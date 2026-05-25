@@ -19,7 +19,7 @@ local M = {}
 
 ---@param opts FluxStatusOptions
 ---@return integer
-local function status_win_width(opts)
+function M.status_win_width(opts)
     return math.max(math.floor(vim.o.columns * opts.width), opts.min_width)
 end
 
@@ -50,7 +50,7 @@ end
 ---@param opts FluxStatusOptions
 ---@return number, GitStatusWindowOptions
 function M.create_status_win(buf, opts)
-    local width = status_win_width(opts)
+    local width = M.status_win_width(opts)
 
     vim.cmd('topleft ' .. width .. 'vsplit')
 
@@ -80,7 +80,7 @@ function M.replace_current_buffer(buf, opts)
     vim.api.nvim_set_current_win(win)
     M.configure_status_win(win)
 
-    local width = status_win_width(opts)
+    local width = M.status_win_width(opts)
     pcall(vim.api.nvim_win_set_width, win, width)
 
     log.info(
@@ -246,6 +246,54 @@ function M.configure_split_diff_win(win)
         fc.diff = ' '
         vim.opt_local.fillchars = fc
     end)
+end
+
+---@param self GitStatusWindow
+function M.close_non_flux_windows(self)
+    -- Collect IDs of all flux-managed buffers.
+    local flux_buf_ids = {}
+
+    for _, field in ipairs(self.config.owned_buffer_fields) do
+        local buf = self[field]
+
+        if buf ~= nil and buf:is_valid() then
+            flux_buf_ids[buf.id] = true
+        end
+    end
+
+    local wins = vim.api.nvim_tabpage_list_wins(0)
+    local to_close = {}
+
+    for _, win in ipairs(wins) do
+        if vim.api.nvim_win_is_valid(win) then
+            local config = vim.api.nvim_win_get_config(win)
+
+            -- Don't close floating windows (help popup, etc.).
+            if config.relative == '' then
+                local buf = vim.api.nvim_win_get_buf(win)
+
+                if not flux_buf_ids[buf] then
+                    table.insert(to_close, win)
+                end
+            end
+        end
+    end
+
+    for _, win in ipairs(to_close) do
+        -- Never close the last window on the tabpage.
+        if #vim.api.nvim_tabpage_list_wins(0) <= 1 then
+            break
+        end
+
+        if vim.api.nvim_win_is_valid(win) then
+            log.debug(string.format('closing non-flux window win=%d', win))
+            pcall(vim.api.nvim_win_close, win, true)
+        end
+    end
+
+    -- target_win may have been closed; clear it so find_target_win
+    -- does not reference a stale handle.
+    self.target_win = nil
 end
 
 ---@param win number

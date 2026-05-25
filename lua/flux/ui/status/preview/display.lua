@@ -5,11 +5,11 @@ local window = require('flux.ui.status.window')
 local buffers = require('flux.ui.status.preview.buffers')
 local window_state = require('flux.ui.status.preview.window_state')
 local preview_util = require('flux.ui.status.preview.util')
+local log = require('flux.log')
 
 local M = {}
 
-local SPLIT_DIFF_NAMESPACE =
-    vim.api.nvim_create_namespace('flux.ui.split_diff')
+local SPLIT_DIFF_NAMESPACE = vim.api.nvim_create_namespace('flux.ui.split_diff')
 
 ---@param win number?
 ---@param enabled boolean
@@ -45,7 +45,6 @@ end
 
 ---@class FluxStatusWinState
 ---@field winfixwidth boolean
----@field width integer
 
 ---@param self GitStatusWindow
 ---@return FluxStatusWinState?
@@ -54,9 +53,17 @@ local function make_status_win_resizable(self)
         return nil
     end
 
+    log.debug(
+        string.format(
+            'make_status_win_resizable: win=%d width=%d winfixwidth=%s',
+            self.win,
+            vim.api.nvim_win_get_width(self.win),
+            tostring(vim.wo[self.win].winfixwidth)
+        )
+    )
+
     local state = {
         winfixwidth = vim.wo[self.win].winfixwidth,
-        width = vim.api.nvim_win_get_width(self.win),
     }
     vim.wo[self.win].winfixwidth = false
 
@@ -70,8 +77,22 @@ local function restore_status_win_state(self, state)
         return
     end
 
-    pcall(vim.api.nvim_win_set_width, self.win, state.width)
+    -- Always restore to the configured status width, not the captured width.
+    -- The captured width can be inflated when non-flux windows were closed
+    -- and the status window expanded to fill the screen.
+    local width = window.status_win_width(self.config.options.status)
+    pcall(vim.api.nvim_win_set_width, self.win, width)
     vim.wo[self.win].winfixwidth = state.winfixwidth
+
+    log.debug(
+        string.format(
+            'restore_status_win_state: win=%d target_width=%d actual_width=%d winfixwidth=%s',
+            self.win,
+            width,
+            vim.api.nvim_win_get_width(self.win),
+            tostring(state.winfixwidth)
+        )
+    )
 end
 
 ---@param self GitStatusWindow
