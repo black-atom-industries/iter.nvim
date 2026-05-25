@@ -5,6 +5,7 @@ local diff_position = require('flux.ui.diff.position')
 local diff_render = require('flux.ui.diff.render')
 local render = require('flux.ui.render')
 local git = require('flux.git')
+local log = require('flux.log')
 local common = require('flux.ui.status.common')
 local selection = require('flux.ui.status.selection')
 local preview_cursor = require('flux.ui.status.preview.cursor')
@@ -416,6 +417,8 @@ end
 
 ---@param self GitStatusWindow
 function M.close_diff(self)
+    log.debug('close_diff called')
+
     local restored = false
 
     if window_state.has_any_split_diff(self) then

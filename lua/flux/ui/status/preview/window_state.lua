@@ -163,7 +163,7 @@ end
 
 ---@param self GitStatusWindow
 ---@param buf integer
----@param actions? FluxPreviewActions
+---@param actions FluxPreviewActions
 ---@param kind? '"stacked"'|'"split"'
 function M.attach_autocmds(self, buf, actions, kind)
     if self.autocmd_group == nil then
@@ -185,19 +185,52 @@ function M.attach_autocmds(self, buf, actions, kind)
     })
 
     if actions ~= nil and kind ~= nil then
-        local keymaps = require('flux.ui.status.keymaps')
+        local keymaps_mod = require('flux.ui.status.keymaps')
+
         vim.api.nvim_create_autocmd('BufEnter', {
             group = self.autocmd_group,
             buffer = buf,
             callback = function()
                 if kind == 'split' then
-                    keymaps.attach_diff_split(
+                    keymaps_mod.attach_diff_split(
                         buf,
                         self.config.keymaps_diff_split,
                         actions
                     )
                 else
-                    keymaps.attach_diff_stacked(
+                    keymaps_mod.attach_diff_stacked(
+                        buf,
+                        self.config.keymaps_diff_stacked,
+                        actions
+                    )
+                end
+            end,
+        })
+
+        -- Re-attach diff keymaps on WinEnter to cover cases where BufEnter
+        -- doesn't fire (e.g. returning to an already-visible diff window
+        -- after focusing another window in the same tabpage).
+        vim.api.nvim_create_autocmd('WinEnter', {
+            group = self.autocmd_group,
+            callback = function()
+                local win = vim.api.nvim_get_current_win()
+
+                if not vim.api.nvim_win_is_valid(win) then
+                    return
+                end
+
+                if vim.api.nvim_win_get_buf(win) ~= buf then
+                    return
+                end
+
+                if kind == 'split' then
+                    keymaps_mod.attach_diff_split(
+                        buf,
+                        self.config.keymaps_diff_split,
+                        actions
+                    )
+                else
+                    keymaps_mod.attach_diff_stacked(
                         buf,
                         self.config.keymaps_diff_stacked,
                         actions

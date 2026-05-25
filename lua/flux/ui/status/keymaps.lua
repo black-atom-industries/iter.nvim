@@ -148,18 +148,22 @@ function M.attach_cursor_autocmd(self)
     assert(self.buf ~= nil)
     assert(self.buf:is_valid())
 
-    -- Clear any prior CursorMoved autocmds on this buffer to avoid
-    -- duplicates when attach_cursor_autocmd is called more than once.
-    -- When autocmd_group is nil (first call during new()), clear all
-    -- CursorMoved events on the buffer regardless of group.
-    local clear_opts = {
-        buffer = self.buf.id,
-        event = 'CursorMoved',
-    }
+    -- Only clear CursorMoved autocmds within our own group (or on the
+    -- buffer if the group doesn't exist yet).  Avoids wiping user-defined
+    -- CursorMoved autocmds on the same buffer.
     if self.autocmd_group ~= nil then
-        clear_opts.group = self.autocmd_group
+        vim.api.nvim_clear_autocmds({
+            group = self.autocmd_group,
+            event = 'CursorMoved',
+        })
+    else
+        vim.api.nvim_clear_autocmds({
+            buffer = self.buf.id,
+            event = 'CursorMoved',
+        })
     end
-    vim.api.nvim_clear_autocmds(clear_opts)
+
+    local debounce_timer = nil
 
     local create_opts = {
         buffer = self.buf.id,
@@ -170,15 +174,45 @@ function M.attach_cursor_autocmd(self)
                 return
             end
 
-            local preview_mod = require('flux.ui.status.preview')
-
-            if preview_mod.has_open_diff(self) then
-                local opts = { force = false, notify = false }
-
-                if not preview_mod.preview_current_commit(self, opts) then
-                    preview_mod.preview_current_entry(self, opts)
-                end
+            -- Debounce: cancel any pending preview update and schedule a new
+            -- one. This prevents rapid j/k presses from triggering a full
+            -- git.diff + render on every line change.
+            if debounce_timer ~= nil then
+                debounce_timer:stop()
+                debounce_timer:close()
+                debounce_timer = nil
             end
+
+            debounce_timer = vim.uv.new_timer()
+
+            if debounce_timer == nil then
+                return
+            end
+
+            debounce_timer:start(50, 0, function()
+                vim.schedule(function()
+                    if debounce_timer ~= nil then
+                        debounce_timer:close()
+                        debounce_timer = nil
+                    end
+
+                    if self.buf == nil or not self.buf:is_valid() then
+                        return
+                    end
+
+                    local preview_mod = require('flux.ui.status.preview')
+
+                    if preview_mod.has_open_diff(self) then
+                        local opts = { force = false, notify = false }
+
+                        if
+                            not preview_mod.preview_current_commit(self, opts)
+                        then
+                            preview_mod.preview_current_entry(self, opts)
+                        end
+                    end
+                end)
+            end)
         end,
     }
     if self.autocmd_group ~= nil then

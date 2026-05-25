@@ -128,6 +128,19 @@ function M.close(self)
     end
 
     self.help_prev_win = nil
+
+    -- Re-attach status keymaps after closing help. Focus is returning to the
+    -- status window, but BufEnter may not fire if the status buffer was never
+    -- left (e.g. floating help overlay) and WinEnter alone may race with the
+    -- help-close redraw.
+    if
+        self.buf ~= nil
+        and self.buf:is_valid()
+        and self.win ~= nil
+        and common.is_valid_win(self.win)
+    then
+        keymaps.attach_status(self.buf.id, self.config.keymaps_status, self)
+    end
 end
 
 ---@param self GitStatusWindow
