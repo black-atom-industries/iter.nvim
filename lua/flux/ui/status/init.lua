@@ -156,13 +156,28 @@ local function release_status_win(self)
         return
     end
 
+    -- If the flux buffer is still visible in any window on the current
+    -- tabpage, don't release — keep tracking so show() and diff operations
+    -- can find the window. This prevents the scheduled BufLeave/BufHidden
+    -- callback from nil'ing self.win during window transitions that
+    -- temporarily shift focus away.
+    if self.buf ~= nil and self.buf:is_valid() then
+        for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+            if
+                vim.api.nvim_win_is_valid(win)
+                and vim.api.nvim_win_get_buf(win) == self.buf.id
+            then
+                if self.win ~= win then
+                    self.win = win
+                end
+                return
+            end
+        end
+    end
+
     local win = self.win
 
     if common.is_valid_win(win) then
-        if vim.api.nvim_win_get_buf(win) == self.buf.id then
-            return
-        end
-
         window.restore_winopts(win, self.win_prev_winopts)
     end
 
@@ -238,9 +253,13 @@ local function ensure_autocmds(self)
 
             -- Update window tracking when re-entering the status window
             -- from outside a BufEnter path (e.g. returning from a diff).
+            -- Only update prev_winopts when they are nil (first entry), to
+            -- avoid overwriting the original user options with flux-options.
             if self.win ~= win then
                 self.win = win
-                self.win_prev_winopts = window.capture_winopts(win)
+                if self.win_prev_winopts == nil then
+                    self.win_prev_winopts = window.capture_winopts(win)
+                end
             end
 
             window.configure_status_win(win)
@@ -281,6 +300,8 @@ local function ensure_autocmds(self)
 end
 
 function GitStatusWindow:show()
+    log.debug('show called')
+
     if not self.buf or not self.buf:is_valid() then
         log.error('Cannot show invalid GitStatus buffer')
         return
@@ -301,7 +322,12 @@ function GitStatusWindow:show()
     window.set_target_win(self, vim.api.nvim_get_current_win())
 
     if self.win and vim.api.nvim_win_is_valid(self.win) then
+        -- Re-set the flux buffer in case an external operation swapped it out.
+        if vim.api.nvim_win_get_buf(self.win) ~= self.buf.id then
+            pcall(vim.api.nvim_win_set_buf, self.win, self.buf.id)
+        end
         vim.api.nvim_set_current_win(self.win)
+        window.configure_status_win(self.win)
         return
     end
 
@@ -330,6 +356,8 @@ end
 
 ---@return boolean
 function GitStatusWindow:diff_entry()
+    log.debug('diff_entry called')
+
     if preview.has_open_diff(self) then
         local commit_item = selection.current_commit_item(self)
 
@@ -360,7 +388,24 @@ function GitStatusWindow:diff_entry()
         end
     end
 
+    -- Wipe non-plugin windows to keep the layout clean and avoid stale
+    -- state from window transitions during diff operations.
+    -- Only close windows when we have a valid entry to show.
     local commit_item = selection.current_commit_item(self)
+    local entry_item = selection.current_entry_item(self)
+
+    if commit_item == nil and entry_item == nil then
+        common.notify_warn('No git status entry under cursor')
+        return false
+    end
+
+    window.close_non_flux_windows(self)
+
+    -- Verify the status window survived the cleanup.
+    if self.win == nil or not common.is_valid_win(self.win) then
+        common.notify_error(nil, 'Status window was lost')
+        return false
+    end
 
     if commit_item ~= nil then
         return preview.preview_current_commit(self, {
@@ -427,6 +472,9 @@ function GitStatusWindow:enter_entry()
     local commit_item = selection.current_commit_item(self)
 
     if commit_item ~= nil then
+        -- Commits open a diff — clean the layout first.
+        window.close_non_flux_windows(self)
+
         return preview.preview_current_commit(self, {
             force = true,
             notify = true,
@@ -567,6 +615,9 @@ function GitStatusWindow:close()
     self.win_prev_buf = nil
     self.win_prev_winopts = nil
 
+    -- Clear layout override so a fresh open doesn't carry stale preferences.
+    self.diff_layout_override = nil
+
     return true
 end
 
@@ -597,6 +648,7 @@ function GitStatusWindow:destroy()
         return false
     end
 
+    self.diff_layout_override = nil
     self:delete_owned_buffers()
 
     return true
