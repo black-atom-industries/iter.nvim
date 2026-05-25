@@ -10,6 +10,7 @@
 ---@field highlight_namespace string
 ---@field diff_header_hl_name string
 ---@field diff_hunk_header_hl_name string
+---@field debug boolean Whether to write debug-level logs to the flux log file
 
 local defaults = require('flux.config.defaults')
 
@@ -257,6 +258,7 @@ function M.resolve(user_opts)
         highlight_namespace = defaults.highlight_namespace,
         diff_header_hl_name = defaults.diff_header_hl_name,
         diff_hunk_header_hl_name = defaults.diff_hunk_header_hl_name,
+        debug = merged.debug,
     }
 end
 

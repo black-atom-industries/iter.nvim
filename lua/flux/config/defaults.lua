@@ -13,6 +13,7 @@
 ---@class FluxOptions
 ---@field preview FluxPreviewOptions
 ---@field status FluxStatusOptions
+---@field debug boolean
 
 ---@class FluxKeymapEntry
 ---@field key string
@@ -29,6 +30,7 @@ local M = {}
 -- ---------------------------------------------------------------------------
 
 M.options = {
+    debug = false,
     preview = {
         wrap = false,
         show_line_numbers = true,

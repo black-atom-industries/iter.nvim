@@ -44,6 +44,13 @@ end
 
 ---@type log_func
 function M.debug(msg)
+    ---@type FluxConfig
+    local config = require('flux').config
+
+    if not config.debug then
+        return
+    end
+
     write('DEBUG', msg)
 end
 
