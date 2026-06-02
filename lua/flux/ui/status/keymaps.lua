@@ -43,7 +43,7 @@ end
 
 ---@param buf_id integer
 ---@param keymaps FluxKeymapEntry[]
----@param actions FluxPreviewActions
+---@param actions FluxPreviewBufferActions
 function M.attach_diff_stacked(buf_id, keymaps, actions)
     for _, entry in ipairs(keymaps) do
         if entry.area == 'diff_stacked' then
@@ -76,7 +76,7 @@ end
 
 ---@param buf_id integer
 ---@param keymaps FluxKeymapEntry[]
----@param actions FluxPreviewActions
+---@param actions FluxPreviewBufferActions
 function M.attach_diff_split(buf_id, keymaps, actions)
     for _, entry in ipairs(keymaps) do
         if entry.area == 'diff_split' then
@@ -126,7 +126,7 @@ function M.attach_help(buf_id, keymaps, close_fn)
 end
 
 ---@param bufnr integer
----@param actions FluxPreviewActions
+---@param actions FluxPreviewBufferActions
 function M.set_goto_code_keymap(bufnr, actions)
     vim.keymap.set('n', '<CR>', actions.goto_code, {
         buffer = bufnr,

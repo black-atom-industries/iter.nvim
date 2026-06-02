@@ -11,6 +11,7 @@
 ---@class FluxOptions
 ---@field preview FluxPreviewOptions
 ---@field status FluxStatusOptions
+---@field keymaps table?
 ---@field debug boolean
 
 ---@class FluxKeymapEntry

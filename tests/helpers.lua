@@ -20,6 +20,7 @@ local M = {
             cwd = cwd,
             env = git_env,
         }):wait()
+        ---@diagnostic disable-next-line: undefined-field
         assert.are.equal(0, result.code, result.stderr)
         return result.stdout or ''
     end,

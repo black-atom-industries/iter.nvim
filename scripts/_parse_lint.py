@@ -6,6 +6,11 @@ project_dir = sys.argv[2]
 with open(outfile) as f:
     data = json.load(f)
 
+if not isinstance(data, dict):
+    # Empty result — no diagnostics
+    print('No diagnostics found.', file=sys.stderr)
+    sys.exit(0)
+
 severity_map = {1: 'error', 2: 'warning'}
 total = 0
 

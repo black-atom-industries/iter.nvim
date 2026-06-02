@@ -7,10 +7,12 @@
         "before_each",
         "after_each",
         "pending",
-        "assert",
         "spy",
         "stub",
         "mock"
+    ],
+    "diagnostics.disable": [
+        "need-check-nil"
     ],
     "runtime.version": "LuaJIT",
     "workspace.checkThirdParty": false

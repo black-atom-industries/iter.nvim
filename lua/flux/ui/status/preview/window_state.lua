@@ -163,7 +163,7 @@ end
 
 ---@param self GitStatusWindow
 ---@param buf integer
----@param actions FluxPreviewActions
+---@param actions FluxPreviewBufferActions
 ---@param kind? '"stacked"'|'"split"'
 function M.attach_autocmds(self, buf, actions, kind)
     if self.autocmd_group == nil then

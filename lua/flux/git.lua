@@ -787,7 +787,7 @@ end
 
 ---@param path string
 ---@param root string
----@return uv.fs_stat.result?
+---@return table?
 local function fs_stat_path(path, root)
     local full_path = path
 

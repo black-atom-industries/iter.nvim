@@ -15,16 +15,14 @@ Highlight.__index = Highlight
 ---}
 
 ---@param names string[]
----@return vim.api.keyset.get_hl_info
+---@return table
 local function get_highlight(names)
     for _, name in ipairs(names) do
-        local ok, source = pcall(vim.api.nvim_get_hl, 0, {
-            name = name,
-            link = false,
-        })
-
-        if ok and next(source) ~= nil then
-            return source
+        local ok, source = pcall(vim.api.nvim_get_hl, 0, { name = name, link = false })
+        if ok and source ~= nil and next(source) ~= nil then
+            ---@type table
+            local result = source
+            return result
         end
     end
 

@@ -53,12 +53,12 @@ local git = require('flux.git')
 ---@field filter string
 ---@field loading_message string?
 ---@field loading_frame integer
----@field loading_timer uv.uv_timer_t?
+---@field loading_timer table?
 ---@field autocmd_group integer?
 local GitStatusWindow = {}
 GitStatusWindow.__index = GitStatusWindow
 
----@return vim.api.keyset.highlight
+---@return table
 local function diff_header_style()
     if vim.o.background == 'light' then
         return {
@@ -73,7 +73,7 @@ local function diff_header_style()
     }
 end
 
----@return vim.api.keyset.highlight
+---@return table
 local function diff_hunk_header_style()
     if vim.o.background == 'light' then
         return {
@@ -89,7 +89,7 @@ local function diff_hunk_header_style()
 end
 
 ---@param name string
----@param style fun(): vim.api.keyset.highlight
+---@param style fun(): table
 ---@return { ensure: fun() }
 local function create_fixed_highlight(name, style)
     return {
@@ -175,7 +175,7 @@ local function release_status_win(self)
 
     local win = self.win
 
-    if common.is_valid_win(win) then
+    if win ~= nil and common.is_valid_win(win) then
         window.restore_winopts(win, self.win_prev_winopts)
     end
 

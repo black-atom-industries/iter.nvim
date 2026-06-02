@@ -133,14 +133,27 @@ local function treesitter_spans(buf, filetype, lines, rows)
     local end_row = -1
 
     if rows ~= nil then
-        start_row = nil
-        end_row = nil
+        local min_row = nil
+        local max_row = nil
 
         for row in pairs(rows) do
             local zero_indexed = row - 1
-            start_row = start_row == nil and zero_indexed
-                or math.min(start_row, zero_indexed)
-            end_row = end_row == nil and row or math.max(end_row, row)
+            if min_row == nil then
+                min_row = zero_indexed
+                max_row = row
+            else
+                ---@diagnostic disable-next-line: param-type-mismatch
+                min_row = math.min(min_row, zero_indexed)
+                ---@diagnostic disable-next-line: param-type-mismatch
+                max_row = math.max(max_row, row)
+            end
+        end
+
+        if min_row ~= nil then
+            start_row = min_row
+        end
+        if max_row ~= nil then
+            end_row = max_row
         end
     end
 
