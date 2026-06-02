@@ -80,6 +80,28 @@ local function validate(opts)
         end
     end
 
+    if opts.confirmations ~= nil then
+        vim.validate('opts.confirmations', opts.confirmations, 'table', true)
+
+        if opts.confirmations.force_discard ~= nil then
+            vim.validate(
+                'opts.confirmations.force_discard',
+                opts.confirmations.force_discard,
+                'boolean',
+                true
+            )
+        end
+
+        if opts.confirmations.force_push ~= nil then
+            vim.validate(
+                'opts.confirmations.force_push',
+                opts.confirmations.force_push,
+                'boolean',
+                true
+            )
+        end
+    end
+
     -- Validate keymap overrides via opts.keymaps.<area>
     if opts.keymaps ~= nil then
         if type(opts.keymaps) ~= 'table' then

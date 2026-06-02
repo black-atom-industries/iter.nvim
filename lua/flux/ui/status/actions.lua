@@ -245,7 +245,8 @@ function M.discard_entry(self, force)
     end
 
     if
-        not force
+        force
+        and self.config.options.confirmations.force_discard
         and vim.fn.confirm(discard_message(item), '&Discard\n&Cancel', 2)
             ~= 1
     then
@@ -361,6 +362,62 @@ function M.push(self)
         )
         self:refresh()
     end)
+
+    return true
+end
+
+---@param self GitStatusWindow
+---@return boolean
+function M.push_force(self)
+    if self.win == nil or not common.is_valid_win(self.win) then
+        common.notify_error(nil, 'Status window is not open')
+        return false
+    end
+
+    if self.loading_message ~= nil then
+        common.notify_warn('Git command already running')
+        return false
+    end
+
+    if
+        self.config.options.confirmations.force_push
+        and vim.fn.confirm(
+                'Force push with lease?',
+                '&Force push\n&Cancel',
+                2
+            )
+            ~= 1
+    then
+        return false
+    end
+
+    self:start_loading('Pushing commits (force with lease)')
+
+    git.push_async(function(ok, output)
+        output = output or ''
+        self:stop_loading()
+
+        if not ok then
+            if
+                output == 'No unpushed commits to push'
+                or output:match('^No upstream')
+                or output:match('^Cannot push')
+            then
+                common.notify_warn(output)
+            else
+                common.notify_error(output, 'Push (force) failed')
+            end
+
+            self:render_cached()
+            return
+        end
+
+        common.notify(
+            output ~= '' and output or 'Force-pushed commits (with lease)',
+            vim.log.levels.INFO
+        )
+        self:refresh()
+    end, { '--force-with-lease' })
 
     return true
 end

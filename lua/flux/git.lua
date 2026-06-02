@@ -1118,7 +1118,8 @@ function git.push()
 end
 
 ---@param callback GitAsyncCallback
-function git.push_async(callback)
+---@param extra_args? string[]
+function git.push_async(callback, extra_args)
     ensure_git()
 
     local root = git.root()
@@ -1140,11 +1141,12 @@ function git.push_async(callback)
         return
     end
 
-    git.run_async(
-        { 'push', destination.remote, 'HEAD:' .. destination.ref },
-        { cwd = root, ignore_error = true },
-        callback
-    )
+    local cmd = { 'push', destination.remote, 'HEAD:' .. destination.ref }
+    if extra_args then
+        vim.list_extend(cmd, extra_args)
+    end
+
+    git.run_async(cmd, { cwd = root, ignore_error = true }, callback)
 end
 
 return git

@@ -453,6 +453,11 @@ function GitStatusWindow:push()
 end
 
 ---@return boolean
+function GitStatusWindow:push_force()
+    return actions.push_force(self)
+end
+
+---@return boolean
 function GitStatusWindow:enter_entry()
     local commit_item = selection.current_commit_item(self)
 

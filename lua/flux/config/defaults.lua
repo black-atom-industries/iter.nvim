@@ -8,9 +8,14 @@
 ---@class FluxStatusOptions
 ---@field height number
 
+---@class FluxConfirmOptions
+---@field force_discard boolean Ask before force-discarding changes (D)
+---@field force_push boolean Ask before force-pushing with lease (P)
+
 ---@class FluxOptions
 ---@field preview FluxPreviewOptions
 ---@field status FluxStatusOptions
+---@field confirmations FluxConfirmOptions
 ---@field keymaps table?
 ---@field debug boolean
 
@@ -39,6 +44,10 @@ M.options = {
     },
     status = {
         height = 0.3,
+    },
+    confirmations = {
+        force_discard = true,
+        force_push = true,
     },
 }
 
@@ -135,7 +144,7 @@ M.keymaps_status = {
     {
         key = 'D',
         modes = { 'n' },
-        desc = 'Discard git status entry without confirmation',
+        desc = 'Force discard git status entry',
         action = 'discard_entry',
         args = { force = true },
         area = 'status',
@@ -152,6 +161,13 @@ M.keymaps_status = {
         modes = { 'n' },
         desc = 'Push unpushed commits',
         action = 'push',
+        area = 'status',
+    },
+    {
+        key = 'P',
+        modes = { 'n' },
+        desc = 'Force push with lease',
+        action = 'push_force',
         area = 'status',
     },
     {
