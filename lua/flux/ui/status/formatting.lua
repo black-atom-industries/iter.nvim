@@ -262,8 +262,8 @@ local function sections(entries)
 
     return {
         { name = 'conflicts', title = 'Conflicts', entries = groups.conflicts },
-        { name = 'unstaged', title = 'Unstaged', entries = groups.unstaged },
         { name = 'staged', title = 'Staged', entries = groups.staged },
+        { name = 'unstaged', title = 'Unstaged', entries = groups.unstaged },
         { name = 'untracked', title = 'Untracked', entries = groups.untracked },
     }
 end
