@@ -1,4 +1,4 @@
-# Roadmap
+# LOG
 
 - [x] fix: make `=` toggle diff preview instead of always re-opening
 - [x] docs: fix key references in help and README to match actual mappings
