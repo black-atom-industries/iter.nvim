@@ -48,20 +48,10 @@ vim.pack.add({
 }
 ```
 
-### Options
+### Configuration
 
-All options, their defaults, and inline documentation live in
+All options, keymaps, their defaults, and inline documentation can be found in
 **[`lua/flux/config/defaults.lua`](lua/flux/config/defaults.lua)**.
-
-```lua
-require('flux').setup({
-    preview = { wrap = false, show_line_numbers = true, diff_layout = 'stacked' },
-    status = { width = 0.4, min_width = 20, layout = 'topleft' },
-    keymaps = {
-        status = { { key = 'q', modes = { 'n' }, desc = 'Close status' } },
-    },
-})
-```
 
 ### Highlight Groups
 
@@ -81,42 +71,6 @@ Open the status window:
 ```lua
 require('flux').status()
 ```
-
-Default status-window mappings:
-
-| Mode | Key    | Action                              |
-| ---- | ------ | ----------------------------------- |
-| n    | `<CR>` | Open entry                          |
-| n    | `o`    | Open entry and close status         |
-| n    | `=`    | Preview diff                        |
-| n    | `q`    | Close status window                 |
-| n    | `/`    | Filter entries                      |
-| n    | `<BS>` | Clear filter                        |
-| n    | `r`    | Refresh status                      |
-| n,v  | `s`    | Stage/Unstage entry                 |
-| n,v  | `u`    | Unstage entry                       |
-| n    | `S`    | Stage all entries                   |
-| n    | `U`    | Unstage all entries                 |
-| n    | `d`    | Discard entry with confirmation     |
-| n    | `D`    | Discard entry without confirmation  |
-| n    | `c`    | Commit staged changes               |
-| n    | `p`    | Push unpushed commits               |
-| n    | `al`   | Alternate stacked/split diff layout |
-| n    | `?`    | Toggle help                         |
-
-Default diff-preview mappings:
-
-| Mode | Key         | Action                                          |
-| ---- | ----------- | ----------------------------------------------- |
-| n    | `q`         | Close diff preview                              |
-| n    | `[h` / `]h` | Jump to previous/next hunk                      |
-| n    | `s`         | Stage current unstaged hunk                     |
-| n    | `u`         | Unstage current staged hunk                     |
-| n    | `d`         | Discard current unstaged hunk with confirmation |
-| n    | `aw`        | Alternate wrap                                  |
-| n    | `an`        | Alternate line numbers                          |
-| n    | `am`        | Alternate metadata rows _(stacked only)_        |
-| n    | `al`        | Alternate stacked/split layout                  |
 
 ## Tooling
 
