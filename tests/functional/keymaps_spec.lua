@@ -318,13 +318,13 @@ describe('flux keymaps', function()
 
             -- Verify keymaps exist
             assert.is_true(has_keymap(status_buf, '='))
-            assert.is_true(has_keymap(status_buf, 'o'))
+            assert.is_true(has_keymap(status_buf, '<C-]>'))
 
             -- Simulate keymaps being lost (e.g. by another plugin clearing them)
             pcall(vim.keymap.del, 'n', '=', { buffer = status_buf })
-            pcall(vim.keymap.del, 'n', 'o', { buffer = status_buf })
+            pcall(vim.keymap.del, 'n', '<C-]>', { buffer = status_buf })
             assert.is_false(has_keymap(status_buf, '='))
-            assert.is_false(has_keymap(status_buf, 'o'))
+            assert.is_false(has_keymap(status_buf, '<C-]>'))
 
             -- Navigate away and back to trigger WinEnter re-attachment
             vim.cmd.wincmd('w')
@@ -332,7 +332,7 @@ describe('flux keymaps', function()
 
             -- Keymaps should be restored
             assert.is_true(has_keymap(status_buf, '='))
-            assert.is_true(has_keymap(status_buf, 'o'))
+            assert.is_true(has_keymap(status_buf, '<C-]>'))
         end
     )
 
@@ -342,7 +342,7 @@ describe('flux keymaps', function()
 
         assert.is_true(has_keymap(status_buf, '='))
         assert.is_true(keymap_has_nowait(status_buf, '='))
-        assert.is_true(keymap_has_nowait(status_buf, 'o'))
+        assert.is_true(keymap_has_nowait(status_buf, '<C-]>'))
         assert.is_true(keymap_has_nowait(status_buf, 'q'))
         assert.is_true(keymap_has_nowait(status_buf, 's'))
     end)
@@ -372,9 +372,9 @@ describe('flux keymaps', function()
 
             -- Clear status keymaps to simulate loss during diff operations
             pcall(vim.keymap.del, 'n', '=', { buffer = status_buf })
-            pcall(vim.keymap.del, 'n', 'o', { buffer = status_buf })
+            pcall(vim.keymap.del, 'n', '<C-]>', { buffer = status_buf })
             assert.is_false(has_keymap(status_buf, '='))
-            assert.is_false(has_keymap(status_buf, 'o'))
+            assert.is_false(has_keymap(status_buf, '<C-]>'))
 
             -- Close diff via q; close_diff should re-attach keymaps
             vim.api.nvim_set_current_win(flux.gsw.diff_win)
@@ -382,7 +382,7 @@ describe('flux keymaps', function()
 
             -- Status keymaps should be restored after close_diff
             assert.is_true(has_keymap(status_buf, '='))
-            assert.is_true(has_keymap(status_buf, 'o'))
+            assert.is_true(has_keymap(status_buf, '<C-]>'))
         end
     )
 

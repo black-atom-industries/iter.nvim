@@ -81,9 +81,7 @@ describe('flux.status.formatting', function()
             }
 
             local text = rendered_text(snapshot)
-            assert.is_true(
-                has_line(text, 'Not inside a git repository')
-            )
+            assert.is_true(has_line(text, 'Not inside a git repository'))
             -- Should NOT show clean message when there's an error
             assert.is_false(has_line(text, 'Working tree clean'))
         end)
@@ -270,23 +268,26 @@ describe('flux.status.formatting', function()
             assert.are.equal(0, line.highlights[1].start_col)
         end)
 
-        it('renders unstaged entry with unstage highlight on second char', function()
-            local line = formatting.entry_line(
-                { staged = ' ', unstaged = 'M', path = 'file.txt' },
-                groups,
-                'unstaged'
-            )
+        it(
+            'renders unstaged entry with unstage highlight on second char',
+            function()
+                local line = formatting.entry_line(
+                    { staged = ' ', unstaged = 'M', path = 'file.txt' },
+                    groups,
+                    'unstaged'
+                )
 
-            assert.are.equal(' M file.txt', line.text)
-            -- Should have highlight on second char (index 1)
-            local has_unstaged_hl = false
-            for _, hl in ipairs(line.highlights) do
-                if hl.group == 'FluxUnstage' and hl.start_col == 1 then
-                    has_unstaged_hl = true
+                assert.are.equal(' M file.txt', line.text)
+                -- Should have highlight on second char (index 1)
+                local has_unstaged_hl = false
+                for _, hl in ipairs(line.highlights) do
+                    if hl.group == 'FluxUnstage' and hl.start_col == 1 then
+                        has_unstaged_hl = true
+                    end
                 end
+                assert.is_true(has_unstaged_hl)
             end
-            assert.is_true(has_unstaged_hl)
-        end)
+        )
 
         it('attaches entry data for selection', function()
             local entry = {

@@ -1,5 +1,6 @@
+require('flux.ui.status.preview.types')
+
 local common = require('flux.ui.status.common')
-local diff_parser = require('flux.ui.diff.parser')
 local render = require('flux.ui.render')
 local window = require('flux.ui.status.window')
 local buffers = require('flux.ui.status.preview.buffers')
@@ -43,71 +44,16 @@ function M.toggle_split_numbers(self)
     return true
 end
 
----@class FluxStatusWinState
----@field winfixwidth boolean
-
----@param self GitStatusWindow
----@return FluxStatusWinState?
-local function make_status_win_resizable(self)
-    if not common.is_valid_win(self.win) then
-        return nil
-    end
-
-    log.debug(
-        string.format(
-            'make_status_win_resizable: win=%d width=%d winfixwidth=%s',
-            self.win,
-            vim.api.nvim_win_get_width(self.win),
-            tostring(vim.wo[self.win].winfixwidth)
-        )
-    )
-
-    local state = {
-        winfixwidth = vim.wo[self.win].winfixwidth,
-    }
-    vim.wo[self.win].winfixwidth = false
-
-    return state
-end
-
----@param self GitStatusWindow
----@param state FluxStatusWinState?
-local function restore_status_win_state(self, state)
-    if state == nil or not common.is_valid_win(self.win) then
-        return
-    end
-
-    -- Always restore to the configured status width, not the captured width.
-    -- The captured width can be inflated when non-flux windows were closed
-    -- and the status window expanded to fill the screen.
-    local width = window.status_win_width(self.config.options.status)
-    pcall(vim.api.nvim_win_set_width, self.win, width)
-    vim.wo[self.win].winfixwidth = state.winfixwidth
-
-    log.debug(
-        string.format(
-            'restore_status_win_state: win=%d target_width=%d actual_width=%d winfixwidth=%s',
-            self.win,
-            width,
-            vim.api.nvim_win_get_width(self.win),
-            tostring(state.winfixwidth)
-        )
-    )
-end
-
 ---@param self GitStatusWindow
 ---@param command string
----@param status_win_state FluxStatusWinState?
 ---@return number?
-local function create_preview_split(self, command, status_win_state)
+local function create_preview_split(self, command)
     local current_win = vim.api.nvim_get_current_win()
     local ok, err = pcall(function()
         vim.cmd(command)
     end)
 
     if not ok then
-        restore_status_win_state(self, status_win_state)
-
         if common.is_valid_win(current_win) then
             pcall(vim.api.nvim_set_current_win, current_win)
         end
@@ -123,13 +69,9 @@ end
 ---@param win number
 ---@param buf integer
 ---@param created boolean
----@param status_win_state FluxStatusWinState?
 ---@return boolean
-local function set_preview_win_buf(self, win, buf, created, status_win_state)
-    vim.wo[win].winfixwidth = false
-
+local function set_preview_win_buf(self, win, buf, created)
     local ok, err = pcall(vim.api.nvim_win_set_buf, win, buf)
-    restore_status_win_state(self, status_win_state)
 
     if ok then
         return true
@@ -149,26 +91,6 @@ local function set_preview_win_buf(self, win, buf, created, status_win_state)
 
     common.notify_error(tostring(err), 'Cannot open diff preview')
     return false
-end
-
----@param win number?
----@param width integer
-local function set_win_width(win, width)
-    if common.is_valid_win(win) then
-        pcall(vim.api.nvim_win_set_width, win, width)
-    end
-end
-
----@param self GitStatusWindow
-local function resize_split_preview_windows(self)
-    -- Split diff uses three vertical windows: status, left diff, and right
-    -- diff. Account for the two vertical separators, then size each content
-    -- window to one third of the usable width.
-    local width = math.max(1, math.floor((vim.o.columns - 2) / 3))
-
-    set_win_width(self.win, width)
-    set_win_width(self.diff_left_win, width)
-    set_win_width(self.diff_right_win, width)
 end
 
 ---@param buf Buffer
@@ -202,6 +124,8 @@ end
 local function mark_split_changes(left_buf, right_buf, diff_lines, groups)
     vim.api.nvim_buf_clear_namespace(left_buf.id, SPLIT_DIFF_NAMESPACE, 0, -1)
     vim.api.nvim_buf_clear_namespace(right_buf.id, SPLIT_DIFF_NAMESPACE, 0, -1)
+
+    local diff_parser = require('flux.ui.diff.parser')
 
     for _, line in ipairs(diff_parser.parse_lines(diff_lines)) do
         if line.kind == 'added' then
@@ -244,6 +168,26 @@ function M.focus_open_diff(self)
 end
 
 ---@param self GitStatusWindow
+---@return number?
+local function reuse_or_create_window_above(self)
+    -- Try to find an existing window above the status drawer first.
+    local window_mod = require('flux.ui.status.window')
+    local above = window_mod.find_window_above(self.win)
+
+    if above ~= nil then
+        vim.api.nvim_set_current_win(above)
+        return above
+    end
+
+    -- Nothing above — create a new split.
+    if self.win ~= nil and common.is_valid_win(self.win) then
+        vim.api.nvim_set_current_win(self.win)
+    end
+
+    return create_preview_split(self, 'aboveleft split')
+end
+
+---@param self GitStatusWindow
 ---@param diff_lines FluxRenderLine[]
 ---@param preview_key string
 ---@param title string
@@ -255,6 +199,7 @@ function M.show_stacked(self, diff_lines, preview_key, title, actions)
     local transition_prev_winopts
     local transition_created_win = false
 
+    -- Transition from split diff: convert the left window to stacked.
     if window_state.has_any_split_diff(self) then
         if common.is_valid_win(self.diff_right_win) then
             window_state.restore_or_close_diff_window(
@@ -285,7 +230,6 @@ function M.show_stacked(self, diff_lines, preview_key, title, actions)
     vim.bo[buf.id].modifiable = false
     render.apply(buf.id, diff_lines)
 
-    local status_winfixwidth = make_status_win_resizable(self)
     local target_win
     local created_win = false
 
@@ -295,36 +239,17 @@ function M.show_stacked(self, diff_lines, preview_key, title, actions)
     elseif window_state.has_open_stacked_diff(self) then
         target_win = assert(self.diff_win)
         vim.api.nvim_set_current_win(target_win)
-    elseif self.config.options.status.layout == 'replace' then
-        -- In replace mode, split to the right of the status window so
-        -- the diff opens adjacent to status, not somewhere else.
-        target_win =
-            create_preview_split(self, 'rightbelow vsplit', status_winfixwidth)
+    else
+        -- Always create a new window above the status drawer.
+        target_win = reuse_or_create_window_above(self)
 
         if target_win == nil then
             return false
         end
 
-        created_win = true
-    else
-        target_win = window.find_target_win(self)
-
-        if target_win == nil then
-            target_win = create_preview_split(
-                self,
-                'rightbelow vsplit',
-                status_winfixwidth
-            )
-
-            if target_win == nil then
-                return false
-            end
-
-            self.target_win = target_win
-            created_win = true
-        else
-            vim.api.nvim_set_current_win(target_win)
-        end
+        -- created_win is false here — we're reusing an existing window or
+        -- the first-time create. window_state handles save/restore correctly
+        -- based on whether the target was previously a diff window.
     end
 
     target_win = assert(target_win)
@@ -343,15 +268,7 @@ function M.show_stacked(self, diff_lines, preview_key, title, actions)
         self.diff_created_win = created_win
     end
 
-    if
-        not set_preview_win_buf(
-            self,
-            target_win,
-            buf.id,
-            created_win,
-            status_winfixwidth
-        )
-    then
+    if not set_preview_win_buf(self, target_win, buf.id, created_win) then
         return false
     end
 
@@ -381,6 +298,7 @@ function M.show_split(self, split_diff, diff_lines, preview_key, title, actions)
     local transition_prev_winopts
     local transition_created_win = false
 
+    -- Transition from stacked diff: convert the stacked window to split left.
     if
         window_state.has_open_diff(self)
         and not window_state.has_open_split_diff(self)
@@ -421,7 +339,6 @@ function M.show_split(self, split_diff, diff_lines, preview_key, title, actions)
         vim.bo[right_buf.id].filetype = split_diff.filetype
     end
 
-    local status_winfixwidth = make_status_win_resizable(self)
     local target_win
     local left_created = false
 
@@ -429,41 +346,17 @@ function M.show_split(self, split_diff, diff_lines, preview_key, title, actions)
         target_win = transition_win
         vim.api.nvim_set_current_win(target_win)
     elseif window_state.has_open_split_diff(self) then
-        -- Reuse the existing left window directly. find_target_win(self) could
-        -- return diff_right_win if the user last focused it (self.target_win ==
-        -- diff_right_win), which would make diff_left_win and diff_right_win
-        -- point at the same window and corrupt the two-window layout.
+        -- Reuse the existing left window directly.
         target_win = assert(self.diff_left_win)
         vim.api.nvim_set_current_win(target_win)
-    elseif self.config.options.status.layout == 'replace' then
-        -- In replace mode, split to the right of the status window.
-        target_win =
-            create_preview_split(self, 'rightbelow vsplit', status_winfixwidth)
+    else
+        target_win = reuse_or_create_window_above(self)
 
         if target_win == nil then
             return false
         end
 
-        left_created = true
-    else
-        target_win = window.find_target_win(self)
-
-        if target_win == nil then
-            target_win = create_preview_split(
-                self,
-                'rightbelow vsplit',
-                status_winfixwidth
-            )
-
-            if target_win == nil then
-                return false
-            end
-
-            self.target_win = target_win
-            left_created = true
-        else
-            vim.api.nvim_set_current_win(target_win)
-        end
+        -- Reusing existing window above, not creating.
     end
 
     target_win = assert(target_win)
@@ -482,15 +375,7 @@ function M.show_split(self, split_diff, diff_lines, preview_key, title, actions)
         self.diff_left_created_win = left_created
     end
 
-    if
-        not set_preview_win_buf(
-            self,
-            target_win,
-            left_buf.id,
-            left_created,
-            status_winfixwidth
-        )
-    then
+    if not set_preview_win_buf(self, target_win, left_buf.id, left_created) then
         return false
     end
 
@@ -502,16 +387,12 @@ function M.show_split(self, split_diff, diff_lines, preview_key, title, actions)
         .. preview_util.winbar_text(split_diff.left.title)
     self.diff_left_win = target_win
 
+    -- Create the right window by splitting the left.
     local right_win = self.diff_right_win
-    local right_status_winfixwidth = make_status_win_resizable(self)
     local right_created = false
 
     if not common.is_valid_win(right_win) then
-        right_win = create_preview_split(
-            self,
-            'rightbelow vsplit',
-            right_status_winfixwidth
-        )
+        right_win = create_preview_split(self, 'rightbelow vsplit')
 
         if right_win == nil then
             actions.close_diff()
@@ -535,13 +416,7 @@ function M.show_split(self, split_diff, diff_lines, preview_key, title, actions)
     end
 
     if
-        not set_preview_win_buf(
-            self,
-            right_win,
-            right_buf.id,
-            right_created,
-            right_status_winfixwidth
-        )
+        not set_preview_win_buf(self, right_win, right_buf.id, right_created)
     then
         actions.close_diff()
         return false
@@ -554,7 +429,6 @@ function M.show_split(self, split_diff, diff_lines, preview_key, title, actions)
         .. ' [2/2] '
         .. preview_util.winbar_text(split_diff.right.title)
     self.diff_right_win = right_win
-    resize_split_preview_windows(self)
 
     preview_util.diffoff(self.diff_left_win)
     preview_util.diffoff(self.diff_right_win)

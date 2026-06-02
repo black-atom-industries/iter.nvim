@@ -11,7 +11,6 @@ local M = {}
 ---@field foldcolumn string
 ---@field wrap boolean
 ---@field cursorline boolean
----@field winfixwidth boolean
 ---@field winbar string
 ---@field diff boolean
 ---@field fillchars string
@@ -19,8 +18,8 @@ local M = {}
 
 ---@param opts FluxStatusOptions
 ---@return integer
-function M.status_win_width(opts)
-    return math.max(math.floor(vim.o.columns * opts.width), opts.min_width)
+function M.status_win_height(opts)
+    return math.max(math.floor(vim.o.lines * opts.height), 1)
 end
 
 ---@param entry GitStatusEntry
@@ -43,16 +42,15 @@ function M.configure_status_win(win)
     vim.wo[win].foldcolumn = '0'
     vim.wo[win].wrap = false
     vim.wo[win].cursorline = true
-    vim.wo[win].winfixwidth = true
 end
 
 ---@param buf Buffer
 ---@param opts FluxStatusOptions
 ---@return number, GitStatusWindowOptions
 function M.create_status_win(buf, opts)
-    local width = M.status_win_width(opts)
+    local height = M.status_win_height(opts)
 
-    vim.cmd('topleft ' .. width .. 'vsplit')
+    vim.cmd('botright ' .. height .. 'split')
 
     local win = vim.api.nvim_get_current_win()
     local prev_winopts = M.capture_winopts(win)
@@ -66,128 +64,36 @@ function M.create_status_win(buf, opts)
     return win, prev_winopts
 end
 
----@param buf Buffer
----@param opts FluxStatusOptions
----@return number
----@return integer
----@return GitStatusWindowOptions
-function M.replace_current_buffer(buf, opts)
-    local win = vim.api.nvim_get_current_win()
-    local prev_buf = vim.api.nvim_win_get_buf(win)
-    local prev_winopts = M.capture_winopts(win)
-
-    vim.api.nvim_win_set_buf(win, buf.id)
-    vim.api.nvim_set_current_win(win)
-    M.configure_status_win(win)
-
-    local width = M.status_win_width(opts)
-    pcall(vim.api.nvim_win_set_width, win, width)
-
-    log.info(
-        string.format(
-            'replaced buffer win=%d buf=%d prev_buf=%d',
-            win,
-            buf.id,
-            prev_buf
-        )
-    )
-
-    return win, prev_buf, prev_winopts
-end
-
----@param win number
----@return boolean
-local function has_winfixbuf(win)
-    local ok, value = pcall(function()
-        return vim.wo[win].winfixbuf
-    end)
-
-    return ok and value
-end
-
----@param win number
----@return boolean
-local function is_normal_edit_window(win)
-    local config = vim.api.nvim_win_get_config(win)
-
-    if config.relative ~= '' then
-        return false
-    end
-
-    if
-        vim.wo[win].previewwindow
-        or vim.wo[win].winfixwidth
-        or has_winfixbuf(win)
-    then
-        return false
-    end
-
-    local buf = vim.api.nvim_win_get_buf(win)
-    local buftype = vim.bo[buf].buftype
-    local filetype = vim.bo[buf].filetype
-
-    if buftype ~= '' then
-        return false
-    end
-
-    if filetype == 'gitcommit' or filetype == 'gitrebase' then
-        return false
-    end
-
-    return true
-end
-
----@param self GitStatusWindow
----@param win number?
----@return boolean
-local function is_usable_target_win(self, win)
-    if win == nil or not common.is_valid_win(win) or win == self.win then
-        return false
-    end
-
-    ---@type integer
-    local target_win = win
-    local is_current_tab = vim.api.nvim_win_get_tabpage(target_win)
-        == vim.api.nvim_get_current_tabpage()
-
-    if not is_current_tab then
-        return false
-    end
-
-    return is_normal_edit_window(target_win)
-end
-
----@param self GitStatusWindow
----@param win number?
-function M.set_target_win(self, win)
-    if is_usable_target_win(self, win) then
-        self.target_win = win
-    end
-end
-
----@param self GitStatusWindow
+---@param status_win number?
 ---@return number?
-function M.find_target_win(self)
-    if is_usable_target_win(self, self.target_win) then
-        return self.target_win
+function M.find_window_above(status_win)
+    -- Find the window immediately above the status drawer, if any.
+    if status_win == nil or not common.is_valid_win(status_win) then
+        return nil
     end
 
-    self.target_win = nil
+    -- Navigate up from the status window.
+    local current = vim.api.nvim_get_current_win()
+    vim.api.nvim_set_current_win(status_win)
+    pcall(vim.cmd, 'wincmd k')
+    local above = vim.api.nvim_get_current_win()
 
-    for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-        if is_usable_target_win(self, win) then
-            self.target_win = win
-            return win
-        end
+    if above ~= status_win then
+        return above
+    end
+
+    -- Restore focus if we didn't move.
+    if common.is_valid_win(current) then
+        pcall(vim.api.nvim_set_current_win, current)
     end
 
     return nil
 end
 
----@param self GitStatusWindow
 ---@param entry GitStatusEntry
+---@param status_win number?
 ---@return boolean
-function M.open_entry(self, entry)
+function M.open_entry(entry, status_win)
     local path = entry_path(entry)
 
     if vim.uv.fs_stat(path) == nil then
@@ -199,18 +105,18 @@ function M.open_entry(self, entry)
         return false
     end
 
-    local target_win = M.find_target_win(self)
+    -- Find or create a window above the status drawer.
+    local target = M.find_window_above(status_win)
 
-    if target_win == nil then
-        vim.cmd('rightbelow vsplit')
-        target_win = vim.api.nvim_get_current_win()
-        self.target_win = target_win
+    if target == nil then
+        vim.cmd('aboveleft split')
+        target = vim.api.nvim_get_current_win()
     else
-        vim.api.nvim_set_current_win(target_win)
+        vim.api.nvim_set_current_win(target)
     end
 
     local current_path = vim.fs.normalize(
-        vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(target_win))
+        vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(target))
     )
 
     if current_path ~= path then
@@ -228,7 +134,6 @@ function M.configure_diff_win(win)
     vim.wo[win].foldcolumn = '0'
     vim.wo[win].wrap = false
     vim.wo[win].cursorline = false
-    vim.wo[win].winfixwidth = false
 end
 
 ---@param win number
@@ -240,60 +145,11 @@ function M.configure_split_diff_win(win)
     vim.wo[win].statuscolumn = '%l %s '
     vim.wo[win].wrap = false
     vim.wo[win].cursorline = false
-    vim.wo[win].winfixwidth = false
     vim.api.nvim_win_call(win, function()
         local fc = vim.opt_local.fillchars:get()
         fc.diff = ' '
         vim.opt_local.fillchars = fc
     end)
-end
-
----@param self GitStatusWindow
-function M.close_non_flux_windows(self)
-    -- Collect IDs of all flux-managed buffers.
-    local flux_buf_ids = {}
-
-    for _, field in ipairs(self.config.owned_buffer_fields) do
-        local buf = self[field]
-
-        if buf ~= nil and buf:is_valid() then
-            flux_buf_ids[buf.id] = true
-        end
-    end
-
-    local wins = vim.api.nvim_tabpage_list_wins(0)
-    local to_close = {}
-
-    for _, win in ipairs(wins) do
-        if vim.api.nvim_win_is_valid(win) then
-            local config = vim.api.nvim_win_get_config(win)
-
-            -- Don't close floating windows (help popup, etc.).
-            if config.relative == '' then
-                local buf = vim.api.nvim_win_get_buf(win)
-
-                if not flux_buf_ids[buf] then
-                    table.insert(to_close, win)
-                end
-            end
-        end
-    end
-
-    for _, win in ipairs(to_close) do
-        -- Never close the last window on the tabpage.
-        if #vim.api.nvim_tabpage_list_wins(0) <= 1 then
-            break
-        end
-
-        if vim.api.nvim_win_is_valid(win) then
-            log.debug(string.format('closing non-flux window win=%d', win))
-            pcall(vim.api.nvim_win_close, win, true)
-        end
-    end
-
-    -- target_win may have been closed; clear it so find_target_win
-    -- does not reference a stale handle.
-    self.target_win = nil
 end
 
 ---@param win number
@@ -306,7 +162,6 @@ function M.capture_winopts(win)
         foldcolumn = vim.wo[win].foldcolumn,
         wrap = vim.wo[win].wrap,
         cursorline = vim.wo[win].cursorline,
-        winfixwidth = vim.wo[win].winfixwidth,
         winbar = vim.wo[win].winbar,
         diff = vim.wo[win].diff,
         fillchars = vim.wo[win].fillchars,
@@ -327,7 +182,6 @@ function M.restore_winopts(win, opts)
     vim.wo[win].foldcolumn = opts.foldcolumn
     vim.wo[win].wrap = opts.wrap
     vim.wo[win].cursorline = opts.cursorline
-    vim.wo[win].winfixwidth = opts.winfixwidth
     vim.wo[win].winbar = opts.winbar
     vim.wo[win].diff = opts.diff
     vim.wo[win].fillchars = opts.fillchars

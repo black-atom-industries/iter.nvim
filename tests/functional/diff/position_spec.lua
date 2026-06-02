@@ -128,8 +128,7 @@ describe('flux.diff.position', function()
 
         it('maps a left-side row within a hunk', function()
             -- old_start=10, so row 11 on left side is the removed line
-            local pos =
-                position.hunk_position_for_split_row(hunks, 'left', 11)
+            local pos = position.hunk_position_for_split_row(hunks, 'left', 11)
             assert.is_not_nil(pos)
             assert.are.equal(1, pos.hunk_index)
             assert.are.equal('left', pos.side)
@@ -138,8 +137,7 @@ describe('flux.diff.position', function()
 
         it('maps a right-side row within a hunk', function()
             -- new_start=10, so row 11 on right side is 'added line one'
-            local pos =
-                position.hunk_position_for_split_row(hunks, 'right', 11)
+            local pos = position.hunk_position_for_split_row(hunks, 'right', 11)
             assert.is_not_nil(pos)
             assert.are.equal(1, pos.hunk_index)
             assert.are.equal('right', pos.side)
@@ -147,8 +145,7 @@ describe('flux.diff.position', function()
         end)
 
         it('returns nil for a row outside all hunks', function()
-            local pos =
-                position.hunk_position_for_split_row(hunks, 'left', 999)
+            local pos = position.hunk_position_for_split_row(hunks, 'left', 999)
             assert.is_nil(pos)
         end)
     end)
@@ -163,23 +160,20 @@ describe('flux.diff.position', function()
 
         it('returns new_number for an added line', function()
             -- '+added line one' is raw_row 8, new_number=11
-            local source =
-                position.source_line_for_stacked_row(lines, hunks, 8)
+            local source = position.source_line_for_stacked_row(lines, hunks, 8)
             assert.are.equal(11, source)
         end)
 
         it('returns new_number for a context line', function()
             -- ' unchanged 1' is raw_row 6, new_number=10
-            local source =
-                position.source_line_for_stacked_row(lines, hunks, 6)
+            local source = position.source_line_for_stacked_row(lines, hunks, 6)
             assert.are.equal(10, source)
         end)
 
         it('finds nearest surviving new_number for a removed line', function()
             -- '-removed line' is raw_row 7; it has no new_number,
             -- so it finds the nearest context/added line's new_number
-            local source =
-                position.source_line_for_stacked_row(lines, hunks, 7)
+            local source = position.source_line_for_stacked_row(lines, hunks, 7)
             assert.is_not_nil(source)
             -- Should be 11 (next added line) or 10 (prior context)
             assert.is_true(source == 10 or source == 11)
@@ -209,12 +203,8 @@ describe('flux.diff.position', function()
         end)
 
         it('maps right side row to itself outside hunks', function()
-            local source = position.source_line_for_split_row(
-                lines,
-                hunks,
-                'right',
-                1
-            )
+            local source =
+                position.source_line_for_split_row(lines, hunks, 'right', 1)
             -- Row 1 is before any hunk (new_start=10), so it maps to itself
             assert.are.equal(1, source)
         end)
@@ -243,15 +233,11 @@ describe('flux.diff.position', function()
             assert.are.equal(1, position.old_line_to_new_line(lines, hunks, 1))
 
             -- old_line 2 (in hunk 1, removed line): maps via diff
-            local translated2 =
-                position.old_line_to_new_line(lines, hunks, 2)
+            local translated2 = position.old_line_to_new_line(lines, hunks, 2)
             assert.is_not_nil(translated2)
 
             -- old_line 5 (between hunks): 5 + delta_from_hunk1(+1) = 6
-            assert.are.equal(
-                6,
-                position.old_line_to_new_line(lines, hunks, 5)
-            )
+            assert.are.equal(6, position.old_line_to_new_line(lines, hunks, 5))
 
             -- old_line 12 (after hunk 2): 12 + total_delta(+2) = 14
             assert.are.equal(
@@ -315,24 +301,22 @@ describe('flux.diff.position', function()
         end)
 
         it('converts left-side position to split row', function()
-            local side, row =
-                position.split_row_for_hunk_position(hunks[1], {
-                    hunk_index = 1,
-                    side = 'left',
-                    offset = 1,
-                })
+            local side, row = position.split_row_for_hunk_position(hunks[1], {
+                hunk_index = 1,
+                side = 'left',
+                offset = 1,
+            })
             assert.are.equal('left', side)
             -- old_start=10, offset=1 → row 11
             assert.are.equal(11, row)
         end)
 
         it('converts right-side position to split row', function()
-            local side, row =
-                position.split_row_for_hunk_position(hunks[1], {
-                    hunk_index = 1,
-                    side = 'right',
-                    offset = 1,
-                })
+            local side, row = position.split_row_for_hunk_position(hunks[1], {
+                hunk_index = 1,
+                side = 'right',
+                offset = 1,
+            })
             assert.are.equal('right', side)
             assert.are.equal(11, row)
         end)
@@ -340,14 +324,12 @@ describe('flux.diff.position', function()
         it('falls back to opposite side for zero-count hunks', function()
             -- Create a pure insertion hunk: old_count=0
             local insertion_hunks = parser.parse_hunks(SAMPLE_DIFF_INSERTION)
-            local side, row = position.split_row_for_hunk_position(
-                insertion_hunks[1],
-                {
+            local side, row =
+                position.split_row_for_hunk_position(insertion_hunks[1], {
                     hunk_index = 1,
                     side = 'left',
                     offset = 0,
-                }
-            )
+                })
             -- Falls back to right side since left count is 0
             assert.are.equal('right', side)
             assert.are.equal(1, row)

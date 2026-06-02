@@ -621,7 +621,6 @@ function M.goto_code(self)
     vim.api.nvim_set_current_win(code_win)
     edit_without_jumplist(path)
     preview_cursor.set_cursor_row(code_win, position.line)
-    self.target_win = code_win
 
     window_state.delete_diff_buffers(diff_buffers)
 

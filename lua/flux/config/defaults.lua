@@ -6,9 +6,7 @@
 ---@field diff_auto_threshold integer
 
 ---@class FluxStatusOptions
----@field width number
----@field min_width integer
----@field layout 'topleft'|'replace'
+---@field height number
 
 ---@class FluxOptions
 ---@field preview FluxPreviewOptions
@@ -39,9 +37,7 @@ M.options = {
         diff_auto_threshold = 120,
     },
     status = {
-        width = 0.4,
-        min_width = 20,
-        layout = 'topleft',
+        height = 0.3,
     },
 }
 
@@ -59,7 +55,7 @@ M.keymaps_status = {
         area = 'status',
     },
     {
-        key = 'o',
+        key = '<C-]>',
         modes = { 'n' },
         desc = 'Open entry and close status',
         action = 'enter_entry_and_close',

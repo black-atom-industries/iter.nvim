@@ -276,14 +276,7 @@ function M.commit(self)
     local path = vim.fn.tempname() .. '.gitcommit'
     vim.fn.writefile(git.commit_template(), path)
 
-    if self.config.options.status.layout == 'replace' then
-        -- In replace mode, opening the commit editor via 'edit' in the
-        -- status window would replace the status buffer and trigger
-        -- BufLeave, which clears win/prev_buf. Use a vsplit instead so
-        -- the status buffer stays intact.
-        vim.api.nvim_set_current_win(self.win)
-        vim.cmd('rightbelow vsplit ' .. vim.fn.fnameescape(path))
-    else
+    if self.win ~= nil and common.is_valid_win(self.win) then
         vim.api.nvim_set_current_win(self.win)
         vim.cmd('edit ' .. vim.fn.fnameescape(path))
     end
@@ -307,16 +300,7 @@ function M.commit(self)
             vim.schedule(function()
                 self:refresh()
 
-                if self.config.options.status.layout == 'replace' then
-                    -- Close the commit vsplit, then focus the status window
-                    if common.is_valid_win(commit_win) then
-                        pcall(vim.api.nvim_win_close, commit_win, true)
-                    end
-
-                    if self.win ~= nil and common.is_valid_win(self.win) then
-                        vim.api.nvim_set_current_win(self.win)
-                    end
-                elseif self.win ~= nil and common.is_valid_win(self.win) then
+                if self.win ~= nil and common.is_valid_win(self.win) then
                     vim.api.nvim_set_current_win(self.win)
                     vim.api.nvim_win_set_buf(self.win, self.buf.id)
                 else

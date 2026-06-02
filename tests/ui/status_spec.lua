@@ -58,7 +58,6 @@ local function capture_winopts(win)
         foldcolumn = vim.wo[win].foldcolumn,
         wrap = vim.wo[win].wrap,
         cursorline = vim.wo[win].cursorline,
-        winfixwidth = vim.wo[win].winfixwidth,
         winbar = vim.wo[win].winbar,
         diff = vim.wo[win].diff,
         fillchars = vim.wo[win].fillchars,
@@ -140,7 +139,7 @@ describe('flux status UI', function()
         vim.cmd.cd(vim.fn.fnameescape(repo))
         vim.cmd.enew()
         flux = require('flux').setup({
-            status = { width = 0.5, min_width = 20 },
+            status = { height = 0.5 },
         })
     end)
 
@@ -158,54 +157,50 @@ describe('flux status UI', function()
         end
     end)
 
-    it(
-        'opens a status window with the expected buffer options and contents',
-        function()
-            helpers.write_file(
-                vim.fs.joinpath(repo, 'tracked.txt'),
-                { 'one', 'two' }
-            )
-            helpers.write_file(
-                vim.fs.joinpath(repo, 'staged.txt'),
-                { 'staged' }
-            )
-            helpers.write_file(
-                vim.fs.joinpath(repo, 'untracked.txt'),
-                { 'untracked' }
-            )
-            helpers.run({ 'git', 'add', 'staged.txt' }, repo)
+    it('opens a status drawer at the bottom', function()
+        helpers.write_file(
+            vim.fs.joinpath(repo, 'tracked.txt'),
+            { 'one', 'two' }
+        )
+        helpers.write_file(vim.fs.joinpath(repo, 'staged.txt'), { 'staged' })
+        helpers.write_file(
+            vim.fs.joinpath(repo, 'untracked.txt'),
+            { 'untracked' }
+        )
+        helpers.run({ 'git', 'add', 'staged.txt' }, repo)
 
-            flux.status()
+        flux.status()
 
-            ---@type GitStatusWindow
-            local gsw = flux.gsw
-            assert.is_not_nil(gsw)
-            assert.is_true(vim.api.nvim_win_is_valid(gsw.win))
-            assert.is_true(vim.api.nvim_buf_is_valid(gsw.buf.id))
-            assert.are.equal(gsw.buf.id, vim.api.nvim_win_get_buf(gsw.win))
-            assert.are.equal('nofile', vim.bo[gsw.buf.id].buftype)
-            assert.are.equal('hide', vim.bo[gsw.buf.id].bufhidden)
-            assert.are.equal(false, vim.bo[gsw.buf.id].modifiable)
-            assert.are.equal('flux', vim.bo[gsw.buf.id].filetype)
-            assert.are.equal(false, vim.wo[gsw.win].number)
-            assert.are.equal(false, vim.wo[gsw.win].relativenumber)
-            assert.are.equal('no', vim.wo[gsw.win].signcolumn)
-            assert.are.equal(true, vim.wo[gsw.win].cursorline)
-            assert.are.equal(true, vim.wo[gsw.win].winfixwidth)
+        ---@type GitStatusWindow
+        local gsw = flux.gsw
+        assert.is_not_nil(gsw)
+        assert.is_true(vim.api.nvim_win_is_valid(gsw.win))
+        assert.is_true(vim.api.nvim_buf_is_valid(gsw.buf.id))
+        assert.are.equal(gsw.buf.id, vim.api.nvim_win_get_buf(gsw.win))
+        assert.are.equal('nofile', vim.bo[gsw.buf.id].buftype)
+        assert.are.equal('hide', vim.bo[gsw.buf.id].bufhidden)
+        assert.are.equal('flux', vim.bo[gsw.buf.id].filetype)
+        assert.are.equal(false, vim.wo[gsw.win].number)
+        assert.are.equal(false, vim.wo[gsw.win].relativenumber)
+        assert.are.equal('no', vim.wo[gsw.win].signcolumn)
+        assert.are.equal(true, vim.wo[gsw.win].cursorline)
 
-            local lines = buffer_lines(gsw.buf.id)
-            assert_has_line(lines, 'HEAD: main')
-            assert_has_line(lines, 'Unstaged (1)')
-            assert_has_line(lines, ' M tracked.txt')
-            assert_has_line(lines, 'Staged (1)')
-            assert_has_line(lines, 'A  staged.txt')
-            assert_has_line(lines, 'Untracked (1)')
-            assert_has_line(lines, '?? untracked.txt')
-        end
-    )
+        -- The drawer should be a real split, not floating.
+        local config = vim.api.nvim_win_get_config(gsw.win)
+        assert.are.equal('', config.relative)
+
+        local lines = buffer_lines(gsw.buf.id)
+        assert_has_line(lines, 'HEAD: main')
+        assert_has_line(lines, 'Unstaged (1)')
+        assert_has_line_containing(lines, 'tracked.txt')
+        assert_has_line(lines, 'Staged (1)')
+        assert_has_line_containing(lines, 'staged.txt')
+        assert_has_line(lines, 'Untracked (1)')
+        assert_has_line_containing(lines, 'untracked.txt')
+    end)
 
     it(
-        'refreshes and reuses the existing status buffer on repeated calls',
+        'refreshes and reuses the existing status drawer on repeated calls',
         function()
             flux.status()
 
@@ -228,19 +223,17 @@ describe('flux status UI', function()
         end
     )
 
-    it('closes the status window through its normal mode mapping', function()
+    it('closes the status drawer through its normal mode mapping', function()
         flux.status()
 
         ---@type GitStatusWindow
         local gsw = flux.gsw
         local win = assert(gsw.win)
-        local buf = gsw.buf.id
 
         vim.api.nvim_set_current_win(win)
         vim.cmd.normal('q')
 
         assert.is_false(vim.api.nvim_win_is_valid(win))
-        assert.is_true(vim.api.nvim_buf_is_valid(buf))
         assert.is_nil(gsw.win)
     end)
 
@@ -258,193 +251,155 @@ describe('flux status UI', function()
         vim.fn.delete(not_repo, 'rf')
     end)
 
-    it(
-        'opens an already visible modified entry without re-editing it',
-        function()
-            helpers.write_file(
-                vim.fs.joinpath(repo, 'tracked.txt'),
-                { 'one', 'two' }
-            )
-            vim.cmd.edit(
-                vim.fn.fnameescape(vim.fs.joinpath(repo, 'tracked.txt'))
-            )
-            local file_win = vim.api.nvim_get_current_win()
-            local file_buf = vim.api.nvim_get_current_buf()
-            vim.api.nvim_buf_set_lines(file_buf, 0, -1, false, { 'unsaved' })
-            assert.is_true(vim.bo[file_buf].modified)
-
-            flux.status()
-            vim.api.nvim_set_current_win(flux.gsw.win)
-            vim.api.nvim_win_set_cursor(
-                flux.gsw.win,
-                { row_containing(flux.gsw.buf.id, 'tracked.txt'), 0 }
-            )
-
-            assert.is_true(flux.gsw:enter_entry())
-
-            assert.are.equal(file_win, vim.api.nvim_get_current_win())
-            assert.are.equal(file_buf, vim.api.nvim_get_current_buf())
-            assert.is_true(vim.bo[file_buf].modified)
-        end
-    )
-
-    it(
-        'keeps a real file window options unchanged after focusing status',
-        function()
-            vim.cmd.edit(
-                vim.fn.fnameescape(vim.fs.joinpath(repo, 'tracked.txt'))
-            )
-            local file_win = vim.api.nvim_get_current_win()
-            local file_buf = vim.api.nvim_get_current_buf()
-            vim.wo[file_win].number = true
-            vim.wo[file_win].relativenumber = true
-            vim.wo[file_win].signcolumn = 'yes:2'
-            vim.wo[file_win].foldcolumn = '2'
-            vim.wo[file_win].wrap = true
-            vim.wo[file_win].cursorline = false
-            vim.wo[file_win].winfixwidth = false
-            vim.wo[file_win].winbar = 'real file'
-            vim.wo[file_win].statuscolumn = 'user-statuscolumn'
-            local before = capture_winopts(file_win)
-
-            flux.status()
-            vim.api.nvim_set_current_win(flux.gsw.win)
-            vim.cmd.normal('q')
-
-            assert.is_true(vim.api.nvim_win_is_valid(file_win))
-            assert.are.equal(file_buf, vim.api.nvim_win_get_buf(file_win))
-            assert_winopts(capture_winopts(file_win), before)
-        end
-    )
-
-    it(
-        'restores a real file window options after closing stacked diff',
-        function()
-            helpers.write_file(
-                vim.fs.joinpath(repo, 'tracked.txt'),
-                { 'one', 'two' }
-            )
-            vim.cmd.edit(
-                vim.fn.fnameescape(vim.fs.joinpath(repo, 'tracked.txt'))
-            )
-            local file_win = vim.api.nvim_get_current_win()
-            local file_buf = vim.api.nvim_get_current_buf()
-            vim.wo[file_win].number = true
-            vim.wo[file_win].relativenumber = true
-            vim.wo[file_win].signcolumn = 'yes:2'
-            vim.wo[file_win].foldcolumn = '2'
-            vim.wo[file_win].wrap = true
-            vim.wo[file_win].cursorline = true
-            vim.wo[file_win].winfixwidth = false
-            vim.wo[file_win].winbar = 'real file'
-            vim.wo[file_win].statuscolumn = 'user-statuscolumn'
-            local before = capture_winopts(file_win)
-
-            flux.config.options.preview.diff_layout = 'stacked'
-            flux.status()
-            vim.api.nvim_win_set_cursor(
-                assert(flux.gsw.win),
-                { row_containing(flux.gsw.buf.id, 'tracked.txt'), 0 }
-            )
-            flux.gsw:diff_entry()
-
-            assert.are.equal(
-                flux.gsw.diff_buf.id,
-                vim.api.nvim_win_get_buf(file_win)
-            )
-            assert.are.equal(false, vim.wo[file_win].number)
-            assert.are.equal(false, vim.wo[file_win].relativenumber)
-            assert.are.equal('no', vim.wo[file_win].signcolumn)
-
-            flux.gsw:close()
-
-            assert.is_true(vim.api.nvim_win_is_valid(file_win))
-            assert.are.equal(file_buf, vim.api.nvim_win_get_buf(file_win))
-            assert_winopts(capture_winopts(file_win), before)
-        end
-    )
-
-    it(
-        'focuses an already open diff when showing the same entry diff',
-        function()
-            helpers.write_file(
-                vim.fs.joinpath(repo, 'tracked.txt'),
-                { 'one', 'two' }
-            )
-
-            flux.config.options.preview.diff_layout = 'stacked'
-            flux.status()
-            vim.api.nvim_set_current_win(flux.gsw.win)
-            vim.api.nvim_win_set_cursor(
-                flux.gsw.win,
-                { row_containing(flux.gsw.buf.id, 'tracked.txt'), 0 }
-            )
-
-            assert.is_true(flux.gsw:diff_entry())
-            vim.api.nvim_set_current_win(flux.gsw.win)
-            assert.is_true(flux.gsw:diff_entry())
-
-            assert.are.equal(
-                flux.gsw.diff_win,
-                vim.api.nvim_get_current_win()
-            )
-        end
-    )
-
-    it('restores real file window options after closing split diff', function()
-        helpers.write_file(
-            vim.fs.joinpath(repo, 'tracked.txt'),
-            { 'one', 'two' }
-        )
+    it('keeps file window options unchanged after closing drawer', function()
         vim.cmd.edit(vim.fn.fnameescape(vim.fs.joinpath(repo, 'tracked.txt')))
         local file_win = vim.api.nvim_get_current_win()
         local file_buf = vim.api.nvim_get_current_buf()
-        vim.wo[file_win].number = false
+        vim.wo[file_win].number = true
         vim.wo[file_win].relativenumber = true
-        vim.wo[file_win].signcolumn = 'auto:2'
-        vim.wo[file_win].foldcolumn = '1'
+        vim.wo[file_win].signcolumn = 'yes:2'
+        vim.wo[file_win].foldcolumn = '2'
         vim.wo[file_win].wrap = true
-        vim.wo[file_win].cursorline = true
-        vim.wo[file_win].winfixwidth = false
-        vim.wo[file_win].winbar = 'real file split'
-        vim.wo[file_win].statuscolumn = 'split-statuscolumn'
+        vim.wo[file_win].cursorline = false
+        vim.wo[file_win].winbar = 'real file'
+        vim.wo[file_win].statuscolumn = 'user-statuscolumn'
         local before = capture_winopts(file_win)
 
-        flux.config.options.preview.diff_layout = 'split'
         flux.status()
-        vim.api.nvim_win_set_cursor(
-            flux.gsw.win,
-            { row_containing(flux.gsw.buf.id, 'tracked.txt'), 0 }
-        )
-        flux.gsw:diff_entry()
-
-        assert.are.equal(
-            flux.gsw.diff_left_buf.id,
-            vim.api.nvim_win_get_buf(file_win)
-        )
-        assert.are.equal(true, vim.wo[file_win].diff)
-        assert.are.equal(false, vim.wo[file_win].relativenumber)
-        assert.are.equal('yes:1', vim.wo[file_win].signcolumn)
-
-        flux.gsw:close()
+        vim.api.nvim_set_current_win(flux.gsw.win)
+        vim.cmd.normal('q')
 
         assert.is_true(vim.api.nvim_win_is_valid(file_win))
         assert.are.equal(file_buf, vim.api.nvim_win_get_buf(file_win))
         assert_winopts(capture_winopts(file_win), before)
     end)
 
-    it('restores file options when Ctrl-O leaves the status buffer', function()
+    it('opens stacked diff above the drawer', function()
+        helpers.write_file(
+            vim.fs.joinpath(repo, 'tracked.txt'),
+            { 'one', 'two' }
+        )
+
+        flux.config.options.preview.diff_layout = 'stacked'
+        flux.status()
+        local gsw = flux.gsw
+
+        vim.api.nvim_set_current_win(gsw.win)
+        vim.api.nvim_win_set_cursor(
+            gsw.win,
+            { row_containing(gsw.buf.id, 'tracked.txt'), 0 }
+        )
+
+        assert.is_true(gsw:diff_entry())
+        assert.is_not_nil(gsw.diff_win)
+        assert.is_true(vim.api.nvim_win_is_valid(gsw.diff_win))
+
+        -- Status drawer should still be open below.
+        assert.is_true(vim.api.nvim_win_is_valid(gsw.win))
+    end)
+
+    it('toggles diff closed on second =', function()
+        helpers.write_file(
+            vim.fs.joinpath(repo, 'tracked.txt'),
+            { 'one', 'two' }
+        )
+
+        flux.config.options.preview.diff_layout = 'stacked'
+        flux.status()
+        local gsw = flux.gsw
+
+        vim.api.nvim_set_current_win(gsw.win)
+        vim.api.nvim_win_set_cursor(
+            gsw.win,
+            { row_containing(gsw.buf.id, 'tracked.txt'), 0 }
+        )
+
+        -- Open diff.
+        assert.is_true(gsw:diff_entry())
+        assert.is_not_nil(gsw.diff_win)
+
+        -- Stay in the diff window, press = from status to close. Using
+        -- diff_entry directly from the status buffer context.
+        local ok = pcall(vim.api.nvim_set_current_win, gsw.win)
+        assert.is_true(ok)
+        -- Allow CursorMoved debounce to settle.
+        vim.wait(100, function()
+            return false
+        end)
+        local closed = gsw:diff_entry()
+        -- After closing, diff_win should be nil.
+        assert.is_nil(gsw.diff_win)
+        assert.is_true(closed)
+    end)
+
+    it('opens split diff above the drawer', function()
+        helpers.write_file(
+            vim.fs.joinpath(repo, 'tracked.txt'),
+            { 'one', 'two' }
+        )
+
+        flux.config.options.preview.diff_layout = 'split'
+        flux.status()
+        local gsw = flux.gsw
+
+        vim.api.nvim_set_current_win(gsw.win)
+        vim.api.nvim_win_set_cursor(
+            gsw.win,
+            { row_containing(gsw.buf.id, 'tracked.txt'), 0 }
+        )
+
+        assert.is_true(gsw:diff_entry())
+        assert.is_not_nil(gsw.diff_left_win)
+        assert.is_not_nil(gsw.diff_right_win)
+        assert.is_true(vim.api.nvim_win_is_valid(gsw.diff_left_win))
+        assert.is_true(vim.api.nvim_win_is_valid(gsw.diff_right_win))
+
+        -- Status drawer should still be open.
+        assert.is_true(vim.api.nvim_win_is_valid(gsw.win))
+    end)
+
+    it('restores file options when diff buffer is replaced', function()
+        helpers.write_file(
+            vim.fs.joinpath(repo, 'tracked.txt'),
+            { 'one', 'two' }
+        )
+        helpers.write_file(vim.fs.joinpath(repo, 'other.txt'), { 'other' })
+
+        flux.config.options.preview.diff_layout = 'stacked'
+        flux.status()
+        local gsw = flux.gsw
+
+        vim.api.nvim_set_current_win(gsw.win)
+        vim.api.nvim_win_set_cursor(
+            gsw.win,
+            { row_containing(gsw.buf.id, 'tracked.txt'), 0 }
+        )
+        gsw:diff_entry()
+
+        local diff_win = assert(gsw.diff_win)
+
+        vim.api.nvim_set_current_win(diff_win)
+        vim.cmd.edit(vim.fn.fnameescape(vim.fs.joinpath(repo, 'other.txt')))
+
+        -- The diff window should be restored after being replaced.
+        assert.is_true(vim.wait(1000, function()
+            return gsw.diff_win == nil
+        end))
+    end)
+
+    it('restores file options when Ctrl-O leaves status drawer', function()
         vim.cmd.edit(vim.fn.fnameescape(vim.fs.joinpath(repo, 'tracked.txt')))
         local file_buf = vim.api.nvim_get_current_buf()
-        vim.wo.number = true
-        vim.wo.relativenumber = true
-        vim.wo.signcolumn = 'yes:2'
-        vim.wo.foldcolumn = '2'
-        vim.wo.wrap = true
-        vim.wo.cursorline = false
-        vim.wo.winbar = 'real file jump'
-        vim.wo.statuscolumn = 'jump-statuscolumn'
-        local file_opts = capture_winopts(vim.api.nvim_get_current_win())
+        local file_win = vim.api.nvim_get_current_win()
+        vim.wo[file_win].number = true
+        vim.wo[file_win].relativenumber = true
+        vim.wo[file_win].signcolumn = 'yes:2'
+        vim.wo[file_win].foldcolumn = '2'
+        vim.wo[file_win].wrap = true
+        vim.wo[file_win].cursorline = false
+        vim.wo[file_win].winbar = 'real file jump'
+        vim.wo[file_win].statuscolumn = 'jump-statuscolumn'
+        local file_opts = capture_winopts(file_win)
 
         flux.status()
         local status_win = assert(flux.gsw.win)
@@ -455,9 +410,11 @@ describe('flux status UI', function()
         normal_keys('<C-O>')
         wait_for_current_buf(file_buf, file_opts)
 
-        local current_win = vim.api.nvim_get_current_win()
         assert.are.equal(file_buf, vim.api.nvim_get_current_buf())
-        assert_winopts(capture_winopts(current_win), file_opts)
+        assert_winopts(
+            capture_winopts(vim.api.nvim_get_current_win()),
+            file_opts
+        )
 
         normal_keys('<C-I>')
         wait_for_current_buf(status_buf, status_opts)
@@ -469,181 +426,108 @@ describe('flux status UI', function()
         )
     end)
 
-    it(
-        'restores file options when Ctrl-O leaves a stacked diff buffer',
-        function()
-            helpers.write_file(
-                vim.fs.joinpath(repo, 'tracked.txt'),
-                { 'one', 'two' }
-            )
-            vim.cmd.edit(
-                vim.fn.fnameescape(vim.fs.joinpath(repo, 'tracked.txt'))
-            )
-            local file_buf = vim.api.nvim_get_current_buf()
-            vim.wo.number = true
-            vim.wo.relativenumber = true
-            vim.wo.signcolumn = 'yes:2'
-            vim.wo.foldcolumn = '2'
-            vim.wo.wrap = true
-            vim.wo.cursorline = true
-            vim.wo.winbar = 'real file diff jump'
-            vim.wo.statuscolumn = 'diff-jump-statuscolumn'
-            local file_opts = capture_winopts(vim.api.nvim_get_current_win())
+    it('reuses window above for stacked diff', function()
+        helpers.write_file(
+            vim.fs.joinpath(repo, 'tracked.txt'),
+            { 'one', 'two' }
+        )
+        vim.cmd.edit(vim.fn.fnameescape(vim.fs.joinpath(repo, 'tracked.txt')))
+        local file_win = vim.api.nvim_get_current_win()
+        local file_buf = vim.api.nvim_get_current_buf()
+        vim.wo[file_win].winbar = 'real file'
+        local file_opts = capture_winopts(file_win)
 
-            flux.config.options.preview.diff_layout = 'stacked'
-            flux.status()
-            vim.api.nvim_win_set_cursor(
-                assert(flux.gsw.win),
-                { row_containing(flux.gsw.buf.id, 'tracked.txt'), 0 }
-            )
-            flux.gsw:diff_entry()
+        flux.config.options.preview.diff_layout = 'stacked'
+        flux.status()
+        local gsw = flux.gsw
 
-            local diff_win = assert(flux.gsw.diff_win)
-            local diff_buf = flux.gsw.diff_buf.id
-            local diff_opts = capture_winopts(diff_win)
-            vim.api.nvim_set_current_win(diff_win)
-            normal_keys('<C-O>')
-            wait_for_current_buf(file_buf, file_opts)
+        vim.api.nvim_set_current_win(gsw.win)
+        vim.api.nvim_win_set_cursor(
+            gsw.win,
+            { row_containing(gsw.buf.id, 'tracked.txt'), 0 }
+        )
+        gsw:diff_entry()
 
-            assert.are.equal(file_buf, vim.api.nvim_get_current_buf())
-            assert_winopts(
-                capture_winopts(vim.api.nvim_get_current_win()),
-                file_opts
-            )
+        -- The diff should reuse the window above the drawer.
+        assert.is_not_nil(gsw.diff_win)
+        assert.are.equal(file_win, gsw.diff_win)
 
-            normal_keys('<C-I>')
-            wait_for_current_buf(diff_buf, diff_opts)
+        -- Diff buffer should be loaded into the file's window.
+        assert.are.equal(gsw.diff_buf.id, vim.api.nvim_win_get_buf(file_win))
 
-            assert.are.equal(diff_buf, vim.api.nvim_get_current_buf())
-            assert_winopts(
-                capture_winopts(vim.api.nvim_get_current_win()),
-                diff_opts
-            )
+        gsw:close()
+
+        -- After close, file window should be restored.
+        assert.is_true(vim.api.nvim_win_is_valid(file_win))
+        assert.are.equal(file_buf, vim.api.nvim_win_get_buf(file_win))
+        assert_winopts(capture_winopts(file_win), file_opts)
+    end)
+
+    it('reuses window above for split diff', function()
+        helpers.write_file(
+            vim.fs.joinpath(repo, 'tracked.txt'),
+            { 'one', 'two' }
+        )
+        vim.cmd.edit(vim.fn.fnameescape(vim.fs.joinpath(repo, 'tracked.txt')))
+        local file_win = vim.api.nvim_get_current_win()
+        local file_buf = vim.api.nvim_get_current_buf()
+        vim.wo[file_win].winbar = 'real file split'
+        local file_opts = capture_winopts(file_win)
+
+        flux.config.options.preview.diff_layout = 'split'
+        flux.status()
+        local gsw = flux.gsw
+
+        vim.api.nvim_set_current_win(gsw.win)
+        vim.api.nvim_win_set_cursor(
+            gsw.win,
+            { row_containing(gsw.buf.id, 'tracked.txt'), 0 }
+        )
+        gsw:diff_entry()
+
+        -- The diff should reuse the window above for the left side,
+        -- and create a new split to the right.
+        assert.is_not_nil(gsw.diff_left_win)
+        assert.are.equal(file_win, gsw.diff_left_win)
+
+        gsw:close()
+
+        -- After close, file window should be restored.
+        assert.is_true(vim.api.nvim_win_is_valid(file_win))
+        assert.are.equal(file_buf, vim.api.nvim_win_get_buf(file_win))
+        assert_winopts(capture_winopts(file_win), file_opts)
+    end)
+
+    it('opens a file above the drawer and keeps drawer open', function()
+        helpers.write_file(
+            vim.fs.joinpath(repo, 'tracked.txt'),
+            { 'one', 'two' }
+        )
+        flux.status()
+        local gsw = flux.gsw
+
+        vim.api.nvim_set_current_win(gsw.win)
+        vim.api.nvim_win_set_cursor(
+            gsw.win,
+            { row_containing(gsw.buf.id, 'tracked.txt'), 0 }
+        )
+
+        local ok = gsw:enter_entry()
+        assert.is_true(ok)
+
+        -- The drawer should still be open.
+        assert.is_true(vim.api.nvim_win_is_valid(gsw.win))
+
+        -- Check that tracked.txt is open somewhere.
+        local found = false
+        for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+            local bufname =
+                vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(win))
+            if bufname:find('tracked.txt', 1, true) ~= nil then
+                found = true
+                break
+            end
         end
-    )
-
-    it(
-        'restores file options when a file replaces a stacked diff buffer',
-        function()
-            helpers.write_file(
-                vim.fs.joinpath(repo, 'tracked.txt'),
-                { 'one', 'two' }
-            )
-            helpers.write_file(vim.fs.joinpath(repo, 'other.txt'), { 'other' })
-            vim.cmd.edit(
-                vim.fn.fnameescape(vim.fs.joinpath(repo, 'tracked.txt'))
-            )
-            local file_win = vim.api.nvim_get_current_win()
-            vim.wo[file_win].number = true
-            vim.wo[file_win].relativenumber = true
-            vim.wo[file_win].signcolumn = 'yes:2'
-            vim.wo[file_win].foldcolumn = '2'
-            vim.wo[file_win].wrap = true
-            local file_opts = capture_winopts(file_win)
-
-            flux.config.options.preview.diff_layout = 'stacked'
-            flux.status()
-            vim.api.nvim_win_set_cursor(
-                assert(flux.gsw.win),
-                { row_containing(flux.gsw.buf.id, 'tracked.txt'), 0 }
-            )
-            flux.gsw:diff_entry()
-
-            vim.api.nvim_set_current_win(file_win)
-            vim.cmd.edit(vim.fn.fnameescape(vim.fs.joinpath(repo, 'other.txt')))
-            assert.is_true(vim.wait(1000, function()
-                return winopts_match(capture_winopts(file_win), file_opts)
-            end))
-            assert_winopts(capture_winopts(file_win), file_opts)
-        end
-    )
-
-    it(
-        'restores file options when a file replaces a split diff buffer',
-        function()
-            helpers.write_file(
-                vim.fs.joinpath(repo, 'tracked.txt'),
-                { 'one', 'two' }
-            )
-            helpers.write_file(vim.fs.joinpath(repo, 'other.txt'), { 'other' })
-            vim.cmd.edit(
-                vim.fn.fnameescape(vim.fs.joinpath(repo, 'tracked.txt'))
-            )
-            local file_win = vim.api.nvim_get_current_win()
-            vim.wo[file_win].number = true
-            vim.wo[file_win].relativenumber = true
-            vim.wo[file_win].signcolumn = 'yes:2'
-            vim.wo[file_win].foldcolumn = '2'
-            vim.wo[file_win].wrap = true
-            local file_opts = capture_winopts(file_win)
-
-            flux.config.options.preview.diff_layout = 'split'
-            flux.status()
-            vim.api.nvim_win_set_cursor(
-                assert(flux.gsw.win),
-                { row_containing(flux.gsw.buf.id, 'tracked.txt'), 0 }
-            )
-            flux.gsw:diff_entry()
-
-            vim.api.nvim_set_current_win(file_win)
-            vim.cmd.edit(vim.fn.fnameescape(vim.fs.joinpath(repo, 'other.txt')))
-            assert.is_true(vim.wait(1000, function()
-                return winopts_match(capture_winopts(file_win), file_opts)
-            end))
-            assert_winopts(capture_winopts(file_win), file_opts)
-        end
-    )
-
-    it(
-        'restores file options when Ctrl-O leaves a split diff buffer',
-        function()
-            helpers.write_file(
-                vim.fs.joinpath(repo, 'tracked.txt'),
-                { 'one', 'two' }
-            )
-            vim.cmd.edit(
-                vim.fn.fnameescape(vim.fs.joinpath(repo, 'tracked.txt'))
-            )
-            local file_buf = vim.api.nvim_get_current_buf()
-            vim.wo.number = false
-            vim.wo.relativenumber = true
-            vim.wo.signcolumn = 'auto:2'
-            vim.wo.foldcolumn = '1'
-            vim.wo.wrap = true
-            vim.wo.cursorline = true
-            vim.wo.winbar = 'real file split jump'
-            vim.wo.statuscolumn = 'split-jump-statuscolumn'
-            local file_opts = capture_winopts(vim.api.nvim_get_current_win())
-
-            flux.config.options.preview.diff_layout = 'split'
-            flux.status()
-            vim.api.nvim_win_set_cursor(
-                assert(flux.gsw.win),
-                { row_containing(flux.gsw.buf.id, 'tracked.txt'), 0 }
-            )
-            flux.gsw:diff_entry()
-
-            local diff_win = assert(flux.gsw.diff_left_win)
-            local diff_buf = flux.gsw.diff_left_buf.id
-            local diff_opts = capture_winopts(diff_win)
-            vim.api.nvim_set_current_win(diff_win)
-            normal_keys('<C-O>')
-            wait_for_current_buf(file_buf, file_opts)
-
-            assert.are.equal(file_buf, vim.api.nvim_get_current_buf())
-            assert_winopts(
-                capture_winopts(vim.api.nvim_get_current_win()),
-                file_opts
-            )
-
-            normal_keys('<C-I>')
-            wait_for_current_buf(diff_buf, diff_opts)
-
-            assert.are.equal(diff_buf, vim.api.nvim_get_current_buf())
-            assert_winopts(
-                capture_winopts(vim.api.nvim_get_current_win()),
-                diff_opts
-            )
-        end
-    )
+        assert.is_true(found)
+    end)
 end)

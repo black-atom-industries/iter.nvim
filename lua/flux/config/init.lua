@@ -71,39 +71,11 @@ local function validate(opts)
     end
 
     if opts.status ~= nil then
-        vim.validate('opts.status.width', opts.status.width, 'number', true)
-        vim.validate(
-            'opts.status.min_width',
-            opts.status.min_width,
-            'number',
-            true
-        )
+        vim.validate('opts.status.height', opts.status.height, 'number', true)
 
-        if opts.status.width ~= nil then
-            if opts.status.width <= 0 or opts.status.width > 1 then
-                return 'opts.status.width must be a number between 0 and 1'
-            end
-        end
-
-        if opts.status.min_width ~= nil then
-            if opts.status.min_width < 1 then
-                return 'opts.status.min_width must be >= 1'
-            end
-        end
-
-        if opts.status.layout ~= nil then
-            vim.validate(
-                'opts.status.layout',
-                opts.status.layout,
-                'string',
-                true
-            )
-
-            if
-                opts.status.layout ~= 'topleft'
-                and opts.status.layout ~= 'replace'
-            then
-                return "opts.status.layout must be 'topleft' or 'replace'"
+        if opts.status.height ~= nil then
+            if opts.status.height <= 0 or opts.status.height > 1 then
+                return 'opts.status.height must be a number between 0 and 1'
             end
         end
     end
