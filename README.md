@@ -84,39 +84,77 @@ require('flux').status()
 
 Default status-window mappings:
 
-| Mode | Key | Action |
-| --- | --- | --- |
-| n | `<CR>` | Open entry |
-| n | `o` | Open entry and close status |
-| n | `=` | Preview diff |
-| n | `q` | Close status window |
-| n | `/` | Filter entries |
-| n | `<BS>` | Clear filter |
-| n | `r` | Refresh status |
-| n,v | `s` | Stage/Unstage entry |
-| n,v | `u` | Unstage entry |
-| n | `S` | Stage all entries |
-| n | `U` | Unstage all entries |
-| n | `d` | Discard entry with confirmation |
-| n | `D` | Discard entry without confirmation |
-| n | `c` | Commit staged changes |
-| n | `p` | Push unpushed commits |
-| n | `al` | Alternate stacked/split diff layout |
-| n | `?` | Toggle help |
+| Mode | Key    | Action                              |
+| ---- | ------ | ----------------------------------- |
+| n    | `<CR>` | Open entry                          |
+| n    | `o`    | Open entry and close status         |
+| n    | `=`    | Preview diff                        |
+| n    | `q`    | Close status window                 |
+| n    | `/`    | Filter entries                      |
+| n    | `<BS>` | Clear filter                        |
+| n    | `r`    | Refresh status                      |
+| n,v  | `s`    | Stage/Unstage entry                 |
+| n,v  | `u`    | Unstage entry                       |
+| n    | `S`    | Stage all entries                   |
+| n    | `U`    | Unstage all entries                 |
+| n    | `d`    | Discard entry with confirmation     |
+| n    | `D`    | Discard entry without confirmation  |
+| n    | `c`    | Commit staged changes               |
+| n    | `p`    | Push unpushed commits               |
+| n    | `al`   | Alternate stacked/split diff layout |
+| n    | `?`    | Toggle help                         |
 
 Default diff-preview mappings:
 
-| Mode | Key | Action |
-| --- | --- | --- |
-| n | `q` | Close diff preview |
-| n | `[h` / `]h` | Jump to previous/next hunk |
-| n | `s` | Stage current unstaged hunk |
-| n | `u` | Unstage current staged hunk |
-| n | `d` | Discard current unstaged hunk with confirmation |
-| n | `aw` | Alternate wrap |
-| n | `an` | Alternate line numbers |
-| n | `am` | Alternate metadata rows *(stacked only)* |
-| n | `al` | Alternate stacked/split layout |
+| Mode | Key         | Action                                          |
+| ---- | ----------- | ----------------------------------------------- |
+| n    | `q`         | Close diff preview                              |
+| n    | `[h` / `]h` | Jump to previous/next hunk                      |
+| n    | `s`         | Stage current unstaged hunk                     |
+| n    | `u`         | Unstage current staged hunk                     |
+| n    | `d`         | Discard current unstaged hunk with confirmation |
+| n    | `aw`        | Alternate wrap                                  |
+| n    | `an`        | Alternate line numbers                          |
+| n    | `am`        | Alternate metadata rows _(stacked only)_        |
+| n    | `al`        | Alternate stacked/split layout                  |
+
+## Tooling
+
+### mise (recommended)
+
+The project pins tool versions in `mise.toml`. Install [mise](https://mise.jdx.dev/), then run:
+
+```bash
+mise install
+```
+
+This installs pinned versions of:
+
+- `lua-language-server` — for linting diagnostics
+- `just` — task runner
+
+### Linting
+
+```bash
+# Via just
+just lint
+
+# Direct
+./scripts/lint.sh
+```
+
+The lint script runs `lua-language-server --check` and outputs warnings / errors.
+A `.luarc.json` at the project root configures the diagnostics (Neovim globals,
+LuaJIT runtime, third-party checks off).
+
+#### Pre-commit hook
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The `.githooks/pre-commit` hook runs the linter on every commit. Commits are
+blocked if diagnostics with severity Error or Warning are found.
 
 ## Testing
 

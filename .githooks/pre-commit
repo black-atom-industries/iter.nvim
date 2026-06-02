@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+set -e
+
+dir="$(cd "$(dirname "$0")" && pwd)"
+project_dir="$(dirname "$dir")"
+"$project_dir/scripts/lint.sh"

@@ -4,6 +4,9 @@ plenary_url := "https://github.com/nvim-lua/plenary.nvim"
 _default:
 	just -l
 
+lint:
+	{{ justfile_directory() }}/scripts/lint.sh
+
 test:
 	#!/usr/bin/env bash
 	# Some comment
