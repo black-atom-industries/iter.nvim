@@ -29,7 +29,7 @@ These conventions apply to all project changes.
 - Keep parsing and formatting logic deterministic and easy to inspect from plain strings/tables.
 - Use logging through `flux.log` for plugin-internal diagnostics; reserve direct user-facing output for health checks or truly actionable failures.
 - Preserve compatibility assumptions already present in the project: Neovim 0.10+ and a working `git` executable.
-- Run lints before committing: `just lint` (or `./scripts/lint.sh`).
+- Run lints before committing: `just lint`.
 - Run the test suite before submitting changes: `just test`. See README for details.
 - For UI or git-status changes, validate against realistic repository states such as modified, untracked, renamed, and conflicted files when relevant.
 - When creating commits, match the existing conventional-commit style seen in history (`feat:`, `fix:`, `refactor:`, `style:`, `chore:`).

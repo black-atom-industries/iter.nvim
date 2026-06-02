@@ -18,7 +18,8 @@ Highlight.__index = Highlight
 ---@return table
 local function get_highlight(names)
     for _, name in ipairs(names) do
-        local ok, source = pcall(vim.api.nvim_get_hl, 0, { name = name, link = false })
+        local ok, source =
+            pcall(vim.api.nvim_get_hl, 0, { name = name, link = false })
         if ok and source ~= nil and next(source) ~= nil then
             ---@type table
             local result = source

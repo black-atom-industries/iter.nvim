@@ -5,7 +5,15 @@ _default:
 	just -l
 
 lint:
-	{{ justfile_directory() }}/scripts/lint.sh
+	lua-language-server --configpath={{ justfile_directory() }}/.luarc.json --check={{ justfile_directory() }}
+
+format:
+	stylua {{ justfile_directory() }}
+
+format-check:
+	stylua --check {{ justfile_directory() }}
+
+checks: lint format-check test
 
 test:
 	#!/usr/bin/env bash

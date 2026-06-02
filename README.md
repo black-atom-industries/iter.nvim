@@ -85,19 +85,30 @@ mise install
 This installs pinned versions of:
 
 - `lua-language-server` — for linting diagnostics
+- `stylua` — Lua formatter
 - `just` — task runner
 
-### Linting
+### Checks
 
 ```bash
-# Via just
-just lint
-
-# Direct
-./scripts/lint.sh
+just checks    # lint + format-check + test
 ```
 
-The lint script runs `lua-language-server --check` and outputs warnings / errors.
+Runs all quality checks:
+
+- **lint** — `lua-language-server --check` with project `.luarc.json`
+- **format-check** — `stylua --check` (auto-fix with `just format`)
+- **test** — plenary.nvim test suite
+
+Individual recipes:
+
+```bash
+just lint        # lint diagnostics
+just format      # auto-format all Lua files
+just format-check # check formatting (for CI/pre-commit)
+just test        # run test suite
+```
+
 A `.luarc.json` at the project root configures the diagnostics (Neovim globals,
 LuaJIT runtime, third-party checks off).
 
@@ -107,8 +118,8 @@ LuaJIT runtime, third-party checks off).
 git config core.hooksPath .githooks
 ```
 
-The `.githooks/pre-commit` hook runs the linter on every commit. Commits are
-blocked if diagnostics with severity Error or Warning are found.
+The `.githooks/pre-commit` hook runs lint and tests on every commit (`just
+checks`). Commits are blocked on any failure.
 
 ## Testing
 
