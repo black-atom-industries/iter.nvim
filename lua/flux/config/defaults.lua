@@ -185,6 +185,20 @@ M.keymaps_status = {
         area = 'status',
     },
     {
+        key = '<C-d>',
+        modes = { 'n' },
+        desc = 'Scroll diff preview down',
+        action = 'scroll_diff_down',
+        area = 'status',
+    },
+    {
+        key = '<C-u>',
+        modes = { 'n' },
+        desc = 'Scroll diff preview up',
+        action = 'scroll_diff_up',
+        area = 'status',
+    },
+    {
         key = 's',
         modes = { 'x' },
         desc = 'Stage selected git status entries',

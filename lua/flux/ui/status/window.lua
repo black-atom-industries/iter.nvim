@@ -96,6 +96,8 @@ end
 ---@param status_win number?
 ---@return boolean
 function M.open_entry(entry, status_win)
+    log.debug('open_entry: ' .. entry.path)
+
     local path = entry_path(entry)
 
     if vim.uv.fs_stat(path) == nil then

@@ -1,4 +1,17 @@
+local log = require('flux.log')
+
 local M = {}
+
+-- Flag to prevent debounced preview during scroll operations
+local scrolling = false
+
+function M.set_scrolling(value)
+    scrolling = value
+end
+
+function M.is_scrolling()
+    return scrolling
+end
 
 ---@param buf_id integer
 ---@param keymaps FluxKeymapEntry[]
@@ -22,6 +35,14 @@ function M.attach_status(buf_id, keymaps, self)
                 callback = function()
                     local preview_mod = require('flux.ui.status.preview')
                     preview_mod.toggle_layout(self)
+                end
+            elseif action == 'scroll_diff_down' then
+                callback = function()
+                    self:scroll_diff('down')
+                end
+            elseif action == 'scroll_diff_up' then
+                callback = function()
+                    self:scroll_diff('up')
                 end
             else
                 callback = function()
@@ -169,6 +190,12 @@ function M.attach_cursor_autocmd(self)
         buffer = self.buf.id,
         callback = function()
             local mode = vim.fn.mode()
+            local win = vim.api.nvim_get_current_win()
+            local buf = vim.api.nvim_win_get_buf(win)
+
+            if buf == self.buf.id then
+                log.debug('CursorMoved: win=' .. win .. ' mode=' .. mode)
+            end
 
             if mode == 'v' or mode == 'V' or mode == '\22' then
                 return
@@ -200,9 +227,23 @@ function M.attach_cursor_autocmd(self)
                         return
                     end
 
+                    local win = vim.api.nvim_get_current_win()
+                    local buf = vim.api.nvim_win_get_buf(win)
+
+                    if buf ~= self.buf.id then
+                        return
+                    end
+
+                    -- Skip preview update if we're currently scrolling
+                    if scrolling then
+                        log.debug('debounce: skipping during scroll')
+                        return
+                    end
+
                     local preview_mod = require('flux.ui.status.preview')
 
                     if preview_mod.has_open_diff(self) then
+                        log.debug('debounce: updating preview')
                         local opts = { force = false, notify = false }
 
                         if

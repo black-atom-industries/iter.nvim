@@ -243,8 +243,9 @@ local function ensure_autocmds(self)
             end
 
             local win = vim.api.nvim_get_current_win()
+            local buf_id = vim.api.nvim_win_get_buf(win)
 
-            if vim.api.nvim_win_get_buf(win) ~= self.buf.id then
+            if buf_id ~= self.buf.id then
                 return
             end
 
@@ -459,6 +460,9 @@ end
 
 ---@return boolean
 function GitStatusWindow:enter_entry()
+    local entry = selection.current_entry(self)
+    log.debug('enter_entry: ' .. (entry ~= nil and entry.path or 'nil'))
+
     local commit_item = selection.current_commit_item(self)
 
     if commit_item ~= nil then
@@ -467,8 +471,6 @@ function GitStatusWindow:enter_entry()
             notify = true,
         })
     end
-
-    local entry = selection.current_entry(self)
 
     if entry == nil then
         common.notify_warn('No git status entry under cursor')
@@ -694,6 +696,75 @@ function GitStatusWindow:stop_loading()
 
         self.loading_timer = nil
     end
+end
+
+---@param direction 'down'|'up'
+---@return boolean
+function GitStatusWindow:scroll_diff(direction)
+    local current_win = vim.api.nvim_get_current_win()
+    log.debug('scroll_diff: ' .. direction)
+
+    -- Set scrolling flag to prevent debounced preview from running
+    keymaps.set_scrolling(true)
+
+    local preview_mod = require('flux.ui.status.preview')
+
+    if not preview_mod.has_open_diff(self) then
+        keymaps.set_scrolling(false)
+        return false
+    end
+
+    -- Determine which window(s) to scroll
+    local wins = {}
+
+    if self.diff_win ~= nil and vim.api.nvim_win_is_valid(self.diff_win) then
+        table.insert(wins, self.diff_win)
+    end
+
+    if
+        self.diff_left_win ~= nil
+        and vim.api.nvim_win_is_valid(self.diff_left_win)
+    then
+        table.insert(wins, self.diff_left_win)
+    end
+
+    if
+        self.diff_right_win ~= nil
+        and vim.api.nvim_win_is_valid(self.diff_right_win)
+    then
+        table.insert(wins, self.diff_right_win)
+    end
+
+    if #wins == 0 then
+        keymaps.set_scrolling(false)
+        return false
+    end
+
+    -- Scroll each diff window
+    for _, win in ipairs(wins) do
+        local win_height = vim.api.nvim_win_get_height(win)
+        local scroll_amount = math.floor(win_height / 2)
+
+        -- Build the normal! command with proper control characters
+        -- Ctrl-D is byte 4, Ctrl-U is byte 21
+        local ctrl_char = direction == 'down' and string.char(4)
+            or string.char(21)
+        local cmd = 'normal! ' .. scroll_amount .. ctrl_char
+
+        vim.fn.win_execute(win, cmd)
+
+        local after_win = vim.api.nvim_get_current_win()
+        if after_win ~= current_win then
+            vim.api.nvim_set_current_win(current_win)
+        end
+    end
+
+    -- Clear scrolling flag after a short delay to allow j/k to register
+    vim.defer_fn(function()
+        keymaps.set_scrolling(false)
+    end, 100)
+
+    return true
 end
 
 ---@param config FluxConfig

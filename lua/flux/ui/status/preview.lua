@@ -474,12 +474,21 @@ function M.open_diff(self, entry, section, opts)
     )
         or (layout ~= 'split' and window_state.has_open_stacked_diff(self))
 
+    log.debug(
+        'open_diff: '
+            .. entry.path
+            .. ' same_key='
+            .. tostring(self.diff_preview_key == preview_key)
+    )
+
     if has_open_preview and self.diff_preview_key == preview_key then
         if opts.focus then
+            log.debug('open_diff: focusing existing diff')
             return display.focus_open_diff(self)
         end
 
         if not opts.force then
+            log.debug('open_diff: returning true (same preview, not forced)')
             return true
         end
     end
@@ -571,6 +580,7 @@ end
 ---@param self GitStatusWindow
 ---@return boolean
 function M.goto_code(self)
+    log.debug('goto_code')
     local position = preview_cursor.current_source_position(self)
 
     if position == nil then
