@@ -54,7 +54,6 @@ end
 ---@param fallback_bg integer?
 local function set_highlight(name, sources, fallback_fg, fallback_bg)
     local source = get_highlight(sources)
-    local resolved_fg = get_highlight_attr(sources, 'fg')
     local resolved_bg = get_highlight_attr(sources, 'bg')
 
     local opts = {
@@ -63,8 +62,12 @@ local function set_highlight(name, sources, fallback_fg, fallback_bg)
         underline = source.underline,
     }
 
+    -- Foreground: use fallback_fg if provided, otherwise clear it
+    -- to preserve syntax highlighting from treesitter/syntax
     if fallback_fg ~= nil then
-        opts.fg = resolved_fg or fallback_fg
+        opts.fg = fallback_fg
+    else
+        opts.fg = 'NONE'
     end
 
     if fallback_bg ~= nil then
