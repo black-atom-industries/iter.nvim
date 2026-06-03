@@ -43,7 +43,7 @@ M.options = {
         diff_auto_threshold = 120,
     },
     status = {
-        height = 0.3,
+        height = 0.25,
     },
     confirmations = {
         force_discard = true,

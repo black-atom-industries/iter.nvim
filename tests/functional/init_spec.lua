@@ -11,7 +11,7 @@ describe('flux', function()
         assert.is_true(flux.did_setup)
         assert.are.equal(false, flux.config.options.preview.wrap)
         assert.are.equal('stacked', flux.config.options.preview.diff_layout)
-        assert.are.equal(0.3, flux.config.options.status.height)
+        assert.are.equal(0.25, flux.config.options.status.height)
     end)
 
     it('merges valid options without losing defaults', function()
