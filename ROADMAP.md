@@ -82,6 +82,9 @@ Priority tiers: **P0** (must fix — gaps or debt that blocks quality),
   - Discard operations (normal + forced)
   - Replace-mode layout
   - Window lifecycle edge cases (BufDelete, BufUnload, etc.)
+  - Rethink fragile default-value assertions (e.g. `assert.are.equal(0.3, height)`) —
+    prefer behavior-based tests that verify the *effect* of a config value rather
+    than asserting specific magic numbers.
 - [ ] **Quick-add to `.gitignore`** — keybinding to add the file under
       cursor to the repo's `.gitignore`.
 - [ ] **Suppress untracked dir diff notification** — once untracked
