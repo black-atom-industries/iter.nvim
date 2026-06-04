@@ -9,6 +9,7 @@
 ---@field height number
 
 ---@class IterConfirmOptions
+---@field discard boolean Ask before discarding changes (d)
 ---@field force_discard boolean Ask before force-discarding changes (D)
 ---@field force_push boolean Ask before force-pushing with lease (P)
 
@@ -46,6 +47,7 @@ M.options = {
         height = 0.25,
     },
     confirmations = {
+        discard = true,
         force_discard = true,
         force_push = true,
     },

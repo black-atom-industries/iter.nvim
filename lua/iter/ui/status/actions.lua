@@ -244,11 +244,13 @@ function M.discard_entry(self, force)
         return false
     end
 
+    local confirm_flag = force
+            and self.config.options.confirmations.force_discard
+        or (not force and self.config.options.confirmations.discard)
+
     if
-        force
-        and self.config.options.confirmations.force_discard
-        and vim.fn.confirm(discard_message(item), '&Discard\n&Cancel', 2)
-            ~= 1
+        confirm_flag
+        and vim.fn.confirm(discard_message(item), '&Discard\n&No', 2) ~= 1
     then
         return false
     end
