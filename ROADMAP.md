@@ -28,15 +28,16 @@ Priority tiers: **P0** (must fix — gaps or debt that blocks quality),
 ## P1 — UX & workflow
 
 - [ ] **Event-driven auto-refresh** — refresh the status window
-      automatically:
-  - On internal git ops (commit, push, stage, unstage, discard) — fire
-    after each iter action completes.
-  - On external changes (commit via terminal, lazygit, another Neovim
-    instance) — simplest approach is a polling interval that checks
-    `.git/index` or runs a lightweight `git status` on a timer.
-    Alternative: watch `.git/` dir with `vim.uv.fs_event` for
-    filesystem-level triggers. Mini.git explored for events but ruled
-    out — not worth the dependency. Self-hosted is fine.
+      automatically on any git state change, internal or external (CLI,
+      LazyGit, another Neovim instance):
+  - Watch `.git/index` with `vim.uv.fs_event` → fires on stage/unstage/commit
+  - Watch `.git/logs/HEAD` with `vim.uv.fs_event` → fires on commit, rebase,
+    merge, cherry-pick, checkout, branch switch
+  - Together these cover the full surface. No polling needed, no external
+    dependency — `vim.uv` is already in Neovim.
+  - Debounce both watchers (fs events can fire multiple times per operation).
+  - Internal iter actions already know when they complete, so they can trigger
+    a refresh directly rather than waiting for the fs event.
   - Manual `r` refresh becomes the fallback, not the default.
 - [ ] **Rename detection** — `git status --porcelain` already flags
       renames (`R` status), but iter currently shows them as separate
