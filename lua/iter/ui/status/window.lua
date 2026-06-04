@@ -16,6 +16,7 @@ local M = {}
 ---@field fillchars string
 ---@field statuscolumn string
 ---@field winfixheight boolean
+---@field winhighlight string
 
 ---@param opts IterStatusOptions
 ---@return integer
@@ -44,6 +45,7 @@ function M.configure_status_win(win)
     vim.wo[win].wrap = false
     vim.wo[win].cursorline = true
     vim.wo[win].winfixheight = true
+    vim.wo[win].winhighlight = 'Normal:NormalPanel'
 end
 
 ---@param buf Buffer
@@ -171,6 +173,7 @@ function M.capture_winopts(win)
         fillchars = vim.wo[win].fillchars,
         statuscolumn = vim.wo[win].statuscolumn,
         winfixheight = vim.wo[win].winfixheight,
+        winhighlight = vim.wo[win].winhighlight,
     }
 end
 
@@ -192,6 +195,7 @@ function M.restore_winopts(win, opts)
     vim.wo[win].fillchars = opts.fillchars
     vim.wo[win].statuscolumn = opts.statuscolumn
     vim.wo[win].winfixheight = opts.winfixheight
+    vim.wo[win].winhighlight = opts.winhighlight
 end
 
 return M
