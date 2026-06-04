@@ -13,11 +13,11 @@ Priority tiers: **P0** (must fix — gaps or debt that blocks quality),
       as a single entry but can't be expanded or inspected. Need to surface
       individual files inside untracked dirs, and allow opening/previewing
       them. This is a core usability gap.
-- [ ] **Config directory restructuring** — the whole `lua/flux/config/`
+- [ ] **Config directory restructuring** — the whole `lua/iter/config/`
       tree needs a rethink:
   - Separate `config/types.lua` for all `---@class` type definitions
     (currently inline in defaults.lua).
-  - Fix the gap where `FluxOptions` is declared but never connected as
+  - Fix the gap where `IterOptions` is declared but never connected as
     the actual type of the resolved `options` table.
   - Audit every config access site for type safety (LuaLS annotations).
   - Keep the tree clean — flat or minimal nesting, one concept per file.
@@ -30,7 +30,7 @@ Priority tiers: **P0** (must fix — gaps or debt that blocks quality),
 - [ ] **Event-driven auto-refresh** — refresh the status window
       automatically:
   - On internal git ops (commit, push, stage, unstage, discard) — fire
-    after each flux action completes.
+    after each iter action completes.
   - On external changes (commit via terminal, lazygit, another Neovim
     instance) — simplest approach is a polling interval that checks
     `.git/index` or runs a lightweight `git status` on a timer.
@@ -39,12 +39,12 @@ Priority tiers: **P0** (must fix — gaps or debt that blocks quality),
     out — not worth the dependency. Self-hosted is fine.
   - Manual `r` refresh becomes the fallback, not the default.
 - [ ] **Rename detection** — `git status --porcelain` already flags
-      renames (`R` status), but flux currently shows them as separate
+      renames (`R` status), but iter currently shows them as separate
       delete + add entries. Parse the rename pair and surface it as a
       single "renamed" row (like `README.md → ROADMAP.md`).
-- [ ] **Flux event system** — once the auto-refresh mechanism works,
-      expose `flux.events` so users can hook into `User FluxRefresh`,
-      `User FluxStage`, etc. Keeps the architecture open without depending
+- [ ] **Iter event system** — once the auto-refresh mechanism works,
+      expose `iter.events` so users can hook into `User IterRefresh`,
+      `User IterStage`, etc. Keeps the architecture open without depending
       on external event sources.
 - [ ] **LazyGit-style action menus** — replace flat keymaps with
       select menus (`vim.ui.select`) for compound actions:
@@ -68,7 +68,7 @@ Priority tiers: **P0** (must fix — gaps or debt that blocks quality),
 
 - [ ] **Co-locate tests with source files** — move test files next to
       the modules they test (e.g. `tests/functional/git_spec.lua` →
-      `lua/flux/git.spec.lua`). Update the test runner to discover
+      `lua/iter/git.spec.lua`). Update the test runner to discover
       co-located specs. Move away from the separate `tests/` tree.
 - [ ] **Migrate or replace `docs/CONVENTIONS.md`** — the `docs/` folder
       currently only contains the conventions doc, which is thin. Either
@@ -95,7 +95,7 @@ Priority tiers: **P0** (must fix — gaps or debt that blocks quality),
 
 ## P3 — Polish & exploration
 
-- [ ] **Statusline component** — expose `flux.statusline()` that returns
+- [ ] **Statusline component** — expose `iter.statusline()` that returns
       branch + dirty file counts for `vim.opt.statusline`. Lightweight,
       no extra polling beyond what git already does.
 - [ ] **Inline hunk staging from diff preview** — stage/unstage the
@@ -122,7 +122,7 @@ Priority tiers: **P0** (must fix — gaps or debt that blocks quality),
 - [x] fix: use bufadd/bufload instead of `:edit` in replace mode
 - [x] feat: customizable keybindings (data-driven keymap tables + keymaps
       option in setup)
-- [x] chore: rename plugin to flux.nvim (with credit to original)
+- [x] chore: rename plugin to iter.nvim (with credit to original)
 - [x] test: add test suite (diff parser, diff position, status formatting,
       keymaps survival, CI workflow)
 - [x] fix: harden keymap lifecycle (CursorMoved group, BufEnter diff

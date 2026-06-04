@@ -1,0 +1,108 @@
+---@class IterRenderSpan
+---@field group string
+---@field start_col integer
+---@field end_col integer
+
+---@class IterRenderLine
+---@field text string
+---@field highlights IterRenderSpan[]
+---@field line_hl_group string?
+---@field data any?
+
+local M = {}
+
+local namespace = vim.api.nvim_create_namespace('iter.ui.render')
+
+---@param text string
+---@param data any?
+---@return IterRenderLine
+function M.line(text, data)
+    return {
+        text = text,
+        highlights = {},
+        data = data,
+    }
+end
+
+---@param line IterRenderLine
+---@param group string?
+---@param start_col integer
+---@param end_col integer?
+function M.add_highlight(line, group, start_col, end_col)
+    if not group then
+        return
+    end
+
+    table.insert(line.highlights, {
+        group = group,
+        start_col = start_col,
+        end_col = end_col or (start_col + 1),
+    })
+end
+
+---@param lines IterRenderLine[]
+---@return string[]
+function M.text_lines(lines)
+    return vim.tbl_map(function(line)
+        return line.text
+    end, lines)
+end
+
+---@param line IterRenderLine
+---@param start_col integer
+---@param end_col integer
+---@return integer?
+---@return integer?
+local function clamp_highlight_range(line, start_col, end_col)
+    local line_len = #(line.text or '')
+
+    start_col = math.max(0, start_col)
+    end_col = math.min(line_len, math.max(0, end_col))
+
+    if start_col >= line_len or end_col <= start_col then
+        return nil, nil
+    end
+
+    return start_col, end_col
+end
+
+---@param buf integer
+---@param lines IterRenderLine[]
+function M.apply(buf, lines)
+    if not vim.api.nvim_buf_is_valid(buf) then
+        return
+    end
+
+    vim.api.nvim_buf_clear_namespace(buf, namespace, 0, -1)
+
+    for index, line in ipairs(lines) do
+        if line.line_hl_group then
+            vim.api.nvim_buf_set_extmark(buf, namespace, index - 1, 0, {
+                line_hl_group = line.line_hl_group,
+                priority = 200,
+            })
+        end
+
+        for _, range in ipairs(line.highlights) do
+            local start_col, end_col =
+                clamp_highlight_range(line, range.start_col, range.end_col)
+
+            if start_col ~= nil and end_col ~= nil then
+                vim.api.nvim_buf_set_extmark(
+                    buf,
+                    namespace,
+                    index - 1,
+                    start_col,
+                    {
+                        end_col = end_col,
+                        hl_group = range.group,
+                        hl_mode = 'combine',
+                        priority = 200,
+                    }
+                )
+            end
+        end
+    end
+end
+
+return M

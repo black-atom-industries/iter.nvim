@@ -1,4 +1,4 @@
----@class FluxTestHelpers
+---@class IterTestHelpers
 ---@field run fun(args: string[], cwd: string): string
 ---@field write_file fun(path: string, lines: string[])
 
@@ -9,7 +9,7 @@ local git_env = {
     GIT_TERMINAL_PROMPT = '0',
 }
 
----@type FluxTestHelpers
+---@type IterTestHelpers
 local M = {
     ---@param args string[]
     ---@param cwd string

@@ -2,7 +2,7 @@
 local spec_dir = vim.fs.dirname(
     vim.fn.fnamemodify(debug.getinfo(1, 'S').source:sub(2), ':p')
 )
----@type FluxTestHelpers
+---@type IterTestHelpers
 local helpers = dofile(vim.fs.joinpath(vim.fs.dirname(spec_dir), 'helpers.lua'))
 
 ---@param buf integer
@@ -111,24 +111,24 @@ local function wait_for_current_buf(buf, expected_opts)
     end))
 end
 
-describe('flux status UI', function()
+describe('iter status UI', function()
     ---@type string
     local original_cwd
     ---@type string
     local repo
-    ---@type Flux
-    local flux
+    ---@type Iter
+    local iter
 
     before_each(function()
-        package.loaded.flux = nil
+        package.loaded.iter = nil
         original_cwd = vim.fn.getcwd()
         repo = vim.fn.tempname()
         vim.fn.mkdir(repo, 'p')
 
         helpers.run({ 'git', 'init', '-b', 'main' }, repo)
-        helpers.run({ 'git', 'config', 'user.name', 'Flux Test' }, repo)
+        helpers.run({ 'git', 'config', 'user.name', 'Iter Test' }, repo)
         helpers.run(
-            { 'git', 'config', 'user.email', 'flux@example.test' },
+            { 'git', 'config', 'user.email', 'iter@example.test' },
             repo
         )
 
@@ -138,14 +138,14 @@ describe('flux status UI', function()
 
         vim.cmd.cd(vim.fn.fnameescape(repo))
         vim.cmd.enew()
-        flux = require('flux').setup({
+        iter = require('iter').setup({
             status = { height = 0.5 },
         })
     end)
 
     after_each(function()
-        if flux ~= nil then
-            flux.reset()
+        if iter ~= nil then
+            iter.reset()
         end
 
         vim.cmd.only({ mods = { emsg_silent = true } })
@@ -169,17 +169,17 @@ describe('flux status UI', function()
         )
         helpers.run({ 'git', 'add', 'staged.txt' }, repo)
 
-        flux.status()
+        iter.status()
 
         ---@type GitStatusWindow
-        local gsw = flux.gsw
+        local gsw = iter.gsw
         assert.is_not_nil(gsw)
         assert.is_true(vim.api.nvim_win_is_valid(gsw.win))
         assert.is_true(vim.api.nvim_buf_is_valid(gsw.buf.id))
         assert.are.equal(gsw.buf.id, vim.api.nvim_win_get_buf(gsw.win))
         assert.are.equal('nofile', vim.bo[gsw.buf.id].buftype)
         assert.are.equal('hide', vim.bo[gsw.buf.id].bufhidden)
-        assert.are.equal('flux', vim.bo[gsw.buf.id].filetype)
+        assert.are.equal('iter', vim.bo[gsw.buf.id].filetype)
         assert.are.equal(false, vim.wo[gsw.win].number)
         assert.are.equal(false, vim.wo[gsw.win].relativenumber)
         assert.are.equal('no', vim.wo[gsw.win].signcolumn)
@@ -202,10 +202,10 @@ describe('flux status UI', function()
     it(
         'refreshes and reuses the existing status drawer on repeated calls',
         function()
-            flux.status()
+            iter.status()
 
             ---@type GitStatusWindow
-            local first = flux.gsw
+            local first = iter.gsw
             local first_buf = first.buf.id
             local first_win = assert(first.win)
 
@@ -213,21 +213,21 @@ describe('flux status UI', function()
                 vim.fs.joinpath(repo, 'untracked.txt'),
                 { 'untracked' }
             )
-            flux.status()
+            iter.status()
 
-            assert.are.equal(first, flux.gsw)
-            assert.are.equal(first_buf, flux.gsw.buf.id)
-            assert.are.equal(first_win, flux.gsw.win)
+            assert.are.equal(first, iter.gsw)
+            assert.are.equal(first_buf, iter.gsw.buf.id)
+            assert.are.equal(first_win, iter.gsw.win)
             assert.are.equal(first_buf, vim.api.nvim_win_get_buf(first_win))
             assert_has_line(buffer_lines(first_buf), '?? untracked.txt')
         end
     )
 
     it('closes the status drawer through its normal mode mapping', function()
-        flux.status()
+        iter.status()
 
         ---@type GitStatusWindow
-        local gsw = flux.gsw
+        local gsw = iter.gsw
         local win = assert(gsw.win)
 
         vim.api.nvim_set_current_win(win)
@@ -242,9 +242,9 @@ describe('flux status UI', function()
         vim.fn.mkdir(not_repo, 'p')
         vim.cmd.cd(vim.fn.fnameescape(not_repo))
 
-        flux.status()
+        iter.status()
 
-        local lines = buffer_lines(flux.gsw.buf.id)
+        local lines = buffer_lines(iter.gsw.buf.id)
         assert_has_line(lines, 'HEAD: (none)')
         assert_has_line_containing(lines, 'Not inside a git repository')
 
@@ -265,8 +265,8 @@ describe('flux status UI', function()
         vim.wo[file_win].statuscolumn = 'user-statuscolumn'
         local before = capture_winopts(file_win)
 
-        flux.status()
-        vim.api.nvim_set_current_win(flux.gsw.win)
+        iter.status()
+        vim.api.nvim_set_current_win(iter.gsw.win)
         vim.cmd.normal('q')
 
         assert.is_true(vim.api.nvim_win_is_valid(file_win))
@@ -280,9 +280,9 @@ describe('flux status UI', function()
             { 'one', 'two' }
         )
 
-        flux.config.options.preview.diff_layout = 'stacked'
-        flux.status()
-        local gsw = flux.gsw
+        iter.config.options.preview.diff_layout = 'stacked'
+        iter.status()
+        local gsw = iter.gsw
 
         vim.api.nvim_set_current_win(gsw.win)
         vim.api.nvim_win_set_cursor(
@@ -304,9 +304,9 @@ describe('flux status UI', function()
             { 'one', 'two' }
         )
 
-        flux.config.options.preview.diff_layout = 'stacked'
-        flux.status()
-        local gsw = flux.gsw
+        iter.config.options.preview.diff_layout = 'stacked'
+        iter.status()
+        local gsw = iter.gsw
 
         vim.api.nvim_set_current_win(gsw.win)
         vim.api.nvim_win_set_cursor(
@@ -338,9 +338,9 @@ describe('flux status UI', function()
             { 'one', 'two' }
         )
 
-        flux.config.options.preview.diff_layout = 'split'
-        flux.status()
-        local gsw = flux.gsw
+        iter.config.options.preview.diff_layout = 'split'
+        iter.status()
+        local gsw = iter.gsw
 
         vim.api.nvim_set_current_win(gsw.win)
         vim.api.nvim_win_set_cursor(
@@ -365,9 +365,9 @@ describe('flux status UI', function()
         )
         helpers.write_file(vim.fs.joinpath(repo, 'other.txt'), { 'other' })
 
-        flux.config.options.preview.diff_layout = 'stacked'
-        flux.status()
-        local gsw = flux.gsw
+        iter.config.options.preview.diff_layout = 'stacked'
+        iter.status()
+        local gsw = iter.gsw
 
         vim.api.nvim_set_current_win(gsw.win)
         vim.api.nvim_win_set_cursor(
@@ -401,9 +401,9 @@ describe('flux status UI', function()
         vim.wo[file_win].statuscolumn = 'jump-statuscolumn'
         local file_opts = capture_winopts(file_win)
 
-        flux.status()
-        local status_win = assert(flux.gsw.win)
-        local status_buf = flux.gsw.buf.id
+        iter.status()
+        local status_win = assert(iter.gsw.win)
+        local status_buf = iter.gsw.buf.id
         local status_opts = capture_winopts(status_win)
 
         vim.api.nvim_set_current_win(status_win)
@@ -437,9 +437,9 @@ describe('flux status UI', function()
         vim.wo[file_win].winbar = 'real file'
         local file_opts = capture_winopts(file_win)
 
-        flux.config.options.preview.diff_layout = 'stacked'
-        flux.status()
-        local gsw = flux.gsw
+        iter.config.options.preview.diff_layout = 'stacked'
+        iter.status()
+        local gsw = iter.gsw
 
         vim.api.nvim_set_current_win(gsw.win)
         vim.api.nvim_win_set_cursor(
@@ -474,9 +474,9 @@ describe('flux status UI', function()
         vim.wo[file_win].winbar = 'real file split'
         local file_opts = capture_winopts(file_win)
 
-        flux.config.options.preview.diff_layout = 'split'
-        flux.status()
-        local gsw = flux.gsw
+        iter.config.options.preview.diff_layout = 'split'
+        iter.status()
+        local gsw = iter.gsw
 
         vim.api.nvim_set_current_win(gsw.win)
         vim.api.nvim_win_set_cursor(
@@ -503,8 +503,8 @@ describe('flux status UI', function()
             vim.fs.joinpath(repo, 'tracked.txt'),
             { 'one', 'two' }
         )
-        flux.status()
-        local gsw = flux.gsw
+        iter.status()
+        local gsw = iter.gsw
 
         vim.api.nvim_set_current_win(gsw.win)
         vim.api.nvim_win_set_cursor(

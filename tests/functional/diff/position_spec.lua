@@ -1,6 +1,6 @@
 ---@diagnostic disable: undefined-field
-local parser = require('flux.ui.diff.parser')
-local position = require('flux.ui.diff.position')
+local parser = require('iter.ui.diff.parser')
+local position = require('iter.ui.diff.position')
 
 -- Helper: build a small diff with known structure
 -- File: a.txt (new file, pure added)
@@ -46,7 +46,7 @@ local SAMPLE_DIFF_TWO_HUNKS = {
     ' ctx4',
 }
 
-describe('flux.diff.position', function()
+describe('iter.diff.position', function()
     describe('hunk_by_index', function()
         local hunks
 

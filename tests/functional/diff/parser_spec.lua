@@ -1,7 +1,7 @@
 ---@diagnostic disable: undefined-field
-local parser = require('flux.ui.diff.parser')
+local parser = require('iter.ui.diff.parser')
 
-describe('flux.diff.parser', function()
+describe('iter.diff.parser', function()
     describe('parse_hunk_header', function()
         it('parses standard hunk header with counts', function()
             local old_start, old_count, new_start, new_count =

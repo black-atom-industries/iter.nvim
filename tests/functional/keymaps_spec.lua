@@ -2,7 +2,7 @@
 local spec_dir = vim.fs.dirname(
     vim.fn.fnamemodify(debug.getinfo(1, 'S').source:sub(2), ':p')
 )
----@type FluxTestHelpers
+---@type IterTestHelpers
 local helpers = dofile(vim.fs.joinpath(vim.fs.dirname(spec_dir), 'helpers.lua'))
 
 ---@param buf integer
@@ -49,21 +49,21 @@ local function keymap_has_nowait(buf, lhs)
     return false
 end
 
-describe('flux keymaps', function()
+describe('iter keymaps', function()
     local original_cwd
     local repo
-    local flux
+    local iter
 
     before_each(function()
-        package.loaded.flux = nil
+        package.loaded.iter = nil
         original_cwd = vim.fn.getcwd()
         repo = vim.fn.tempname()
         vim.fn.mkdir(repo, 'p')
 
         helpers.run({ 'git', 'init', '-b', 'main' }, repo)
-        helpers.run({ 'git', 'config', 'user.name', 'Flux Test' }, repo)
+        helpers.run({ 'git', 'config', 'user.name', 'Iter Test' }, repo)
         helpers.run(
-            { 'git', 'config', 'user.email', 'flux@example.test' },
+            { 'git', 'config', 'user.email', 'iter@example.test' },
             repo
         )
 
@@ -73,14 +73,14 @@ describe('flux keymaps', function()
 
         vim.cmd.cd(vim.fn.fnameescape(repo))
         vim.cmd.enew()
-        flux = require('flux').setup({
+        iter = require('iter').setup({
             status = { width = 0.5, min_width = 20 },
         })
     end)
 
     after_each(function()
-        if flux ~= nil then
-            flux.reset()
+        if iter ~= nil then
+            iter.reset()
         end
 
         vim.cmd.only({ mods = { emsg_silent = true } })
@@ -93,9 +93,9 @@ describe('flux keymaps', function()
     end)
 
     it('status buffer has expected keymaps after open', function()
-        flux.status()
+        iter.status()
 
-        local buf = flux.gsw.buf.id
+        local buf = iter.gsw.buf.id
         assert.is_true(vim.api.nvim_buf_is_valid(buf))
         assert.is_true(has_keymap(buf, '='))
         assert.is_true(has_keymap(buf, 'q'))
@@ -106,16 +106,16 @@ describe('flux keymaps', function()
     end)
 
     it('status keymaps survive close and reopen', function()
-        flux.status()
-        local buf = flux.gsw.buf.id
+        iter.status()
+        local buf = iter.gsw.buf.id
 
         -- Close via q mapping
-        vim.api.nvim_set_current_win(flux.gsw.win)
+        vim.api.nvim_set_current_win(iter.gsw.win)
         vim.cmd.normal('q')
 
         -- Reopen
-        flux.status()
-        local new_buf = flux.gsw.buf.id
+        iter.status()
+        local new_buf = iter.gsw.buf.id
         assert.are.equal(buf, new_buf)
         assert.is_true(has_keymap(new_buf, '='))
         assert.is_true(has_keymap(new_buf, 'q'))
@@ -128,27 +128,27 @@ describe('flux keymaps', function()
             { 'one', 'two' }
         )
 
-        flux.status()
-        local status_buf = flux.gsw.buf.id
+        iter.status()
+        local status_buf = iter.gsw.buf.id
 
         -- Open diff via = mapping
-        vim.api.nvim_set_current_win(flux.gsw.win)
+        vim.api.nvim_set_current_win(iter.gsw.win)
         vim.api.nvim_win_set_cursor(
-            flux.gsw.win,
+            iter.gsw.win,
             { row_containing(status_buf, 'tracked.txt'), 0 }
         )
         vim.cmd.normal('=')
 
         -- Diff buffer should exist and have keymaps
-        assert.is_not_nil(flux.gsw.diff_buf)
-        local diff_buf = flux.gsw.diff_buf.id
+        assert.is_not_nil(iter.gsw.diff_buf)
+        local diff_buf = iter.gsw.diff_buf.id
         assert.is_true(vim.api.nvim_buf_is_valid(diff_buf))
         assert.is_true(has_keymap(diff_buf, 'q'))
         assert.is_true(has_keymap(diff_buf, 's'))
         assert.is_true(has_keymap(diff_buf, 'u'))
 
         -- Close diff via q mapping
-        vim.api.nvim_set_current_win(flux.gsw.diff_win)
+        vim.api.nvim_set_current_win(iter.gsw.diff_win)
         vim.cmd.normal('q')
 
         -- Status keymaps still present
@@ -156,17 +156,17 @@ describe('flux keymaps', function()
         assert.is_true(has_keymap(status_buf, 'q'))
 
         -- Re-open diff on same entry
-        vim.api.nvim_set_current_win(flux.gsw.win)
+        vim.api.nvim_set_current_win(iter.gsw.win)
         vim.api.nvim_win_set_cursor(
-            flux.gsw.win,
+            iter.gsw.win,
             { row_containing(status_buf, 'tracked.txt'), 0 }
         )
         vim.cmd.normal('=')
 
         -- Diff should be open again with keymaps
-        assert.is_not_nil(flux.gsw.diff_buf)
-        assert.is_true(vim.api.nvim_buf_is_valid(flux.gsw.diff_buf.id))
-        assert.is_true(has_keymap(flux.gsw.diff_buf.id, 'q'))
+        assert.is_not_nil(iter.gsw.diff_buf)
+        assert.is_true(vim.api.nvim_buf_is_valid(iter.gsw.diff_buf.id))
+        assert.is_true(has_keymap(iter.gsw.diff_buf.id, 'q'))
     end)
 
     it('status keymaps survive opening a file from status', function()
@@ -175,12 +175,12 @@ describe('flux keymaps', function()
             { 'one', 'two' }
         )
 
-        flux.status()
-        local status_buf = flux.gsw.buf.id
-        local status_win = flux.gsw.win
+        iter.status()
+        local status_buf = iter.gsw.buf.id
+        local status_win = iter.gsw.win
 
         -- Open entry via API
-        flux.gsw:enter_entry()
+        iter.gsw:enter_entry()
 
         -- We should now be in the tracked.txt file buffer
         local file_buf = vim.api.nvim_get_current_buf()
@@ -204,8 +204,8 @@ describe('flux keymaps', function()
         vim.cmd.normal('=')
 
         -- Verify diff opened
-        assert.is_not_nil(flux.gsw.diff_buf)
-        assert.is_true(vim.api.nvim_buf_is_valid(flux.gsw.diff_buf.id))
+        assert.is_not_nil(iter.gsw.diff_buf)
+        assert.is_true(vim.api.nvim_buf_is_valid(iter.gsw.diff_buf.id))
     end)
 
     it('status keymaps survive open/close toggle', function()
@@ -214,22 +214,22 @@ describe('flux keymaps', function()
             { 'one', 'two' }
         )
 
-        flux.status()
-        local status_buf = flux.gsw.buf.id
+        iter.status()
+        local status_buf = iter.gsw.buf.id
 
         -- First press: open diff
-        vim.api.nvim_set_current_win(flux.gsw.win)
+        vim.api.nvim_set_current_win(iter.gsw.win)
         vim.api.nvim_win_set_cursor(
-            flux.gsw.win,
+            iter.gsw.win,
             { row_containing(status_buf, 'tracked.txt'), 0 }
         )
         vim.cmd.normal('=')
 
-        assert.is_not_nil(flux.gsw.diff_win)
-        assert.is_true(vim.api.nvim_win_is_valid(flux.gsw.diff_win))
+        assert.is_not_nil(iter.gsw.diff_win)
+        assert.is_true(vim.api.nvim_win_is_valid(iter.gsw.diff_win))
 
         -- Second press: close diff (toggle)
-        vim.api.nvim_set_current_win(flux.gsw.win)
+        vim.api.nvim_set_current_win(iter.gsw.win)
         vim.cmd.normal('=')
 
         -- Status keymaps intact
@@ -237,36 +237,36 @@ describe('flux keymaps', function()
         assert.is_true(has_keymap(status_buf, 'q'))
 
         -- Third press: re-open diff
-        vim.api.nvim_set_current_win(flux.gsw.win)
+        vim.api.nvim_set_current_win(iter.gsw.win)
         vim.api.nvim_win_set_cursor(
-            flux.gsw.win,
+            iter.gsw.win,
             { row_containing(status_buf, 'tracked.txt'), 0 }
         )
         vim.cmd.normal('=')
 
-        assert.is_not_nil(flux.gsw.diff_win)
-        assert.is_true(vim.api.nvim_win_is_valid(flux.gsw.diff_win))
+        assert.is_not_nil(iter.gsw.diff_win)
+        assert.is_true(vim.api.nvim_win_is_valid(iter.gsw.diff_win))
     end)
 
     it('help buffer opens with q and closes', function()
-        flux.status()
+        iter.status()
 
         -- Open help via ?
-        vim.api.nvim_set_current_win(flux.gsw.win)
+        vim.api.nvim_set_current_win(iter.gsw.win)
         vim.cmd.normal('?')
 
-        assert.is_not_nil(flux.gsw.help_win)
-        assert.is_true(vim.api.nvim_win_is_valid(flux.gsw.help_win))
-        assert.is_true(has_keymap(flux.gsw.help_buf.id, 'q'))
+        assert.is_not_nil(iter.gsw.help_win)
+        assert.is_true(vim.api.nvim_win_is_valid(iter.gsw.help_win))
+        assert.is_true(has_keymap(iter.gsw.help_buf.id, 'q'))
 
         -- Close help via q
-        vim.api.nvim_set_current_win(flux.gsw.help_win)
+        vim.api.nvim_set_current_win(iter.gsw.help_win)
         vim.cmd.normal('q')
 
         -- Status window should be back in focus with keymaps
-        assert.is_not_nil(flux.gsw.win)
-        assert.is_true(vim.api.nvim_win_is_valid(flux.gsw.win))
-        assert.is_true(has_keymap(flux.gsw.buf.id, '?'))
+        assert.is_not_nil(iter.gsw.win)
+        assert.is_true(vim.api.nvim_win_is_valid(iter.gsw.win))
+        assert.is_true(has_keymap(iter.gsw.buf.id, '?'))
     end)
 
     it('diff keymaps survive switching windows and coming back', function()
@@ -277,24 +277,24 @@ describe('flux keymaps', function()
         helpers.write_file(vim.fs.joinpath(repo, 'other.txt'), { 'other' })
         helpers.run({ 'git', 'add', 'other.txt' }, repo)
 
-        flux.status()
-        local status_buf = flux.gsw.buf.id
+        iter.status()
+        local status_buf = iter.gsw.buf.id
 
         -- Open diff
-        vim.api.nvim_set_current_win(flux.gsw.win)
+        vim.api.nvim_set_current_win(iter.gsw.win)
         vim.api.nvim_win_set_cursor(
-            flux.gsw.win,
+            iter.gsw.win,
             { row_containing(status_buf, 'tracked.txt'), 0 }
         )
         vim.cmd.normal('=')
 
-        local diff_win = flux.gsw.diff_win
-        local diff_buf = flux.gsw.diff_buf.id
+        local diff_win = iter.gsw.diff_win
+        local diff_buf = iter.gsw.diff_buf.id
         assert.is_true(has_keymap(diff_buf, 'q'))
         assert.is_true(has_keymap(diff_buf, 's'))
 
         -- Switch back to status window
-        vim.api.nvim_set_current_win(flux.gsw.win)
+        vim.api.nvim_set_current_win(iter.gsw.win)
 
         -- Switch back to diff window
         vim.api.nvim_set_current_win(diff_win)
@@ -313,8 +313,8 @@ describe('flux keymaps', function()
     it(
         'status keymaps are restored via WinEnter after being cleared',
         function()
-            flux.status()
-            local status_buf = flux.gsw.buf.id
+            iter.status()
+            local status_buf = iter.gsw.buf.id
 
             -- Verify keymaps exist
             assert.is_true(has_keymap(status_buf, '='))
@@ -328,7 +328,7 @@ describe('flux keymaps', function()
 
             -- Navigate away and back to trigger WinEnter re-attachment
             vim.cmd.wincmd('w')
-            vim.api.nvim_set_current_win(flux.gsw.win)
+            vim.api.nvim_set_current_win(iter.gsw.win)
 
             -- Keymaps should be restored
             assert.is_true(has_keymap(status_buf, '='))
@@ -337,8 +337,8 @@ describe('flux keymaps', function()
     )
 
     it('status keymaps have nowait = true', function()
-        flux.status()
-        local status_buf = flux.gsw.buf.id
+        iter.status()
+        local status_buf = iter.gsw.buf.id
 
         assert.is_true(has_keymap(status_buf, '='))
         assert.is_true(keymap_has_nowait(status_buf, '='))
@@ -355,19 +355,19 @@ describe('flux keymaps', function()
                 { 'one', 'two' }
             )
 
-            flux.status()
-            local status_buf = flux.gsw.buf.id
+            iter.status()
+            local status_buf = iter.gsw.buf.id
 
             -- Open diff
-            vim.api.nvim_set_current_win(flux.gsw.win)
+            vim.api.nvim_set_current_win(iter.gsw.win)
             vim.api.nvim_win_set_cursor(
-                flux.gsw.win,
+                iter.gsw.win,
                 { row_containing(status_buf, 'tracked.txt'), 0 }
             )
             vim.cmd.normal('=')
 
-            assert.is_not_nil(flux.gsw.diff_buf)
-            local diff_buf = flux.gsw.diff_buf.id
+            assert.is_not_nil(iter.gsw.diff_buf)
+            local diff_buf = iter.gsw.diff_buf.id
             assert.is_true(vim.api.nvim_buf_is_valid(diff_buf))
 
             -- Clear status keymaps to simulate loss during diff operations
@@ -377,7 +377,7 @@ describe('flux keymaps', function()
             assert.is_false(has_keymap(status_buf, '<C-]>'))
 
             -- Close diff via q; close_diff should re-attach keymaps
-            vim.api.nvim_set_current_win(flux.gsw.diff_win)
+            vim.api.nvim_set_current_win(iter.gsw.diff_win)
             vim.cmd.normal('q')
 
             -- Status keymaps should be restored after close_diff
@@ -392,19 +392,19 @@ describe('flux keymaps', function()
             { 'one', 'two' }
         )
 
-        flux.status()
-        local status_buf = flux.gsw.buf.id
+        iter.status()
+        local status_buf = iter.gsw.buf.id
 
         -- Open diff
-        vim.api.nvim_set_current_win(flux.gsw.win)
+        vim.api.nvim_set_current_win(iter.gsw.win)
         vim.api.nvim_win_set_cursor(
-            flux.gsw.win,
+            iter.gsw.win,
             { row_containing(status_buf, 'tracked.txt'), 0 }
         )
         vim.cmd.normal('=')
 
-        assert.is_not_nil(flux.gsw.diff_buf)
-        local diff_buf = flux.gsw.diff_buf.id
+        assert.is_not_nil(iter.gsw.diff_buf)
+        local diff_buf = iter.gsw.diff_buf.id
         assert.is_true(keymap_has_nowait(diff_buf, 'q'))
         assert.is_true(keymap_has_nowait(diff_buf, 's'))
         assert.is_true(keymap_has_nowait(diff_buf, 'u'))

@@ -1,16 +1,18 @@
-# flux.nvim
+# iter.nvim
 
-https://github.com/user-attachments/assets/54852a86-f04e-4eea-a432-700de08bb89f
+> **iter** /ˈɪtɛr/ — Latin: _journey, path, road, march_
+>
+> Your code's journey through version control.
 
 A lightweight Git status UI for Neovim, inspired by
 [vim-fugitive](https://github.com/tpope/vim-fugitive).
 
-flux.nvim focuses on a compact status window for everyday Git operations
+iter.nvim focuses on a compact status window for everyday Git operations
 without leaving Neovim.
 
 ## Features
 
-- Open a Git status window with `:Flux`.
+- Open a Git status window with `:Iter`.
 - View your files' status.
 - Discard unstaged changes or delete untracked paths, with confirmation by
   default.
@@ -20,7 +22,7 @@ without leaving Neovim.
 - Create commits.
 - Animated loading spinner while pushing your commits.
 - View unpushed commits in the status window and preview the diffs.
-- Run `:checkhealth flux` to verify Neovim and Git requirements.
+- Run `:checkhealth iter` to verify Neovim and Git requirements.
 
 ## Requirements
 
@@ -33,7 +35,7 @@ without leaving Neovim.
 
 ```lua
 vim.pack.add({
-    'https://github.com/nikbrunner/flux.nvim',
+    'https://github.com/black-atom-industries/iter.nvim',
     version = vim.version.range("*") -- stable version
     -- version = "nightly"
 })
@@ -43,21 +45,21 @@ vim.pack.add({
 
 ```lua
 {
-    'nikbrunner/flux.nvim',
-    cmd = { 'Flux' },
+    'black-atom-industries/iter.nvim',
+    cmd = { 'Iter' },
 }
 ```
 
 ### Configuration
 
 All options, keymaps, their defaults, and inline documentation can be found in
-**[`lua/flux/config/defaults.lua`](lua/flux/config/defaults.lua)**.
+**[`lua/iter/config/defaults.lua`](lua/iter/config/defaults.lua)**.
 
 ### Highlight Groups
 
-Flux defines its own highlight groups (all prefixed `Flux*`). Each one falls
+Iter defines its own highlight groups (all prefixed `Iter*`). Each one falls
 back to a standard Neovim group when available, then to a hardcoded hex color.
-See **[`lua/flux/config/defaults.lua`](lua/flux/config/defaults.lua)** for the
+See **[`lua/iter/config/defaults.lua`](lua/iter/config/defaults.lua)** for the
 full list and their fallback sources.
 
 ## Usage
@@ -65,11 +67,11 @@ full list and their fallback sources.
 Open the status window:
 
 ```vim
-:Flux
+:Iter
 ```
 
 ```lua
-require('flux').status()
+require('iter').status()
 ```
 
 ## Tooling
@@ -157,7 +159,7 @@ repository).
 
 ## Credits
 
-flux.nvim is a fork of [minifugit.nvim](https://github.com/vieitesss/minifugit.nvim)
+iter.nvim is a fork of [minifugit.nvim](https://github.com/vieitesss/minifugit.nvim)
 by [vieitesss](https://github.com/vieitesss). The original plugin provided the
-foundation for this lightweight Git status UI — flux.nvim builds on it with a
+foundation for this lightweight Git status UI — iter.nvim builds on it with a
 fresh name and continued development.

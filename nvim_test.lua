@@ -1,4 +1,4 @@
--- Test init file for miniharp.nvim development
+-- Test init file for iter.nvim development
 -- Add the plugin to runtime path
 vim.opt.runtimepath:prepend('.')
 
@@ -8,10 +8,10 @@ vim.opt.number = true
 vim.cmd('colorscheme catppuccin')
 
 vim.pack.add({
-    { src = vim.env.HOME .. '/personal/flux.nvim' },
+    { src = vim.env.HOME .. '/personal/iter.nvim' },
 })
 
-local mf = require('flux').setup({
+local mf = require('iter').setup({
     preview = {
         wrap = false,
         show_line_numbers = true,
@@ -22,7 +22,7 @@ local mf = require('flux').setup({
         min_width = 20,
     },
 })
-local log = require('flux.log')
+local log = require('iter.log')
 
 vim.keymap.set('n', '<leader>gs', function()
     mf.status()

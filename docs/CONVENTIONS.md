@@ -4,7 +4,7 @@ These conventions apply to all project changes.
 
 ## Project shape
 
-- Keep the public `flux` entrypoints thin and move behavior into focused modules.
+- Keep the public `iter` entrypoints thin and move behavior into focused modules.
 - Separate data collection, formatting, and UI rendering. A good default flow is: Git/process output -> parsed data -> renderable lines -> buffer/window updates.
 - Prefer small single-purpose modules over catch-all utility files.
 - Model stateful UI pieces as table-based objects with `__index`; keep pure transforms and parsers as local helper functions or stateless modules.
@@ -27,7 +27,7 @@ These conventions apply to all project changes.
 ## Good practices
 
 - Keep parsing and formatting logic deterministic and easy to inspect from plain strings/tables.
-- Use logging through `flux.log` for plugin-internal diagnostics; reserve direct user-facing output for health checks or truly actionable failures.
+- Use logging through `iter.log` for plugin-internal diagnostics; reserve direct user-facing output for health checks or truly actionable failures.
 - Preserve compatibility assumptions already present in the project: Neovim 0.10+ and a working `git` executable.
 - Run lints before committing: `just lint`.
 - Run the test suite before submitting changes: `just test`. See README for details.
