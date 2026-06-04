@@ -92,9 +92,22 @@ Priority tiers: **P0** (must fix — gaps or debt that blocks quality),
       or silence the "Diff preview not available for untracked directories"
       warning.
 - [ ] **Config** - Configurable `git diff` command (`--detect-renames` e.g.)
+- [ ] **Fixup commit workflow** — LazyGit-style fixup: with staged changes,
+      open a commit picker (last ~25 commits, not just unpushed), select a
+      target, and:
+  - `F` → `git commit --fixup=<sha>` (create fixup commit)
+  - `S` → `git commit --fixup=<sha>` + `git rebase -i --autosquash <sha>~1`
+          (create and immediately squash in one step)
+  - Prerequisite: a proper commit list view that shows more than unpushed
+    commits — a natural base for other history-browsing features too.
 
 ## P3 — Polish & exploration
 
+- [ ] **Visual commit reordering** — once the commit list exists (see fixup
+      workflow in P2), allow reordering via visual selection + move: select
+      one or more commits with `V`, cut with `d`/`x`, paste above/below with
+      `p`/`P`. Translates to `git rebase -i` under the hood, rewriting the
+      pick order. Natural follow-up to the fixup workflow.
 - [ ] **Statusline component** — expose `iter.statusline()` that returns
       branch + dirty file counts for `vim.opt.statusline`. Lightweight,
       no extra polling beyond what git already does.
