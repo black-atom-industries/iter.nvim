@@ -27,7 +27,7 @@ Priority tiers: **P0** (must fix — gaps or debt that blocks quality),
 
 ## P1 — UX & workflow
 
-- [ ] **Event-driven auto-refresh** — refresh the status window
+- [x] **Event-driven auto-refresh** — refresh the status window
       automatically on any git state change, internal or external (CLI,
       LazyGit, another Neovim instance):
   - Watch `.git/index` with `vim.uv.fs_event` → fires on stage/unstage/commit

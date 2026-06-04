@@ -56,6 +56,8 @@ local git = require('iter.git')
 ---@field loading_frame integer
 ---@field loading_timer table?
 ---@field autocmd_group integer?
+---@field _fs_watchers table[]?
+---@field _refresh_timer table?
 local GitStatusWindow = {}
 GitStatusWindow.__index = GitStatusWindow
 
@@ -199,6 +201,73 @@ local function refresh_highlights(self)
         and preview.has_open_diff(self)
     then
         preview.refresh_current_entry(self)
+    end
+end
+
+local REFRESH_DEBOUNCE_MS = 300
+
+---@param self GitStatusWindow
+local function start_fs_watchers(self)
+    local root = git.root()
+    if root == '' then
+        return
+    end
+
+    local git_dir = root .. '/.git'
+
+    local timer = vim.uv.new_timer()
+    self._refresh_timer = timer
+
+    local refresh = vim.schedule_wrap(function()
+        if self.buf and self.buf:is_valid() then
+            self:refresh()
+        end
+    end)
+
+    local function debounced_refresh()
+        timer:stop()
+        timer:start(REFRESH_DEBOUNCE_MS, 0, refresh)
+    end
+
+    local watchers = {}
+    self._fs_watchers = watchers
+
+    local function watch(path)
+        local w = vim.uv.new_fs_event()
+        local ok = pcall(function()
+            w:start(path, {}, function(err)
+                if not err then
+                    debounced_refresh()
+                end
+            end)
+        end)
+        if ok then
+            table.insert(watchers, w)
+        else
+            w:close()
+        end
+    end
+
+    watch(git_dir .. '/index')
+    watch(git_dir .. '/logs/HEAD')
+end
+
+---@param self GitStatusWindow
+local function stop_fs_watchers(self)
+    if self._fs_watchers then
+        for _, w in ipairs(self._fs_watchers) do
+            if not w:is_closing() then
+                w:stop()
+                w:close()
+            end
+        end
+        self._fs_watchers = nil
+    end
+
+    if self._refresh_timer then
+        self._refresh_timer:stop()
+        self._refresh_timer:close()
+        self._refresh_timer = nil
     end
 end
 
@@ -581,6 +650,8 @@ end
 
 ---@return boolean destroyed
 function GitStatusWindow:destroy()
+    stop_fs_watchers(self)
+
     if self.autocmd_group ~= nil then
         pcall(vim.api.nvim_del_augroup_by_id, self.autocmd_group)
         self.autocmd_group = nil
@@ -806,6 +877,7 @@ function GitStatusWindow.new(config)
 
     selection.move_to_first_entry(self)
     ensure_autocmds(self)
+    start_fs_watchers(self)
 
     return self
 end
