@@ -280,6 +280,7 @@ function M.commit(self)
     vim.fn.writefile(git.commit_template(), path)
 
     if self.win ~= nil and common.is_valid_win(self.win) then
+        self._retain_win = true
         vim.api.nvim_set_current_win(self.win)
         vim.cmd('edit ' .. vim.fn.fnameescape(path))
     end
@@ -287,6 +288,10 @@ function M.commit(self)
     vim.bo.filetype = 'gitcommit'
 
     local commit_win = vim.api.nvim_get_current_win()
+
+    vim.wo[commit_win].signcolumn = 'no'
+    vim.wo[commit_win].number = false
+    vim.wo[commit_win].relativenumber = false
 
     vim.api.nvim_create_autocmd('BufWritePost', {
         buffer = vim.api.nvim_get_current_buf(),

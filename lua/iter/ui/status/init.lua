@@ -45,6 +45,7 @@ local git = require('iter.git')
 ---@field help_prev_win number?
 ---@field win number?
 ---@field win_prev_winopts GitStatusWindowOptions?
+---@field _retain_win boolean?
 ---@field config IterConfig
 ---@field groups table<string, string>
 ---@field highlights table<string, { ensure: fun() }>
@@ -175,10 +176,11 @@ local function release_status_win(self)
 
     local win = self.win
 
-    if win ~= nil and common.is_valid_win(win) then
+    if win ~= nil and common.is_valid_win(win) and not self._retain_win then
         window.restore_winopts(win, self.win_prev_winopts)
     end
 
+    self._retain_win = nil
     self.win = nil
     self.win_prev_winopts = nil
 end
