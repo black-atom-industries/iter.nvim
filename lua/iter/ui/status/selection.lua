@@ -1,4 +1,5 @@
 local common = require('iter.ui.status.common')
+local git = require('iter.git')
 
 local M = {}
 
@@ -316,6 +317,32 @@ function M.row_for_commit_key(self, commit_key)
             M.commit_item_key(M.commit_item_from_data(line.data)) == commit_key
         then
             return row
+        end
+    end
+
+    return nil
+end
+
+---@param self GitStatusWindow
+---@param path string Absolute file path
+---@return integer?
+function M.row_for_path(self, path)
+    local root = git.root()
+    local normalized = vim.fs.normalize(path)
+
+    for row, line in ipairs(self.lines) do
+        local item = M.entry_item_from_data(line.data)
+
+        if item ~= nil then
+            local entry_abs = item.entry.path
+
+            if root ~= '' then
+                entry_abs = vim.fs.normalize(vim.fs.joinpath(root, entry_abs))
+            end
+
+            if entry_abs == normalized then
+                return row
+            end
         end
     end
 

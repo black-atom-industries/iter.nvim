@@ -77,6 +77,13 @@ end
 function M.status()
     log.info('status command called')
 
+    -- Capture the current buffer path before opening the status window so we
+    -- can pre-select the matching entry if it has changes.
+    local source_buf = vim.api.nvim_get_current_buf()
+    local source_path = vim.api.nvim_buf_is_valid(source_buf)
+            and vim.api.nvim_buf_get_name(source_buf)
+        or ''
+
     if M.gsw ~= nil and not has_valid_status_buffer(M.gsw) then
         M.reset()
     end
@@ -89,6 +96,17 @@ function M.status()
         local gsw = GitStatusWindow.new(M.config)
         attach_status_buffer_autocmd(gsw)
         M.gsw = gsw
+    end
+
+    -- Try to select the entry that matches the source buffer. Falls back to
+    -- the default first-entry position when the file has no changes.
+    if source_path ~= '' and M.gsw.win ~= nil then
+        local selection = require('iter.ui.status.selection')
+        local row = selection.row_for_path(M.gsw, source_path)
+
+        if row ~= nil then
+            selection.set_cursor_row(M.gsw, row)
+        end
     end
 
     log.info(
