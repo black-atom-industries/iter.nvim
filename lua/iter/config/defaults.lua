@@ -1,7 +1,5 @@
 ---@class IterPreviewOptions
 ---@field wrap boolean
----@field show_line_numbers boolean
----@field show_metadata boolean
 ---@field diff_layout 'stacked'|'split'|'auto'
 ---@field diff_auto_threshold integer
 
@@ -38,8 +36,6 @@ M.options = {
     debug = false,
     preview = {
         wrap = false,
-        show_line_numbers = true,
-        show_metadata = true,
         diff_layout = 'stacked',
         diff_auto_threshold = 120,
     },
@@ -247,20 +243,6 @@ M.keymaps_diff_stacked = {
         area = 'diff_stacked',
     },
     {
-        key = 'an',
-        modes = { 'n' },
-        desc = 'Toggle git diff preview line numbers',
-        action = 'toggle_numbers',
-        area = 'diff_stacked',
-    },
-    {
-        key = 'am',
-        modes = { 'n' },
-        desc = 'Toggle git diff preview metadata',
-        action = 'toggle_headers',
-        area = 'diff_stacked',
-    },
-    {
         key = 's',
         modes = { 'n' },
         desc = 'Stage current git diff hunk',
@@ -437,16 +419,6 @@ M.highlight_specs = {
         sources = { 'Identifier', 'Keyword' },
         fallback_fg = 0x61AFEF,
     },
-    diff_added = {
-        name = 'IterDiffAdded',
-        sources = { 'DiffAdd', 'Added', 'String' },
-        fallback_bg = 0x2E4D33,
-    },
-    diff_removed = {
-        name = 'IterDiffRemoved',
-        sources = { 'DiffDelete', 'Removed', 'Error' },
-        fallback_bg = 0x5A2D34,
-    },
     unpushed = {
         name = 'IterUnpushed',
         sources = { 'Constant', 'Number' },
@@ -456,11 +428,6 @@ M.highlight_specs = {
         name = 'IterLoading',
         sources = { 'DiagnosticInfo', 'Identifier' },
         fallback_fg = 0x61AFEF,
-    },
-    diff_line_nr = {
-        name = 'IterDiffLineNr',
-        sources = { 'LineNr', 'Comment' },
-        fallback_fg = 0x5C6370,
     },
 }
 
@@ -479,9 +446,5 @@ M.owned_buffer_fields = {
 }
 
 M.highlight_namespace = 'GitStatusWindow'
-
-M.diff_header_hl_name = 'IterDiffHeader'
-
-M.diff_hunk_header_hl_name = 'IterDiffHunkHeader'
 
 return M

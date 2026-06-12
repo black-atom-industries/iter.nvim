@@ -16,11 +16,23 @@ local check_nvim_version = function()
     end
 end
 
+local function check_diffs_nvim()
+    if pcall(require, 'diffs') then
+        vim.health.ok('`diffs.nvim` is installed')
+    else
+        vim.health.error(
+            '`diffs.nvim` is not installed (required for diff previews)',
+            'Install https://github.com/barrettruth/diffs.nvim alongside iter.nvim'
+        )
+    end
+end
+
 M.check = function()
     vim.health.start('iter.nvim report')
     -- make sure setup function parameters are ok
     check_nvim_version()
     check_git_installed()
+    check_diffs_nvim()
 end
 
 return M

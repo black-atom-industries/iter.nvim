@@ -28,7 +28,7 @@ These conventions apply to all project changes.
 
 - Keep parsing and formatting logic deterministic and easy to inspect from plain strings/tables.
 - Use logging through `iter.log` for plugin-internal diagnostics; reserve direct user-facing output for health checks or truly actionable failures.
-- Preserve compatibility assumptions already present in the project: Neovim 0.10+ and a working `git` executable.
+- Preserve compatibility assumptions already present in the project: Neovim 0.10+, a working `git` executable, and the diffs.nvim plugin (required for diff previews).
 - Run lints before committing: `just lint`.
 - Run the test suite before submitting changes: `just test`. See README for details.
 - For UI or git-status changes, validate against realistic repository states such as modified, untracked, renamed, and conflicted files when relevant.

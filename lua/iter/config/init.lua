@@ -8,8 +8,6 @@
 ---@field spinner_frames string[]
 ---@field owned_buffer_fields string[]
 ---@field highlight_namespace string
----@field diff_header_hl_name string
----@field diff_hunk_header_hl_name string
 ---@field debug boolean Whether to write debug-level logs to the iter log file
 
 local defaults = require('iter.config.defaults')
@@ -28,18 +26,6 @@ local function validate(opts)
 
     if opts.preview ~= nil then
         vim.validate('opts.preview.wrap', opts.preview.wrap, 'boolean', true)
-        vim.validate(
-            'opts.preview.show_line_numbers',
-            opts.preview.show_line_numbers,
-            'boolean',
-            true
-        )
-        vim.validate(
-            'opts.preview.show_metadata',
-            opts.preview.show_metadata,
-            'boolean',
-            true
-        )
         vim.validate(
             'opts.preview.diff_layout',
             opts.preview.diff_layout,
@@ -250,8 +236,6 @@ function M.resolve(user_opts)
         spinner_frames = defaults.spinner_frames,
         owned_buffer_fields = defaults.owned_buffer_fields,
         highlight_namespace = defaults.highlight_namespace,
-        diff_header_hl_name = defaults.diff_header_hl_name,
-        diff_hunk_header_hl_name = defaults.diff_hunk_header_hl_name,
         debug = merged.debug,
     }
 end

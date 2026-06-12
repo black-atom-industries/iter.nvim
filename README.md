@@ -22,12 +22,15 @@ without leaving Neovim.
 - Create commits.
 - Animated loading spinner while pushing your commits.
 - View unpushed commits in the status window and preview the diffs.
-- Run `:checkhealth iter` to verify Neovim and Git requirements.
+- Run `:checkhealth iter` to verify Neovim, Git, and diffs.nvim requirements.
 
 ## Requirements
 
 - Neovim 0.10+
 - `git` executable on `PATH`
+- [diffs.nvim](https://github.com/barrettruth/diffs.nvim) — renders the diff
+  previews (treesitter syntax inside hunks, intra-line word highlighting,
+  colorscheme-derived colors)
 
 ## Configuration
 
@@ -35,9 +38,12 @@ without leaving Neovim.
 
 ```lua
 vim.pack.add({
-    'https://github.com/black-atom-industries/iter.nvim',
-    version = vim.version.range("*") -- stable version
-    -- version = "nightly"
+    'https://github.com/barrettruth/diffs.nvim',
+    {
+        src = 'https://github.com/black-atom-industries/iter.nvim',
+        version = vim.version.range("*") -- stable version
+        -- version = "nightly"
+    },
 })
 ```
 
@@ -47,8 +53,15 @@ vim.pack.add({
 {
     'black-atom-industries/iter.nvim',
     cmd = { 'Iter' },
+    dependencies = { 'barrettruth/diffs.nvim' },
 }
 ```
+
+### diffs.nvim
+
+iter hands its diff preview buffers to diffs.nvim for highlighting, so its
+rendering options (highlight blend, intra-line algorithm, …) apply to iter's
+previews too. Configure them via `vim.g.diffs` — see `:help diffs.nvim`.
 
 ### Configuration
 

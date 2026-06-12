@@ -2,8 +2,7 @@ require('iter.ui.status.preview.types')
 
 local diff_parser = require('iter.ui.diff.parser')
 local diff_position = require('iter.ui.diff.position')
-local diff_render = require('iter.ui.diff.render')
-local render = require('iter.ui.render')
+local diffs_nvim = require('iter.ui.diff.diffs_nvim')
 local git = require('iter.git')
 local log = require('iter.log')
 local common = require('iter.ui.status.common')
@@ -191,12 +190,6 @@ local function preview_actions(self)
         toggle_wrap = function()
             M.toggle_wrap(self)
         end,
-        toggle_numbers = function()
-            M.toggle_numbers(self)
-        end,
-        toggle_headers = function()
-            M.toggle_headers(self)
-        end,
         toggle_split_numbers = function()
             display.toggle_split_numbers(self)
         end,
@@ -323,41 +316,6 @@ function M.toggle_layout(self)
 end
 
 ---@param self GitStatusWindow
----@param option 'numbers'|'headers'
----@return boolean
-local function toggle_diff_render_option(self, option)
-    if option == 'numbers' then
-        self.diff_show_numbers = not self.diff_show_numbers
-    else
-        self.diff_show_headers = not self.diff_show_headers
-    end
-
-    local ok = M.refresh_current_entry(self) == true
-
-    if
-        ok
-        and self.diff_win ~= nil
-        and vim.api.nvim_win_is_valid(self.diff_win)
-    then
-        vim.api.nvim_set_current_win(self.diff_win)
-    end
-
-    return ok
-end
-
----@param self GitStatusWindow
----@return boolean
-function M.toggle_numbers(self)
-    return toggle_diff_render_option(self, 'numbers')
-end
-
----@param self GitStatusWindow
----@return boolean
-function M.toggle_headers(self)
-    return toggle_diff_render_option(self, 'headers')
-end
-
----@param self GitStatusWindow
 ---@return boolean
 function M.has_open_diff(self)
     return window_state.has_open_stacked_diff(self)
@@ -381,8 +339,12 @@ function M.open_commit_diff(self, commit, opts)
         return true
     end
 
+    if not diffs_nvim.is_available() then
+        common.notify_error(diffs_nvim.error_msg, 'Cannot show commit diff')
+        return false
+    end
+
     local lines, err = git.show_commit(commit)
-    local diff_lines
 
     if err ~= nil then
         common.notify_error(err, 'Cannot show commit diff')
@@ -390,19 +352,14 @@ function M.open_commit_diff(self, commit, opts)
     end
 
     if #lines == 0 then
-        diff_lines = { render.line('No diff for commit ' .. commit.hash) }
-    else
-        diff_lines = diff_render.render_lines(lines, self.groups, {
-            show_headers = self.diff_show_headers,
-            show_numbers = self.diff_show_numbers,
-        })
+        lines = { 'No diff for commit ' .. commit.hash }
     end
 
     set_diff_context(self, nil, nil, nil, nil, nil)
 
     local ok = display.show_stacked(
         self,
-        diff_lines,
+        lines,
         preview_key,
         commit_diff_title(commit),
         preview_actions(self)
@@ -493,6 +450,11 @@ function M.open_diff(self, entry, section, opts)
         end
     end
 
+    if not diffs_nvim.is_available() then
+        common.notify_error(diffs_nvim.error_msg, 'Cannot show diff')
+        return false
+    end
+
     local lines, err = git.diff(entry, section)
 
     if err ~= nil then
@@ -501,14 +463,14 @@ function M.open_diff(self, entry, section, opts)
     end
 
     local parsed_hunks = diff_parser.parse_hunks(lines)
-    local split_diff, split_err = git.split_diff(entry, section)
 
     if layout == 'split' then
+        local split_diff, split_err = git.split_diff(entry, section)
+
         if split_diff ~= nil then
             local ok = display.show_split(
                 self,
                 split_diff,
-                lines,
                 preview_key,
                 diff_title(entry, section),
                 preview_actions(self)
@@ -526,33 +488,22 @@ function M.open_diff(self, entry, section, opts)
         end
     end
 
-    local diff_lines
-    local raw_rows
-    local syntax
+    -- The stacked buffer holds the raw unified diff verbatim (diffs.nvim
+    -- parses it for highlighting), so buffer rows map 1:1 to raw diff rows.
+    local raw_rows = {}
 
-    if split_diff ~= nil then
-        syntax = {
-            filetype = split_diff.filetype,
-            left_lines = split_diff.left.lines,
-            right_lines = split_diff.right.lines,
-        }
+    for row = 1, #lines do
+        raw_rows[row] = row
     end
 
-    if #lines == 0 then
-        diff_lines = { render.line('No diff for ' .. entry.path) }
-    else
-        diff_lines, raw_rows = diff_render.render_lines(lines, self.groups, {
-            show_headers = self.diff_show_headers,
-            show_numbers = self.diff_show_numbers,
-            syntax = syntax,
-        })
-    end
+    local display_lines = #lines > 0 and lines
+        or { 'No diff for ' .. entry.path }
 
     diff_parser.assign_stacked_rows(parsed_hunks, raw_rows)
 
     local ok = display.show_stacked(
         self,
-        diff_lines,
+        display_lines,
         preview_key,
         diff_title(entry, section),
         preview_actions(self)

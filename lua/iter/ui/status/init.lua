@@ -36,8 +36,7 @@ local git = require('iter.git')
 ---@field diff_left_prev_winopts GitStatusWindowOptions?
 ---@field diff_right_prev_winopts GitStatusWindowOptions?
 ---@field diff_wrap boolean
----@field diff_show_headers boolean
----@field diff_show_numbers boolean
+---@field diff_split_show_numbers boolean
 ---@field diff_layout 'stacked'|'split'|'auto'
 ---@field diff_layout_override 'stacked'|'split'?
 ---@field help_buf Buffer?
@@ -61,47 +60,6 @@ local git = require('iter.git')
 local GitStatusWindow = {}
 GitStatusWindow.__index = GitStatusWindow
 
----@return table
-local function diff_header_style()
-    if vim.o.background == 'light' then
-        return {
-            fg = 0x8A8A8A,
-            ctermfg = 245,
-        }
-    end
-
-    return {
-        fg = 0x6C7086,
-        ctermfg = 243,
-    }
-end
-
----@return table
-local function diff_hunk_header_style()
-    if vim.o.background == 'light' then
-        return {
-            fg = 0x5F6B7A,
-            ctermfg = 60,
-        }
-    end
-
-    return {
-        fg = 0x7A88A1,
-        ctermfg = 67,
-    }
-end
-
----@param name string
----@param style fun(): table
----@return { ensure: fun() }
-local function create_fixed_highlight(name, style)
-    return {
-        ensure = function()
-            vim.api.nvim_set_hl(0, name, style())
-        end,
-    }
-end
-
 ---@param config IterConfig
 ---@return table<string, string>
 local function create_highlight_groups(config)
@@ -110,9 +68,6 @@ local function create_highlight_groups(config)
     for key, spec in pairs(config.highlight_specs) do
         groups[key] = spec.name
     end
-
-    groups.diff_header = config.diff_header_hl_name
-    groups.diff_hunk_header = config.diff_hunk_header_hl_name
 
     return groups
 end
@@ -131,13 +86,6 @@ local function create_highlights(config)
             fallback_bg = spec.fallback_bg,
         })
     end
-
-    highlights.diff_header =
-        create_fixed_highlight(config.diff_header_hl_name, diff_header_style)
-    highlights.diff_hunk_header = create_fixed_highlight(
-        config.diff_hunk_header_hl_name,
-        diff_hunk_header_style
-    )
 
     return highlights
 end
@@ -853,8 +801,7 @@ function GitStatusWindow.new(config)
     self.diff_left_created_win = false
     self.diff_right_created_win = false
     self.diff_wrap = config.options.preview.wrap
-    self.diff_show_headers = config.options.preview.show_metadata
-    self.diff_show_numbers = config.options.preview.show_line_numbers
+    self.diff_split_show_numbers = true
     self.diff_layout = config.options.preview.diff_layout
     self.filter = ''
     self.loading_frame = 1

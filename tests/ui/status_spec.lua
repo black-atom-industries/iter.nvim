@@ -296,6 +296,14 @@ describe('iter status UI', function()
 
         -- Status drawer should still be open below.
         assert.is_true(vim.api.nvim_win_is_valid(gsw.win))
+
+        -- The buffer holds the raw unified diff and is handed to diffs.nvim.
+        local diff_buf = gsw.diff_buf.id
+        local lines = buffer_lines(diff_buf)
+        assert_has_line_containing(lines, 'diff --git')
+        assert_has_line_containing(lines, '@@')
+        assert.are.equal('iter-diff', vim.bo[diff_buf].filetype)
+        assert.is_not_nil(vim.b[diff_buf].diffs_repo_root)
     end)
 
     it('toggles diff closed on second =', function()

@@ -17,13 +17,13 @@ describe('iter', function()
     it('merges valid options without losing defaults', function()
         ---@type Iter
         local iter = require('iter').setup({
-            preview = { show_metadata = false, diff_layout = 'split' },
+            preview = { wrap = true, diff_layout = 'split' },
             status = { height = 0.5 },
         })
 
-        assert.are.equal(false, iter.config.options.preview.show_metadata)
+        assert.are.equal(true, iter.config.options.preview.wrap)
         assert.are.equal('split', iter.config.options.preview.diff_layout)
-        assert.are.equal(false, iter.config.options.preview.wrap)
+        assert.are.equal(120, iter.config.options.preview.diff_auto_threshold)
         assert.are.equal(0.5, iter.config.options.status.height)
     end)
 

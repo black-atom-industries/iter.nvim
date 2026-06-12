@@ -1,7 +1,8 @@
 require('iter.ui.status.preview.types')
 
 local common = require('iter.ui.status.common')
-local render = require('iter.ui.render')
+local diffs_nvim = require('iter.ui.diff.diffs_nvim')
+local rail = require('iter.ui.status.preview.rail')
 local window = require('iter.ui.status.window')
 local buffers = require('iter.ui.status.preview.buffers')
 local window_state = require('iter.ui.status.preview.window_state')
@@ -9,8 +10,6 @@ local preview_util = require('iter.ui.status.preview.util')
 local log = require('iter.log')
 
 local M = {}
-
-local SPLIT_DIFF_NAMESPACE = vim.api.nvim_create_namespace('iter.ui.split_diff')
 
 ---@param win number?
 ---@param enabled boolean
@@ -35,7 +34,7 @@ function M.toggle_split_numbers(self)
         end
     end
 
-    self.diff_show_numbers = enabled
+    self.diff_split_show_numbers = enabled
 
     for _, win in ipairs({ self.diff_left_win, self.diff_right_win }) do
         M.set_split_line_numbers(win, enabled)
@@ -93,59 +92,6 @@ local function set_preview_win_buf(self, win, buf, created)
     return false
 end
 
----@param buf Buffer
----@param row integer?
----@param group string
----@param marker string
-local function mark_split_change(buf, row, group, marker)
-    if row == nil or row < 1 then
-        return
-    end
-
-    pcall(
-        vim.api.nvim_buf_set_extmark,
-        buf.id,
-        SPLIT_DIFF_NAMESPACE,
-        row - 1,
-        0,
-        {
-            line_hl_group = group,
-            sign_text = marker,
-            sign_hl_group = group,
-            priority = 200,
-        }
-    )
-end
-
----@param left_buf Buffer
----@param right_buf Buffer
----@param diff_lines string[]
----@param groups table<string, string>
-local function mark_split_changes(left_buf, right_buf, diff_lines, groups)
-    vim.api.nvim_buf_clear_namespace(left_buf.id, SPLIT_DIFF_NAMESPACE, 0, -1)
-    vim.api.nvim_buf_clear_namespace(right_buf.id, SPLIT_DIFF_NAMESPACE, 0, -1)
-
-    local diff_parser = require('iter.ui.diff.parser')
-
-    for _, line in ipairs(diff_parser.parse_lines(diff_lines)) do
-        if line.kind == 'added' then
-            mark_split_change(
-                right_buf,
-                line.new_number,
-                groups.diff_added,
-                '+'
-            )
-        elseif line.kind == 'removed' then
-            mark_split_change(
-                left_buf,
-                line.old_number,
-                groups.diff_removed,
-                '-'
-            )
-        end
-    end
-end
-
 ---@param self GitStatusWindow
 ---@return boolean
 function M.focus_open_diff(self)
@@ -188,12 +134,12 @@ local function reuse_or_create_window_above(self)
 end
 
 ---@param self GitStatusWindow
----@param diff_lines IterRenderLine[]
+---@param lines string[] raw unified diff lines (diffs.nvim parses them)
 ---@param preview_key string
 ---@param title string
 ---@param actions IterPreviewBufferActions
 ---@return boolean
-function M.show_stacked(self, diff_lines, preview_key, title, actions)
+function M.show_stacked(self, lines, preview_key, title, actions)
     local transition_win
     local transition_prev_buf
     local transition_prev_winopts
@@ -225,10 +171,9 @@ function M.show_stacked(self, diff_lines, preview_key, title, actions)
     local buf = buffers.ensure_stacked(self, actions)
     window_state.attach_autocmds(self, buf.id, actions, 'stacked')
 
-    vim.bo[buf.id].modifiable = true
-    buf:set_lines(render.text_lines(diff_lines))
-    vim.bo[buf.id].modifiable = false
-    render.apply(buf.id, diff_lines)
+    buffers.set_plain_lines(buf, lines)
+    diffs_nvim.attach(buf.id)
+    diffs_nvim.refresh(buf.id)
 
     local target_win
     local created_win = false
@@ -273,6 +218,7 @@ function M.show_stacked(self, diff_lines, preview_key, title, actions)
     end
 
     window.configure_diff_win(target_win)
+    rail.set(target_win, buf.id, lines)
     vim.wo[target_win].wrap = self.diff_wrap
     vim.wo[target_win].winbar = title
     self.diff_win = target_win
@@ -287,12 +233,11 @@ end
 
 ---@param self GitStatusWindow
 ---@param split_diff GitSplitDiff
----@param diff_lines string[]
 ---@param preview_key string
 ---@param title string
 ---@param actions IterPreviewBufferActions
 ---@return boolean
-function M.show_split(self, split_diff, diff_lines, preview_key, title, actions)
+function M.show_split(self, split_diff, preview_key, title, actions)
     local transition_win
     local transition_prev_buf
     local transition_prev_winopts
@@ -332,7 +277,6 @@ function M.show_split(self, split_diff, diff_lines, preview_key, title, actions)
     window_state.attach_autocmds(self, right_buf.id, actions, 'split')
     buffers.set_plain_lines(left_buf, split_diff.left.lines)
     buffers.set_plain_lines(right_buf, split_diff.right.lines)
-    mark_split_changes(left_buf, right_buf, diff_lines, self.groups)
 
     if split_diff.filetype ~= '' then
         vim.bo[left_buf.id].filetype = split_diff.filetype
@@ -380,7 +324,7 @@ function M.show_split(self, split_diff, diff_lines, preview_key, title, actions)
     end
 
     window.configure_split_diff_win(target_win)
-    M.set_split_line_numbers(target_win, self.diff_show_numbers)
+    M.set_split_line_numbers(target_win, self.diff_split_show_numbers)
     vim.wo[target_win].wrap = self.diff_wrap
     vim.wo[target_win].winbar = title
         .. ' [1/2] '
@@ -423,7 +367,7 @@ function M.show_split(self, split_diff, diff_lines, preview_key, title, actions)
     end
 
     window.configure_split_diff_win(right_win)
-    M.set_split_line_numbers(right_win, self.diff_show_numbers)
+    M.set_split_line_numbers(right_win, self.diff_split_show_numbers)
     vim.wo[right_win].wrap = self.diff_wrap
     vim.wo[right_win].winbar = title
         .. ' [2/2] '
@@ -442,6 +386,8 @@ function M.show_split(self, split_diff, diff_lines, preview_key, title, actions)
         vim.cmd('diffupdate')
         vim.cmd('syncbind')
     end)
+    diffs_nvim.apply_diff_winhighlight(self.diff_left_win, 'old')
+    diffs_nvim.apply_diff_winhighlight(self.diff_right_win, 'new')
 
     self.diff_preview_key = preview_key
 

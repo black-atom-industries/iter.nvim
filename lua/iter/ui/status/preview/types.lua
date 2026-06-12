@@ -2,8 +2,6 @@
 ---@field close_diff fun()
 ---@field jump_hunk fun(delta: integer)
 ---@field toggle_wrap fun()
----@field toggle_numbers fun()
----@field toggle_headers fun()
 ---@field toggle_split_numbers fun()
 ---@field stage_current_hunk fun()
 ---@field unstage_current_hunk fun()

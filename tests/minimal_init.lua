@@ -4,6 +4,7 @@ local project_root = vim.fs.dirname(tests_dir)
 
 vim.opt.runtimepath:prepend(project_root)
 vim.opt.runtimepath:prepend(project_root .. '/plenary.nvim')
+vim.opt.runtimepath:prepend(project_root .. '/diffs.nvim')
 
 vim.g.mapleader = ' '
 
