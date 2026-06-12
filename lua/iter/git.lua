@@ -133,7 +133,10 @@ function git.run(args, opts)
         }
     end
 
-    local cmd = { 'git' }
+    -- --no-optional-locks keeps read-only commands (status, diff) from
+    -- opportunistically rewriting .git/index, which would re-trigger the
+    -- fs-event watchers and loop the auto-refresh.
+    local cmd = { 'git', '--no-optional-locks' }
     vim.list_extend(cmd, args)
 
     local cwd = opts.cwd or vim.fn.getcwd()
@@ -184,7 +187,7 @@ function git.run_async(args, opts, callback)
         return
     end
 
-    local cmd = { 'git' }
+    local cmd = { 'git', '--no-optional-locks' }
     vim.list_extend(cmd, args)
 
     local cwd = opts.cwd or vim.fn.getcwd()

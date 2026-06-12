@@ -331,11 +331,10 @@ function M.open_commit_diff(self, commit, opts)
 
     local preview_key = 'commit:' .. commit.hash
 
-    if
-        not opts.force
-        and M.has_open_diff(self)
-        and self.diff_preview_key == preview_key
-    then
+    -- A commit's diff is immutable for its hash, so an already-open preview
+    -- never needs a re-render — even on forced refreshes (fs events would
+    -- otherwise flicker the buffer with identical content).
+    if M.has_open_diff(self) and self.diff_preview_key == preview_key then
         return true
     end
 
@@ -460,6 +459,19 @@ function M.open_diff(self, entry, section, opts)
     if err ~= nil then
         common.notify_error(err, 'Cannot show diff')
         return false
+    end
+
+    -- Forced refreshes (fs events, ColorScheme) often re-produce the exact
+    -- same diff. Rewriting the buffer anyway would flicker and make
+    -- diffs.nvim re-highlight from scratch, so skip when nothing changed.
+    if
+        has_open_preview
+        and self.diff_preview_key == preview_key
+        and self.diff_raw_lines ~= nil
+        and vim.deep_equal(lines, self.diff_raw_lines)
+    then
+        log.debug('open_diff: content unchanged, skipping re-render')
+        return true
     end
 
     local parsed_hunks = diff_parser.parse_hunks(lines)
