@@ -29,6 +29,7 @@ describe('iter', function()
 
     it('rejects invalid setup options', function()
         assert.has_error(function()
+            ---@diagnostic disable-next-line: assign-type-mismatch
             require('iter').setup({ preview = { diff_layout = 'wide' } })
         end, "opts.preview.diff_layout must be 'stacked', 'split', or 'auto'")
 

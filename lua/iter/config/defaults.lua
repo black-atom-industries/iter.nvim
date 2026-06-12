@@ -1,22 +1,25 @@
+-- All user-facing option fields are optional: setup() deep-merges partial
+-- tables with M.options, so the resolved config always has every field.
+
 ---@class IterPreviewOptions
----@field wrap boolean
----@field diff_layout 'stacked'|'split'|'auto'
----@field diff_auto_threshold integer
+---@field wrap? boolean
+---@field diff_layout? 'stacked'|'split'|'auto'
+---@field diff_auto_threshold? integer
 
 ---@class IterStatusOptions
----@field height number
+---@field height? number
 
 ---@class IterConfirmOptions
----@field discard boolean Ask before discarding changes (d)
----@field force_discard boolean Ask before force-discarding changes (D)
----@field force_push boolean Ask before force-pushing with lease (P)
+---@field discard? boolean Ask before discarding changes (d)
+---@field force_discard? boolean Ask before force-discarding changes (D)
+---@field force_push? boolean Ask before force-pushing with lease (P)
 
 ---@class IterOptions
----@field preview IterPreviewOptions
----@field status IterStatusOptions
----@field confirmations IterConfirmOptions
----@field keymaps table?
----@field debug boolean
+---@field preview? IterPreviewOptions
+---@field status? IterStatusOptions
+---@field confirmations? IterConfirmOptions
+---@field keymaps? table
+---@field debug? boolean
 
 ---@class IterKeymapEntry
 ---@field key string
