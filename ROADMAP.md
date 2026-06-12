@@ -9,6 +9,25 @@ Priority tiers: **P0** (must fix — gaps or debt that blocks quality),
 
 ## P0 — Critical
 
+- [x] **Diff display quality** — bring the diff preview up to the level of
+      plugins like codediff.nvim (inline emphasis, colorscheme-native colors,
+      no rendering glitches):
+  - [x] Inline word-level diff highlighting in stacked mode — pair
+        removed/added line runs, compute word ranges via `vim.text.diff()`
+        (no native lib needed).
+  - [x] Colorscheme-derived highlight shades — derive inline-word groups
+        from the resolved line groups by scaling RGB channels (1.4× dark /
+        0.92× light background, codediff-style), recomputed on ColorScheme.
+        Replace fixed-hex header/hunk colors with source-group resolution.
+  - [x] Fix fg resolution bug — `Highlight:ensure()` never resolved `fg`
+        from source groups, freezing all fg-based groups to fallback hex.
+  - [x] Stacked glitch fixes — diff windows inherit winhighlight/
+        winfixheight from the status window; reset them, hide eob tildes
+        via fillchars.
+  - [x] Split mode — drop hardcoded `statuscolumn`, let native diff (with
+        `diffopt` `inline:word`, configurable via `preview.diff_inline`)
+        provide line + intra-line highlighting instead of painting
+        full-line overlays that masked it.
 - [ ] **Untracked file/dir navigation** — untracked directories show up
       as a single entry but can't be expanded or inspected. Need to surface
       individual files inside untracked dirs, and allow opening/previewing
