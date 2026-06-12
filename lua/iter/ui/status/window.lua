@@ -36,6 +36,14 @@ local function entry_path(entry)
     return vim.fs.normalize(vim.fs.joinpath(root, entry.path))
 end
 
+--- Whether the entry's worktree path exists and can be opened in a buffer.
+--- False for deleted files, where the diff preview is the useful action.
+---@param entry GitStatusEntry
+---@return boolean
+function M.entry_is_openable(entry)
+    return vim.uv.fs_stat(entry_path(entry)) ~= nil
+end
+
 ---@param win number
 function M.configure_status_win(win)
     vim.wo[win].number = false

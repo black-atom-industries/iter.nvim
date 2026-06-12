@@ -496,6 +496,11 @@ function GitStatusWindow:enter_entry()
         return false
     end
 
+    -- Deleted files have no worktree path to open — show their diff instead.
+    if not window.entry_is_openable(entry) then
+        return preview.preview_current_entry(self, { notify = true })
+    end
+
     if preview.has_open_diff(self) then
         preview.close_diff(self)
     end
@@ -525,6 +530,12 @@ function GitStatusWindow:enter_entry_and_close()
     if entry == nil then
         common.notify_warn('No git status entry under cursor')
         return false
+    end
+
+    -- Deleted files have no worktree path to open — show their diff and
+    -- keep the drawer, since the preview is anchored to it.
+    if not window.entry_is_openable(entry) then
+        return preview.preview_current_entry(self, { notify = true })
     end
 
     if preview.has_open_diff(self) then
