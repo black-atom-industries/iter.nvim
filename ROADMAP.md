@@ -9,25 +9,18 @@ Priority tiers: **P0** (must fix — gaps or debt that blocks quality),
 
 ## P0 — Critical
 
-- [x] **Diff display quality** — bring the diff preview up to the level of
-      plugins like codediff.nvim (inline emphasis, colorscheme-native colors,
-      no rendering glitches):
-  - [x] Inline word-level diff highlighting in stacked mode — pair
-        removed/added line runs, compute word ranges via `vim.text.diff()`
-        (no native lib needed).
-  - [x] Colorscheme-derived highlight shades — derive inline-word groups
-        from the resolved line groups by scaling RGB channels (1.4× dark /
-        0.92× light background, codediff-style), recomputed on ColorScheme.
-        Replace fixed-hex header/hunk colors with source-group resolution.
-  - [x] Fix fg resolution bug — `Highlight:ensure()` never resolved `fg`
-        from source groups, freezing all fg-based groups to fallback hex.
-  - [x] Stacked glitch fixes — diff windows inherit winhighlight/
-        winfixheight from the status window; reset them, hide eob tildes
-        via fillchars.
-  - [x] Split mode — drop hardcoded `statuscolumn`, let native diff (with
-        `diffopt` `inline:word`, configurable via `preview.diff_inline`)
-        provide line + intra-line highlighting instead of painting
-        full-line overlays that masked it.
+- [x] **Diff display quality** — resolved by adopting
+      [diffs.nvim](https://github.com/barrettruth/diffs.nvim) as a hard
+      dependency instead of maintaining our own renderer:
+  - Stacked preview holds the raw unified diff; diffs.nvim provides
+    treesitter syntax inside hunks, intra-line word emphasis, and
+    colorscheme-derived colors via its documented host-plugin API.
+  - Line-number rail rendered via `statuscolumn` (display-only, colored
+    with diffs.nvim's documented rail groups).
+  - Split mode keeps native `diffthis`, with per-side winhighlight
+    remaps so the old pane reads red and the new pane green.
+  - Removed: `ui/diff/render.lua`, `ui/diff/syntax.lua`,
+    `show_line_numbers`/`show_metadata` options, `an`/`am` toggles.
 - [ ] **Untracked file/dir navigation** — untracked directories show up
       as a single entry but can't be expanded or inspected. Need to surface
       individual files inside untracked dirs, and allow opening/previewing
@@ -37,7 +30,9 @@ Priority tiers: **P0** (must fix — gaps or debt that blocks quality),
   - Separate `config/types.lua` for all `---@class` type definitions
     (currently inline in defaults.lua).
   - Fix the gap where `IterOptions` is declared but never connected as
-    the actual type of the resolved `options` table.
+    the actual type of the resolved `options` table. (User-facing fields
+    are now `?`-optional for setup() input; a separate resolved-config
+    type is still missing.)
   - Audit every config access site for type safety (LuaLS annotations).
   - Keep the tree clean — flat or minimal nesting, one concept per file.
 - [ ] **Remove vendored plenary.nvim** — replace with `mini.test` for
@@ -78,11 +73,11 @@ Priority tiers: **P0** (must fix — gaps or debt that blocks quality),
       the conventions (e.g. single-char for primary actions, menus for
       compound actions, no `a`-prefix namespace). This doc becomes the
       reference for all future keymap decisions.
-- [ ] **Rename `a`-prefix toggles** — `aw`/`an`/`am`/`al` in diff
-      previews feel unnatural after removing the namespacing need. Find
-      mnemonic single-key or menu-based alternatives. Evaluate whether
-      each toggle is even useful (e.g. line number toggling may not be
-      needed). Layout toggle (`l`) is valuable and should stay prominent.
+- [ ] **Rename `a`-prefix toggles** — `aw`/`al` in diff previews (plus
+      `an` in split mode) feel unnatural after removing the namespacing
+      need. Find mnemonic single-key or menu-based alternatives.
+      (Stacked-mode `an`/`am` were removed with the diffs.nvim adoption.)
+      Layout toggle (`l`) is valuable and should stay prominent.
 
 ## P2 — DX & code quality
 
@@ -103,8 +98,12 @@ Priority tiers: **P0** (must fix — gaps or debt that blocks quality),
   - Replace-mode layout
   - Window lifecycle edge cases (BufDelete, BufUnload, etc.)
   - Rethink fragile default-value assertions (e.g. `assert.are.equal(0.3, height)`) —
-    prefer behavior-based tests that verify the *effect* of a config value rather
+    prefer behavior-based tests that verify the _effect_ of a config value rather
     than asserting specific magic numbers.
+- [ ] **Remove stale `.github/workflows/test.yml`** — duplicate of
+      `tests.yml` that runs nvim directly without cloning plenary or
+      diffs.nvim, so it cannot pass. Delete it; `tests.yml` (via
+      `just test`) is the real workflow.
 - [ ] **Quick-add to `.gitignore`** — keybinding to add the file under
       cursor to the repo's `.gitignore`.
 - [ ] **Suppress untracked dir diff notification** — once untracked
@@ -117,7 +116,7 @@ Priority tiers: **P0** (must fix — gaps or debt that blocks quality),
       target, and:
   - `F` → `git commit --fixup=<sha>` (create fixup commit)
   - `S` → `git commit --fixup=<sha>` + `git rebase -i --autosquash <sha>~1`
-          (create and immediately squash in one step)
+    (create and immediately squash in one step)
   - Prerequisite: a proper commit list view that shows more than unpushed
     commits — a natural base for other history-browsing features too.
 

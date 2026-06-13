@@ -7,7 +7,6 @@ local M = {}
 local AREA_TITLES = {
     status = 'Status window mappings',
     diff_stacked = 'Diff preview mappings',
-    diff_split = 'Diff preview mappings',
 }
 
 ---@param text string
@@ -27,8 +26,7 @@ local function help_lines(self)
     local lines = {}
     local all_entries = {}
 
-    -- Collect all keymap entries across areas, deduplicating by key+desc
-    -- so that mappings shared between stacked and split appear once.
+    -- Collect all keymap entries across areas, deduplicating by key+desc.
     local seen = {}
 
     local function add_entries(entries)
@@ -43,7 +41,6 @@ local function help_lines(self)
 
     add_entries(self.config.keymaps_status)
     add_entries(self.config.keymaps_diff_stacked)
-    add_entries(self.config.keymaps_diff_split)
 
     -- Compute max key width.
     local key_width = 0

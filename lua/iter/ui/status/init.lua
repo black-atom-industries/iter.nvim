@@ -16,16 +16,8 @@ local git = require('iter.git')
 ---@field buf Buffer
 ---@field diff_buf Buffer?
 ---@field diff_win number?
----@field diff_left_buf Buffer?
----@field diff_right_buf Buffer?
----@field diff_left_win number?
----@field diff_right_win number?
 ---@field diff_prev_buf number?
----@field diff_left_prev_buf number?
----@field diff_right_prev_buf number?
 ---@field diff_created_win boolean
----@field diff_left_created_win boolean
----@field diff_right_created_win boolean
 ---@field diff_preview_key string?
 ---@field diff_raw_lines string[]?
 ---@field diff_raw_rows integer[]?
@@ -33,12 +25,7 @@ local git = require('iter.git')
 ---@field diff_section GitStatusSectionName?
 ---@field diff_context_entry GitStatusEntry?
 ---@field diff_prev_winopts GitStatusWindowOptions?
----@field diff_left_prev_winopts GitStatusWindowOptions?
----@field diff_right_prev_winopts GitStatusWindowOptions?
 ---@field diff_wrap boolean
----@field diff_split_show_numbers boolean
----@field diff_layout 'stacked'|'split'|'auto'
----@field diff_layout_override 'stacked'|'split'?
 ---@field help_buf Buffer?
 ---@field help_win number?
 ---@field help_prev_win number?
@@ -585,9 +572,6 @@ function GitStatusWindow:close()
     self.win = nil
     self.win_prev_winopts = nil
 
-    -- Clear layout override so a fresh open doesn't carry stale preferences.
-    self.diff_layout_override = nil
-
     return true
 end
 
@@ -620,7 +604,6 @@ function GitStatusWindow:destroy()
         return false
     end
 
-    self.diff_layout_override = nil
     self:delete_owned_buffers()
 
     return true
@@ -753,20 +736,6 @@ function GitStatusWindow:scroll_diff(direction)
         table.insert(wins, self.diff_win)
     end
 
-    if
-        self.diff_left_win ~= nil
-        and vim.api.nvim_win_is_valid(self.diff_left_win)
-    then
-        table.insert(wins, self.diff_left_win)
-    end
-
-    if
-        self.diff_right_win ~= nil
-        and vim.api.nvim_win_is_valid(self.diff_right_win)
-    then
-        table.insert(wins, self.diff_right_win)
-    end
-
     if #wins == 0 then
         keymaps.set_scrolling(false)
         return false
@@ -809,11 +778,7 @@ function GitStatusWindow.new(config)
     self.highlights = create_highlights(config)
     self.lines = {}
     self.diff_created_win = false
-    self.diff_left_created_win = false
-    self.diff_right_created_win = false
     self.diff_wrap = config.options.preview.wrap
-    self.diff_split_show_numbers = true
-    self.diff_layout = config.options.preview.diff_layout
     self.filter = ''
     self.loading_frame = 1
 

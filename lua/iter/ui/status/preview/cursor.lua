@@ -4,9 +4,7 @@ local diff_position = require('iter.ui.diff.position')
 local M = {}
 
 ---@class IterDiffCursor
----@field layout 'stacked'|'split'
 ---@field row integer
----@field side IterDiffSide?
 
 ---@param self GitStatusWindow
 ---@return IterDiffCursor?
@@ -16,15 +14,7 @@ function M.current_diff_cursor(self)
     local row = vim.api.nvim_win_get_cursor(current_win)[1]
 
     if self.diff_buf ~= nil and current_buf == self.diff_buf.id then
-        return { layout = 'stacked', row = row }
-    end
-
-    if self.diff_left_buf ~= nil and current_buf == self.diff_left_buf.id then
-        return { layout = 'split', side = 'left', row = row }
-    end
-
-    if self.diff_right_buf ~= nil and current_buf == self.diff_right_buf.id then
-        return { layout = 'split', side = 'right', row = row }
+        return { row = row }
     end
 
     return nil
@@ -45,23 +35,12 @@ function M.current_source_position(self)
         return nil
     end
 
-    local line_number
-
-    if cursor.layout == 'stacked' then
-        local raw_row = self.diff_raw_rows and self.diff_raw_rows[cursor.row]
-        line_number = diff_position.source_line_for_stacked_row(
-            self.diff_raw_lines,
-            self.diff_hunks,
-            raw_row
-        )
-    elseif cursor.side ~= nil then
-        line_number = diff_position.source_line_for_split_row(
-            self.diff_raw_lines,
-            self.diff_hunks,
-            cursor.side,
-            cursor.row
-        )
-    end
+    local raw_row = self.diff_raw_rows and self.diff_raw_rows[cursor.row]
+    local line_number = diff_position.source_line_for_stacked_row(
+        self.diff_raw_lines,
+        self.diff_hunks,
+        raw_row
+    )
 
     if line_number == nil then
         return nil
@@ -79,24 +58,12 @@ function M.current_hunk_position(self)
         return nil
     end
 
-    if cursor.layout == 'stacked' then
-        local raw_row = self.diff_raw_rows and self.diff_raw_rows[cursor.row]
+    local raw_row = self.diff_raw_rows and self.diff_raw_rows[cursor.row]
 
-        return diff_position.hunk_position_for_raw_row(
-            self.diff_raw_lines,
-            self.diff_hunks,
-            raw_row
-        )
-    end
-
-    if cursor.side == nil then
-        return nil
-    end
-
-    return diff_position.hunk_position_for_split_row(
+    return diff_position.hunk_position_for_raw_row(
+        self.diff_raw_lines,
         self.diff_hunks,
-        cursor.side,
-        cursor.row
+        raw_row
     )
 end
 
@@ -138,17 +105,6 @@ function M.restore_hunk_position(self, position)
         )
 
         local win = assert(self.diff_win)
-        vim.api.nvim_set_current_win(win)
-        M.set_cursor_row(win, row)
-
-        return
-    end
-
-    local side, row = diff_position.split_row_for_hunk_position(hunk, position)
-    local win = side == 'left' and self.diff_left_win or self.diff_right_win
-
-    if common.is_valid_win(win) and row ~= nil then
-        win = assert(win)
         vim.api.nvim_set_current_win(win)
         M.set_cursor_row(win, row)
     end

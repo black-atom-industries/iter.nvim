@@ -38,49 +38,4 @@ function M.refresh(bufnr)
     require('diffs').refresh(bufnr)
 end
 
--- Native diff groups are direction-less: `DiffAdd`/`DiffChange` mean "this
--- window differs", so the old side would paint removed lines green. Remap
--- per side to diffs.nvim's documented groups (:h diffs.nvim-highlights),
--- mirroring its own split view: red family on the old pane, green on the new.
-local SIDE_WINHIGHLIGHT = {
-    old = table.concat({
-        'DiffAdd:DiffsDelete',
-        'DiffChange:DiffsDelete',
-        'DiffText:DiffsDeleteText',
-        'DiffDelete:DiffsDiffDelete',
-    }, ','),
-    new = table.concat({
-        'DiffAdd:DiffsAdd',
-        'DiffChange:DiffsAdd',
-        'DiffText:DiffsAddText',
-        'DiffDelete:DiffsDiffDelete',
-    }, ','),
-}
-
---- Remap native diff-mode groups to diffs.nvim's replacements. diffs.nvim
---- applies a generic remap itself on `OptionSet diff`, but that event does
---- not fire for :diffthis, so iter sets it on its own split diff windows —
---- and per side, which the generic remap cannot know about.
----@param win integer
----@param side 'old'|'new'
-function M.apply_diff_winhighlight(win, side)
-    if not M.is_available() then
-        return
-    end
-
-    -- The groups are defined on diffs.nvim's first initialization; force it
-    -- through the public API if split mode is used before any attach.
-    if vim.fn.hlexists('DiffsDiffAdd') == 0 then
-        local scratch = vim.api.nvim_create_buf(false, true)
-        require('diffs').attach(scratch)
-        vim.api.nvim_buf_delete(scratch, { force = true })
-    end
-
-    if vim.fn.hlexists('DiffsDiffAdd') == 0 then
-        return
-    end
-
-    vim.wo[win].winhighlight = SIDE_WINHIGHLIGHT[side]
-end
-
 return M

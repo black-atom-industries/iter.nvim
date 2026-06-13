@@ -3,8 +3,6 @@
 
 ---@class IterPreviewOptions
 ---@field wrap? boolean
----@field diff_layout? 'stacked'|'split'|'auto'
----@field diff_auto_threshold? integer
 
 ---@class IterStatusOptions
 ---@field height? number
@@ -39,8 +37,6 @@ M.options = {
     debug = false,
     preview = {
         wrap = false,
-        diff_layout = 'stacked',
-        diff_auto_threshold = 120,
     },
     status = {
         height = 0.25,
@@ -181,8 +177,8 @@ M.keymaps_status = {
     {
         key = 'l',
         modes = { 'n' },
-        desc = 'Toggle stacked/split diff preview layout',
-        action = 'toggle_preview_layout',
+        desc = 'Open side-by-side diff via diffs.nvim',
+        action = 'open_split_diff',
         area = 'status',
     },
     {
@@ -269,8 +265,8 @@ M.keymaps_diff_stacked = {
     {
         key = 'al',
         modes = { 'n' },
-        desc = 'Toggle stacked/split git diff preview layout',
-        action = 'toggle_layout',
+        desc = 'Open side-by-side diff via diffs.nvim',
+        action = 'open_split_diff',
         area = 'diff_stacked',
     },
     {
@@ -279,80 +275,6 @@ M.keymaps_diff_stacked = {
         desc = 'Toggle git mappings help',
         action = 'toggle_help',
         area = 'diff_stacked',
-    },
-}
-
----@type IterKeymapEntry[]
-M.keymaps_diff_split = {
-    {
-        key = 'q',
-        modes = { 'n' },
-        desc = 'Close git diff preview',
-        action = 'close_diff',
-        area = 'diff_split',
-    },
-    {
-        key = 'aw',
-        modes = { 'n' },
-        desc = 'Toggle git diff preview wrap',
-        action = 'toggle_wrap',
-        area = 'diff_split',
-    },
-    {
-        key = ']h',
-        modes = { 'n' },
-        desc = 'Jump to next git diff hunk',
-        action = 'jump_hunk_next',
-        area = 'diff_split',
-    },
-    {
-        key = '[h',
-        modes = { 'n' },
-        desc = 'Jump to previous git diff hunk',
-        action = 'jump_hunk_prev',
-        area = 'diff_split',
-    },
-    {
-        key = 'an',
-        modes = { 'n' },
-        desc = 'Toggle git diff preview line numbers',
-        action = 'toggle_split_numbers',
-        area = 'diff_split',
-    },
-    {
-        key = 's',
-        modes = { 'n' },
-        desc = 'Stage current git diff hunk',
-        action = 'stage_current_hunk',
-        area = 'diff_split',
-    },
-    {
-        key = 'u',
-        modes = { 'n' },
-        desc = 'Unstage current git diff hunk',
-        action = 'unstage_current_hunk',
-        area = 'diff_split',
-    },
-    {
-        key = 'd',
-        modes = { 'n' },
-        desc = 'Discard current git diff hunk',
-        action = 'discard_current_hunk',
-        area = 'diff_split',
-    },
-    {
-        key = 'l',
-        modes = { 'n' },
-        desc = 'Toggle stacked/split git diff preview layout',
-        action = 'toggle_layout',
-        area = 'diff_split',
-    },
-    {
-        key = '?',
-        modes = { 'n' },
-        desc = 'Toggle git mappings help',
-        action = 'toggle_help',
-        area = 'diff_split',
     },
 }
 

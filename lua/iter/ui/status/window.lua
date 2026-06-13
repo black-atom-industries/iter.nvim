@@ -151,22 +151,6 @@ function M.configure_diff_win(win)
 end
 
 ---@param win number
-function M.configure_split_diff_win(win)
-    vim.wo[win].number = true
-    vim.wo[win].relativenumber = false
-    vim.wo[win].signcolumn = 'yes:1'
-    vim.wo[win].foldcolumn = '0'
-    vim.wo[win].statuscolumn = '%l %s '
-    vim.wo[win].wrap = false
-    vim.wo[win].cursorline = false
-    vim.api.nvim_win_call(win, function()
-        local fc = vim.opt_local.fillchars:get()
-        fc.diff = ' '
-        vim.opt_local.fillchars = fc
-    end)
-end
-
----@param win number
 ---@return GitStatusWindowOptions
 function M.capture_winopts(win)
     return {

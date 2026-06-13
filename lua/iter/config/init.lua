@@ -2,7 +2,6 @@
 ---@field options IterOptions
 ---@field keymaps_status IterKeymapEntry[]
 ---@field keymaps_diff_stacked IterKeymapEntry[]
----@field keymaps_diff_split IterKeymapEntry[]
 ---@field keymaps_help IterKeymapEntry[]
 ---@field highlight_specs table<string, IterHighlightSpec>
 ---@field spinner_frames string[]
@@ -26,34 +25,6 @@ local function validate(opts)
 
     if opts.preview ~= nil then
         vim.validate('opts.preview.wrap', opts.preview.wrap, 'boolean', true)
-        vim.validate(
-            'opts.preview.diff_layout',
-            opts.preview.diff_layout,
-            'string',
-            true
-        )
-        vim.validate(
-            'opts.preview.diff_auto_threshold',
-            opts.preview.diff_auto_threshold,
-            'number',
-            true
-        )
-
-        if
-            opts.preview.diff_layout ~= nil
-            and opts.preview.diff_layout ~= 'stacked'
-            and opts.preview.diff_layout ~= 'split'
-            and opts.preview.diff_layout ~= 'auto'
-        then
-            return "opts.preview.diff_layout must be 'stacked', 'split', or 'auto'"
-        end
-
-        if
-            opts.preview.diff_auto_threshold ~= nil
-            and opts.preview.diff_auto_threshold < 1
-        then
-            return 'opts.preview.diff_auto_threshold must be >= 1'
-        end
     end
 
     if opts.status ~= nil then
@@ -97,7 +68,6 @@ local function validate(opts)
         local valid_areas = {
             'status',
             'diff_stacked',
-            'diff_split',
             'help',
         }
 
@@ -113,7 +83,7 @@ local function validate(opts)
             if not found then
                 return 'opts.keymaps.'
                     .. area
-                    .. ' is not a valid area (use: status, diff_stacked, diff_split, help)'
+                    .. ' is not a valid area (use: status, diff_stacked, help)'
             end
         end
 
@@ -223,10 +193,6 @@ function M.resolve(user_opts)
         keymaps_diff_stacked = resolve_keymaps(
             keymap_overrides.diff_stacked,
             defaults.keymaps_diff_stacked
-        ),
-        keymaps_diff_split = resolve_keymaps(
-            keymap_overrides.diff_split,
-            defaults.keymaps_diff_split
         ),
         keymaps_help = resolve_keymaps(
             keymap_overrides.help,

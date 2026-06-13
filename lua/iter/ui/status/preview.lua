@@ -11,6 +11,7 @@ local preview_cursor = require('iter.ui.status.preview.cursor')
 local preview_hunks = require('iter.ui.status.preview.hunks')
 local preview_buffers = require('iter.ui.status.preview.buffers')
 local display = require('iter.ui.status.preview.display')
+local window = require('iter.ui.status.window')
 local window_state = require('iter.ui.status.preview.window_state')
 local preview_util = require('iter.ui.status.preview.util')
 local keymaps = require('iter.ui.status.keymaps')
@@ -120,7 +121,6 @@ end
 ---@field prev_winopts_field string
 ---@field created_win_field string
 ---@field buf_field string
----@field split boolean?
 
 ---@param commit GitCommit
 ---@return string
@@ -140,20 +140,6 @@ local function diff_title(entry, section)
         or entry.path
 
     return preview_util.winbar_text(prefix .. ': ' .. path)
-end
-
----@param self GitStatusWindow
----@return 'stacked'|'split'
-local function resolved_layout(self)
-    local layout = self.diff_layout_override or self.diff_layout
-
-    if layout == 'auto' then
-        return vim.o.columns >= self.config.options.preview.diff_auto_threshold
-                and 'split'
-            or 'stacked'
-    end
-
-    return layout == 'split' and 'split' or 'stacked'
 end
 
 ---@param self GitStatusWindow
@@ -190,9 +176,6 @@ local function preview_actions(self)
         toggle_wrap = function()
             M.toggle_wrap(self)
         end,
-        toggle_split_numbers = function()
-            display.toggle_split_numbers(self)
-        end,
         stage_current_hunk = function()
             M.stage_current_hunk(self)
         end,
@@ -202,8 +185,8 @@ local function preview_actions(self)
         discard_current_hunk = function()
             M.discard_current_hunk(self)
         end,
-        toggle_layout = function()
-            M.toggle_layout(self)
+        open_split_diff = function()
+            M.open_split_diff(self)
         end,
         goto_code = function()
             M.goto_code(self)
@@ -233,7 +216,6 @@ function M.jump_hunk(self, delta)
     end
 
     if not common.is_valid_win(self.diff_win) then
-        -- Split diff layout uses vim-native ]c / [c for hunk navigation.
         return false
     end
 
@@ -268,58 +250,66 @@ function M.toggle_wrap(self)
         vim.wo[self.diff_win].wrap = self.diff_wrap
     end
 
-    if common.is_valid_win(self.diff_left_win) then
-        vim.wo[self.diff_left_win].wrap = self.diff_wrap
+    return true
+end
+
+--- Open a side-by-side view of the current entry by delegating to
+--- diffs.nvim's `:Diff ++layout=split` (plugin-aligned paired windows).
+--- The view is owned by diffs.nvim; iter does not track its windows.
+---@param self GitStatusWindow
+---@return boolean
+function M.open_split_diff(self)
+    local item = selection.current_entry_item(self)
+
+    if item == nil then
+        common.notify_warn('No git status entry under cursor')
+        return false
     end
 
-    if common.is_valid_win(self.diff_right_win) then
-        vim.wo[self.diff_right_win].wrap = self.diff_wrap
+    if not diffs_nvim.is_available() then
+        common.notify_error(diffs_nvim.error_msg, 'Cannot open split diff')
+        return false
+    end
+
+    -- :Diff's public object forms always compare against the worktree, so
+    -- the staged edge (HEAD vs index) cannot be expressed.
+    if item.section == 'staged' then
+        common.notify_warn(
+            'diffs.nvim cannot show the staged edge side-by-side; '
+                .. 'use the stacked preview'
+        )
+        return false
+    end
+
+    local entry = item.entry
+
+    if not window.entry_is_openable(entry) then
+        common.notify_warn('Split diff needs a worktree file')
+        return false
+    end
+
+    if M.has_open_diff(self) then
+        M.close_diff(self)
+    end
+
+    if not window.open_entry(entry, self.win) then
+        return false
+    end
+
+    local ok, err = pcall(vim.cmd, 'Diff ++layout=split')
+
+    if not ok then
+        common.notify_error(tostring(err), 'Cannot open split diff')
+        return false
     end
 
     return true
 end
 
 ---@param self GitStatusWindow
----@param layout 'stacked'|'split'
----@return boolean
-function M.set_layout(self, layout)
-    self.diff_layout_override = layout
-
-    local ok = M.refresh_current_entry(self) == true
-
-    if ok and self.win ~= nil and common.is_valid_win(self.win) then
-        vim.api.nvim_set_current_win(self.win)
-    end
-
-    return ok
-end
-
----@param self GitStatusWindow
----@return boolean
-function M.toggle_layout(self)
-    local current = resolved_layout(self)
-    local next_layout = current == 'split' and 'stacked' or 'split'
-
-    if not M.has_open_diff(self) then
-        self.diff_layout_override = next_layout
-        return true
-    end
-
-    local position = preview_cursor.current_hunk_position(self)
-    local ok = M.set_layout(self, next_layout)
-
-    if ok then
-        preview_cursor.restore_hunk_position(self, position)
-    end
-
-    return ok
-end
-
----@param self GitStatusWindow
 ---@return boolean
 function M.has_open_diff(self)
     return window_state.has_open_stacked_diff(self)
-        or window_state.has_any_split_diff(self)
 end
 
 ---@param self GitStatusWindow
@@ -375,21 +365,12 @@ end
 function M.close_diff(self)
     log.debug('close_diff called')
 
-    local restored = false
-
-    if window_state.has_any_split_diff(self) then
-        restored = window_state.restore_or_close_diff_windows(
-            self,
-            window_state.SPLIT_DIFF_CLOSE_STATES
-        )
-    end
-
     if window_state.has_open_stacked_diff(self) then
-        restored = window_state.restore_or_close_diff_window(
+        window_state.restore_or_close_diff_window(
             self,
             window_state.STACKED_DIFF_STATE,
             false
-        ) or restored
+        )
     end
 
     -- Always clean up diff state, even when the diff window was closed
@@ -424,11 +405,7 @@ function M.open_diff(self, entry, section, opts)
 
     local preview_key =
         table.concat({ section or '', entry.orig_path or '', entry.path }, '\0')
-    local layout = resolved_layout(self)
-    local has_open_preview = (
-        layout == 'split' and window_state.has_open_split_diff(self)
-    )
-        or (layout ~= 'split' and window_state.has_open_stacked_diff(self))
+    local has_open_preview = window_state.has_open_stacked_diff(self)
 
     log.debug(
         'open_diff: '
@@ -475,30 +452,6 @@ function M.open_diff(self, entry, section, opts)
     end
 
     local parsed_hunks = diff_parser.parse_hunks(lines)
-
-    if layout == 'split' then
-        local split_diff, split_err = git.split_diff(entry, section)
-
-        if split_diff ~= nil then
-            local ok = display.show_split(
-                self,
-                split_diff,
-                preview_key,
-                diff_title(entry, section),
-                preview_actions(self)
-            )
-
-            if ok then
-                set_diff_context(self, lines, nil, parsed_hunks, section, entry)
-            end
-
-            return ok
-        end
-
-        if split_err ~= nil and opts.notify ~= false then
-            common.notify_warn(split_err .. '; showing stacked diff')
-        end
-    end
 
     -- The stacked buffer holds the raw unified diff verbatim (diffs.nvim
     -- parses it for highlighting), so buffer rows map 1:1 to raw diff rows.

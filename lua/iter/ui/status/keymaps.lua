@@ -31,10 +31,10 @@ function M.attach_status(buf_id, keymaps, self)
                 callback = function()
                     self:discard_entry(force)
                 end
-            elseif action == 'toggle_preview_layout' then
+            elseif action == 'open_split_diff' then
                 callback = function()
                     local preview_mod = require('iter.ui.status.preview')
-                    preview_mod.toggle_layout(self)
+                    preview_mod.open_split_diff(self)
                 end
             elseif action == 'scroll_diff_down' then
                 callback = function()
@@ -95,38 +95,6 @@ function M.attach_diff_stacked(buf_id, keymaps, actions)
     end
 end
 
----@param buf_id integer
----@param keymaps IterKeymapEntry[]
----@param actions IterPreviewBufferActions
-function M.attach_diff_split(buf_id, keymaps, actions)
-    for _, entry in ipairs(keymaps) do
-        if entry.area == 'diff_split' then
-            local callback
-            if entry.action == 'jump_hunk_next' then
-                callback = function()
-                    vim.cmd('normal! ]c')
-                end
-            elseif entry.action == 'jump_hunk_prev' then
-                callback = function()
-                    vim.cmd('normal! [c')
-                end
-            else
-                callback = actions[entry.action]
-            end
-
-            if callback ~= nil then
-                for _, mode in ipairs(entry.modes) do
-                    vim.keymap.set(mode, entry.key, callback, {
-                        buffer = buf_id,
-                        desc = entry.desc,
-                        silent = true,
-                        nowait = true,
-                    })
-                end
-            end
-        end
-    end
-end
 
 ---@param buf_id integer
 ---@param keymaps IterKeymapEntry[]

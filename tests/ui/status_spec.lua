@@ -340,13 +340,16 @@ describe('iter status UI', function()
         assert.is_true(closed)
     end)
 
-    it('opens split diff above the drawer', function()
+    it('delegates side-by-side diff to diffs.nvim', function()
+        -- Tests run with --noplugin; source diffs.nvim's plugin file so the
+        -- :Diff command exists.
+        vim.cmd('runtime! plugin/diffs.lua')
+
         helpers.write_file(
             vim.fs.joinpath(repo, 'tracked.txt'),
             { 'one', 'two' }
         )
 
-        iter.config.options.preview.diff_layout = 'split'
         iter.status()
         local gsw = iter.gsw
 
@@ -356,14 +359,23 @@ describe('iter status UI', function()
             { row_containing(gsw.buf.id, 'tracked.txt'), 0 }
         )
 
-        assert.is_true(gsw:diff_entry())
-        assert.is_not_nil(gsw.diff_left_win)
-        assert.is_not_nil(gsw.diff_right_win)
-        assert.is_true(vim.api.nvim_win_is_valid(gsw.diff_left_win))
-        assert.is_true(vim.api.nvim_win_is_valid(gsw.diff_right_win))
+        local preview = require('iter.ui.status.preview')
+        assert.is_true(preview.open_split_diff(gsw))
 
-        -- Status drawer should still be open.
-        assert.is_true(vim.api.nvim_win_is_valid(gsw.win))
+        -- diffs.nvim owns the paired windows; both sides carry its marker.
+        local side_wins = {}
+        for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+            local buf = vim.api.nvim_win_get_buf(win)
+            local ok = pcall(vim.api.nvim_buf_get_var, buf, 'diffs_split_side')
+            if ok then
+                table.insert(side_wins, win)
+            end
+        end
+        assert.are.equal(2, #side_wins)
+
+        for _, win in ipairs(side_wins) do
+            pcall(vim.api.nvim_win_close, win, true)
+        end
     end)
 
     it('restores file options when diff buffer is replaced', function()
@@ -462,41 +474,6 @@ describe('iter status UI', function()
 
         -- Diff buffer should be loaded into the file's window.
         assert.are.equal(gsw.diff_buf.id, vim.api.nvim_win_get_buf(file_win))
-
-        gsw:close()
-
-        -- After close, file window should be restored.
-        assert.is_true(vim.api.nvim_win_is_valid(file_win))
-        assert.are.equal(file_buf, vim.api.nvim_win_get_buf(file_win))
-        assert_winopts(capture_winopts(file_win), file_opts)
-    end)
-
-    it('reuses window above for split diff', function()
-        helpers.write_file(
-            vim.fs.joinpath(repo, 'tracked.txt'),
-            { 'one', 'two' }
-        )
-        vim.cmd.edit(vim.fn.fnameescape(vim.fs.joinpath(repo, 'tracked.txt')))
-        local file_win = vim.api.nvim_get_current_win()
-        local file_buf = vim.api.nvim_get_current_buf()
-        vim.wo[file_win].winbar = 'real file split'
-        local file_opts = capture_winopts(file_win)
-
-        iter.config.options.preview.diff_layout = 'split'
-        iter.status()
-        local gsw = iter.gsw
-
-        vim.api.nvim_set_current_win(gsw.win)
-        vim.api.nvim_win_set_cursor(
-            gsw.win,
-            { row_containing(gsw.buf.id, 'tracked.txt'), 0 }
-        )
-        gsw:diff_entry()
-
-        -- The diff should reuse the window above for the left side,
-        -- and create a new split to the right.
-        assert.is_not_nil(gsw.diff_left_win)
-        assert.are.equal(file_win, gsw.diff_left_win)
 
         gsw:close()
 

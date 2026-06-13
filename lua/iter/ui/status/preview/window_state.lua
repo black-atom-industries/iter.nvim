@@ -1,7 +1,5 @@
-local Buffer = require('iter.ui.buffer')
 local common = require('iter.ui.status.common')
 local window = require('iter.ui.status.window')
-local preview_util = require('iter.ui.status.preview.util')
 
 local M = {}
 
@@ -26,54 +24,14 @@ local function clear_diff_context(self)
     self.diff_context_entry = nil
 end
 
----@type IterDiffWindowState[]
-local DIFF_WINDOW_STATES = {
-    {
-        win_field = 'diff_win',
-        prev_buf_field = 'diff_prev_buf',
-        prev_winopts_field = 'diff_prev_winopts',
-        created_win_field = 'diff_created_win',
-        buf_field = 'diff_buf',
-    },
-    {
-        win_field = 'diff_left_win',
-        prev_buf_field = 'diff_left_prev_buf',
-        prev_winopts_field = 'diff_left_prev_winopts',
-        created_win_field = 'diff_left_created_win',
-        buf_field = 'diff_left_buf',
-        split = true,
-    },
-    {
-        win_field = 'diff_right_win',
-        prev_buf_field = 'diff_right_prev_buf',
-        prev_winopts_field = 'diff_right_prev_winopts',
-        created_win_field = 'diff_right_created_win',
-        buf_field = 'diff_right_buf',
-        split = true,
-    },
+---@type IterDiffWindowState
+M.STACKED_DIFF_STATE = {
+    win_field = 'diff_win',
+    prev_buf_field = 'diff_prev_buf',
+    prev_winopts_field = 'diff_prev_winopts',
+    created_win_field = 'diff_created_win',
+    buf_field = 'diff_buf',
 }
-
-M.STACKED_DIFF_STATE = DIFF_WINDOW_STATES[1]
-M.SPLIT_LEFT_DIFF_STATE = DIFF_WINDOW_STATES[2]
-M.SPLIT_RIGHT_DIFF_STATE = DIFF_WINDOW_STATES[3]
-M.SPLIT_DIFF_CLOSE_STATES = {
-    M.SPLIT_RIGHT_DIFF_STATE,
-    M.SPLIT_LEFT_DIFF_STATE,
-}
-
----@param self GitStatusWindow
----@return boolean
-function M.has_open_split_diff(self)
-    return has_diff_side(self.diff_left_buf, self.diff_left_win)
-        and has_diff_side(self.diff_right_buf, self.diff_right_win)
-end
-
----@param self GitStatusWindow
----@return boolean
-function M.has_any_split_diff(self)
-    return has_diff_side(self.diff_left_buf, self.diff_left_win)
-        or has_diff_side(self.diff_right_buf, self.diff_right_win)
-end
 
 ---@param self GitStatusWindow
 ---@return boolean
@@ -84,19 +42,18 @@ end
 ---@param self GitStatusWindow
 ---@return boolean
 function M.has_open_diff(self)
-    return M.has_open_stacked_diff(self) or M.has_any_split_diff(self)
+    return M.has_open_stacked_diff(self)
 end
 
 ---@param self GitStatusWindow
 ---@param buf integer
 ---@return IterDiffWindowState?
 function M.diff_window_state_for_buf(self, buf)
-    for _, state in ipairs(DIFF_WINDOW_STATES) do
-        local diff_buf = self[state.buf_field]
+    local state = M.STACKED_DIFF_STATE
+    local diff_buf = self[state.buf_field]
 
-        if diff_buf ~= nil and diff_buf.id == buf then
-            return state
-        end
+    if diff_buf ~= nil and diff_buf.id == buf then
+        return state
     end
 
     return nil
@@ -106,10 +63,10 @@ end
 ---@param win number
 ---@return IterDiffWindowState?
 function M.diff_window_state_for_win(self, win)
-    for _, state in ipairs(DIFF_WINDOW_STATES) do
-        if self[state.win_field] == win then
-            return state
-        end
+    local state = M.STACKED_DIFF_STATE
+
+    if self[state.win_field] == win then
+        return state
     end
 
     return nil
@@ -126,10 +83,10 @@ end
 
 ---@param self GitStatusWindow
 function M.clear_missing_diff_window_states(self)
-    for _, state in ipairs(DIFF_WINDOW_STATES) do
-        if not has_diff_side(self[state.buf_field], self[state.win_field]) then
-            M.clear_diff_window_state(self, state)
-        end
+    local state = M.STACKED_DIFF_STATE
+
+    if not has_diff_side(self[state.buf_field], self[state.win_field]) then
+        M.clear_diff_window_state(self, state)
     end
 end
 
@@ -153,10 +110,6 @@ function M.restore_replaced_diff_window(self, buf)
         return
     end
 
-    if state.split then
-        preview_util.diffoff(win)
-    end
-
     window.restore_winopts(win, self[state.prev_winopts_field])
     M.clear_diff_window_state(self, state)
 end
@@ -164,8 +117,7 @@ end
 ---@param self GitStatusWindow
 ---@param buf integer
 ---@param actions IterPreviewBufferActions
----@param kind? '"stacked"'|'"split"'
-function M.attach_autocmds(self, buf, actions, kind)
+function M.attach_autocmds(self, buf, actions)
     if self.autocmd_group == nil then
         return
     end
@@ -184,26 +136,18 @@ function M.attach_autocmds(self, buf, actions, kind)
         end,
     })
 
-    if actions ~= nil and kind ~= nil then
+    if actions ~= nil then
         local keymaps_mod = require('iter.ui.status.keymaps')
 
         vim.api.nvim_create_autocmd('BufEnter', {
             group = self.autocmd_group,
             buffer = buf,
             callback = function()
-                if kind == 'split' then
-                    keymaps_mod.attach_diff_split(
-                        buf,
-                        self.config.keymaps_diff_split,
-                        actions
-                    )
-                else
-                    keymaps_mod.attach_diff_stacked(
-                        buf,
-                        self.config.keymaps_diff_stacked,
-                        actions
-                    )
-                end
+                keymaps_mod.attach_diff_stacked(
+                    buf,
+                    self.config.keymaps_diff_stacked,
+                    actions
+                )
             end,
         })
 
@@ -223,19 +167,11 @@ function M.attach_autocmds(self, buf, actions, kind)
                     return
                 end
 
-                if kind == 'split' then
-                    keymaps_mod.attach_diff_split(
-                        buf,
-                        self.config.keymaps_diff_split,
-                        actions
-                    )
-                else
-                    keymaps_mod.attach_diff_stacked(
-                        buf,
-                        self.config.keymaps_diff_stacked,
-                        actions
-                    )
-                end
+                keymaps_mod.attach_diff_stacked(
+                    buf,
+                    self.config.keymaps_diff_stacked,
+                    actions
+                )
             end,
         })
     end
@@ -245,13 +181,10 @@ end
 ---@return Buffer[]
 function M.diff_buffers(self)
     local buffers = {}
+    local buf = self[M.STACKED_DIFF_STATE.buf_field]
 
-    for _, state in ipairs(DIFF_WINDOW_STATES) do
-        local buf = self[state.buf_field]
-
-        if buf ~= nil and buf:is_valid() then
-            table.insert(buffers, buf)
-        end
+    if buf ~= nil and buf:is_valid() then
+        table.insert(buffers, buf)
     end
 
     return buffers
@@ -259,9 +192,7 @@ end
 
 ---@param self GitStatusWindow
 function M.clear_diff_buffers(self)
-    for _, state in ipairs(DIFF_WINDOW_STATES) do
-        self[state.buf_field] = nil
-    end
+    self[M.STACKED_DIFF_STATE.buf_field] = nil
 end
 
 ---@param buffers Buffer[]
@@ -281,10 +212,6 @@ function M.restore_or_close_diff_window(self, state, keep_win)
     if not common.is_valid_win(win) then
         M.clear_diff_window_state(self, state)
         return false
-    end
-
-    if state.split then
-        preview_util.diffoff(win)
     end
 
     if keep_win then
@@ -315,52 +242,14 @@ function M.restore_or_close_diff_window(self, state, keep_win)
 end
 
 ---@param self GitStatusWindow
----@param states IterDiffWindowState[]
----@return boolean
-function M.restore_or_close_diff_windows(self, states)
-    local restored = false
-
-    for _, state in ipairs(states) do
-        restored = M.restore_or_close_diff_window(self, state, false)
-            or restored
-    end
-
-    return restored
-end
-
----@param self GitStatusWindow
----@param current_state IterDiffWindowState
----@return IterDiffWindowState
-function M.code_window_state_for_diff(self, current_state)
-    if not current_state.split then
-        return current_state
-    end
-
-    local left_state = DIFF_WINDOW_STATES[2]
-
-    if common.is_valid_win(self[left_state.win_field]) then
-        return left_state
-    end
-
-    return current_state
-end
-
----@param self GitStatusWindow
 ---@param current_state IterDiffWindowState
 ---@return Buffer[]
 ---@return number
 function M.close_diff_windows_for_code(self, current_state)
     local buffers = M.diff_buffers(self)
-    local code_state = M.code_window_state_for_diff(self, current_state)
-    local code_win = self[code_state.win_field]
+    local code_win = self[current_state.win_field]
 
-    for _, state in ipairs(DIFF_WINDOW_STATES) do
-        if state == code_state then
-            M.restore_or_close_diff_window(self, state, true)
-        elseif current_state.split and state.split then
-            M.restore_or_close_diff_window(self, state, false)
-        end
-    end
+    M.restore_or_close_diff_window(self, current_state, true)
 
     self.diff_preview_key = nil
     clear_diff_context(self)

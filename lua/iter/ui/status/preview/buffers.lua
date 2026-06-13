@@ -51,31 +51,4 @@ function M.ensure_stacked(self, actions)
     return self.diff_buf
 end
 
---- NOTE: self is now used (was _) to access self.config.keymaps_diff_split.
---- All internal callers pass self; this module is not part of the public API.
----@param self GitStatusWindow
----@param buf_name string
----@param existing Buffer?
----@param actions IterPreviewBufferActions
----@return Buffer
-function M.ensure_split(self, buf_name, existing, actions)
-    if existing ~= nil and existing:is_valid() then
-        return existing
-    end
-
-    local buf = Buffer.new({
-        listed = false,
-        scratch = true,
-        name = buf_name,
-    })
-
-    vim.bo[buf.id].buftype = 'nofile'
-    vim.bo[buf.id].bufhidden = 'hide'
-    vim.bo[buf.id].swapfile = false
-
-    keymaps.attach_diff_split(buf.id, self.config.keymaps_diff_split, actions)
-
-    return buf
-end
-
 return M
