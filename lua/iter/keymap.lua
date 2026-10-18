@@ -47,7 +47,7 @@ local ACTIONS = {
         { 'prev_file', 'Previous file' },
         { 'stage', 'Stage the hunk' },
         { 'unstage', 'Unstage the hunk' },
-        { 'comment', 'Comment on the line or range' },
+        { 'comment', 'Comment on the line or range', { 'n', 'x' } },
         { 'comment_file', 'Comment on the file' },
         { 'edit', 'Edit the comment' },
         { 'delete', 'Delete the comment' },

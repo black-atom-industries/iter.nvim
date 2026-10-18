@@ -578,6 +578,24 @@ local function normal_win_of(buf)
     return nil
 end
 
+--- The repo root and repo-relative path of `buf`, or nil when it is not a
+--- file buffer inside a git worktree. Spawns no git.
+---@param buf integer
+---@return { root: string, path: string }?
+function M.target(buf)
+    return target_of(buf)
+end
+
+--- Draw the comments of `buf` again in a normal window showing it.
+---@param buf integer
+function M.render_buffer(buf)
+    local win = vim.api.nvim_buf_is_valid(buf) and normal_win_of(buf)
+
+    if win then
+        render(buf, win)
+    end
+end
+
 --- Show comments in normal buffers of repo files and keep them anchored
 --- as the files are written. Safe to call more than once.
 function M.watch_buffers()

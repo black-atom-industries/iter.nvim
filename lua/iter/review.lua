@@ -1,8 +1,11 @@
+local anchor = require('iter.comments.anchor')
 local Drawer = require('iter.ui.drawer')
+local editor = require('iter.comments.editor')
 local git = require('iter.git')
 local help = require('iter.ui.help')
 local model = require('iter.diff.model')
 local patch = require('iter.diff.patch')
+local store = require('iter.store')
 local util = require('iter.util')
 
 ---@class IterReviewOpenOptions
@@ -178,6 +181,18 @@ function Review:view_handlers()
         end,
         goto_file = function()
             self:goto_file()
+        end,
+        comment = function()
+            self:comment()
+        end,
+        comment_file = function()
+            self:comment_file()
+        end,
+        edit = function()
+            self:edit_comment()
+        end,
+        delete = function()
+            self:delete_comment()
         end,
         close = function()
             self:close()
@@ -516,6 +531,187 @@ function Review:goto_file()
         win,
         { math.min(line, vim.api.nvim_buf_line_count(0)), 0 }
     )
+end
+
+---@param comment table
+function Review:open_editor(comment)
+    editor.open({
+        root = self.drawer.changes.root,
+        comment = comment,
+        config = self.drawer.config,
+        pane = self.diff_win,
+        on_save = function()
+            self.drawer:refresh_comments()
+        end,
+    })
+end
+
+--- The anchor of rows `first` to `last` of the shown diff. Rows with a new
+--- line number anchor on the new side, which follows the worktree, so a
+--- staged line goes through the unstaged diff; only deleted rows anchor on
+--- the old side, against the version they were deleted from.
+---@param file IterFileDiff
+---@param first integer
+---@param last integer
+---@return IterAnchor?
+---@return string? error
+function Review:anchor_rows(file, first, last)
+    local new_rows, old = {}, {}
+
+    for lnum = first, last do
+        local row = file.rows[lnum]
+
+        if row.kind == 'gap' then
+            return nil, 'Expand the hidden lines first'
+        elseif row.new ~= nil then
+            table.insert(new_rows, lnum)
+        elseif row.kind == 'del' then
+            table.insert(old, row.old)
+        end
+    end
+
+    local changes = self.drawer.changes
+
+    if #new_rows > 0 then
+        local start = worktree_line(changes, file, new_rows[1])
+        local stop = worktree_line(changes, file, new_rows[#new_rows])
+        local path = vim.fs.joinpath(changes.root, file.path)
+        local ok, lines = pcall(vim.fn.readfile, path)
+
+        if not ok or lines[stop] == nil then
+            return nil, file.path .. ' has no such line in the worktree'
+        end
+
+        return anchor.create({
+            path = file.path,
+            side = 'new',
+            start_line = start,
+            end_line = stop,
+        }, lines)
+    end
+
+    if #old > 0 then
+        local lines = file.old_lines
+
+        if lines == nil then
+            lines = {}
+
+            for _, row in ipairs(file.rows) do
+                if row.old ~= nil then
+                    lines[row.old] = row.text
+                end
+            end
+        end
+
+        return anchor.create({
+            path = file.orig_path or file.path,
+            side = 'old',
+            base = file.side == 'unstaged' and 'index' or 'HEAD',
+            start_line = old[1],
+            end_line = old[#old],
+        }, lines)
+    end
+
+    return nil, 'No line under the cursor'
+end
+
+--- Comment on the line under the cursor of the diff pane, or on the
+--- visual range.
+function Review:comment()
+    local view = self.drawer.view
+    local file = view:is_shown() and view.files[1] or nil
+
+    if file == nil then
+        return
+    end
+
+    local first, last = editor.selection()
+
+    if file.binary then
+        util.warn('A binary file takes file comments only')
+        return
+    end
+
+    local a, err = self:anchor_rows(file, first, last)
+
+    if a == nil then
+        util.warn(err or 'No line under the cursor')
+        return
+    end
+
+    self:open_editor({
+        scope = a.start_line == a.end_line and 'line' or 'range',
+        anchor = a,
+    })
+end
+
+--- Comment on the file of the diff pane.
+function Review:comment_file()
+    local view = self.drawer.view
+    local file = view:is_shown() and view.files[1] or nil
+
+    if file == nil then
+        return
+    end
+
+    self:open_editor({
+        scope = 'file',
+        anchor = { path = file.path, side = 'new' },
+    })
+end
+
+--- The first comment placed below the cursor row of the diff pane.
+---@return IterComment?
+function Review:comment_under_cursor()
+    local view = self.drawer.view
+
+    if not view:is_shown() then
+        return nil
+    end
+
+    local lnum = vim.api.nvim_win_get_cursor(view.win)[1]
+
+    for _, mark in ipairs(view.marks) do
+        if mark.lnum == lnum then
+            return mark.comment
+        end
+    end
+
+    util.warn('No comment on this line')
+    return nil
+end
+
+function Review:edit_comment()
+    local comment = self:comment_under_cursor()
+
+    if comment ~= nil then
+        self:open_editor(comment)
+    end
+end
+
+function Review:delete_comment()
+    local comment = self:comment_under_cursor()
+
+    if comment == nil then
+        return
+    end
+
+    local first = vim.split(comment.body, '\n')[1]
+
+    if
+        vim.fn.confirm('Delete the comment?\n' .. first, '&Delete\n&No', 2) ~= 1
+    then
+        return
+    end
+
+    local _, err =
+        store.remove_comments(self.drawer.changes.root, { comment.id })
+
+    if err ~= nil then
+        util.warn('Cannot delete the comment: ' .. err)
+    end
+
+    self.drawer:refresh_comments()
 end
 
 return Review
