@@ -1,5 +1,6 @@
 local highlight = require('iter.highlight')
 local keymap = require('iter.keymap')
+local marks = require('iter.comments.marks')
 local model = require('iter.diff.model')
 local syntax = require('iter.diff.syntax')
 local words = require('iter.diff.words')
@@ -28,12 +29,17 @@ local words = require('iter.diff.words')
 ---@field generation integer bumped by every render
 ---@field decorated integer last generation whose syntax is applied
 ---@field prev_buf? integer buffer the window showed before the view
+---@field comments IterComment[] stored comments the view places on its file
+---@field marks IterCommentMark[] comments placed on the shown rows
+---@field marks_width? integer text width the marks were wrapped to
+---@field new_follows boolean a staged file's index equals its worktree
 local View = {}
 View.__index = View
 
 local NS = vim.api.nvim_create_namespace('iter.diff')
 local NS_SYNTAX = vim.api.nvim_create_namespace('iter.diff.syntax')
 local NS_WORDS = vim.api.nvim_create_namespace('iter.diff.words')
+local NS_COMMENTS = vim.api.nvim_create_namespace('iter.diff.comments')
 
 -- Del and add rows draw below syntax, word emphasis above it, so an
 -- emphasis background also shows over a capture that sets one.
@@ -108,6 +114,9 @@ function View.new(opts)
         word_diff = opts.word_diff,
         generation = 0,
         decorated = 0,
+        comments = {},
+        marks = {},
+        new_follows = false,
     }, View)
 
     if self.word_diff == nil then
@@ -364,10 +373,75 @@ function View:render()
     end
 
     self:decorate_syntax()
+    self:render_marks()
 
     if self:is_shown() then
         -- Setting the option again lets the rail shrink to a new width.
         set_winopts(self.win, { statuscolumn = WINOPTS.statuscolumn })
+    end
+end
+
+--- Width of the text area right of the rail, which the view's options make
+--- the only column in front of the text.
+---@return integer
+function View:text_width()
+    if not vim.api.nvim_win_is_valid(self.win) then
+        return 1
+    end
+
+    return math.max(
+        1,
+        vim.api.nvim_win_get_width(self.win) - 2 * self.width - 4
+    )
+end
+
+--- Place the comments on the shown rows, wrapped to the window.
+function View:render_marks()
+    local file = self.files[1]
+
+    self.marks = file ~= nil
+            and marks.place(
+                file,
+                self.comments,
+                { new_follows = self.new_follows }
+            )
+        or {}
+    self.marks_width = self:text_width()
+    marks.apply(self.buf, NS_COMMENTS, self.marks, self.marks_width)
+end
+
+--- Show `comments`, the stored ones of the repository, on the file.
+---@param comments IterComment[]
+function View:set_comments(comments)
+    self.comments = comments
+
+    if vim.api.nvim_buf_is_valid(self.buf) then
+        self:render_marks()
+    end
+end
+
+--- Tell the view whether a staged file's index is also its worktree
+--- version, which lets a miss there outdate a new-side comment.
+---@param value boolean
+function View:set_new_follows(value)
+    if value == self.new_follows then
+        return
+    end
+
+    self.new_follows = value
+
+    if vim.api.nvim_buf_is_valid(self.buf) then
+        self:render_marks()
+    end
+end
+
+--- Wrap the comments again when the window width changed.
+function View:rewrap()
+    if
+        vim.api.nvim_buf_is_valid(self.buf)
+        and self:text_width() ~= self.marks_width
+    then
+        self:render_marks()
     end
 end
 
@@ -584,6 +658,28 @@ function View:jump_hunk(dir)
         end
 
         lnum = lnum + dir
+    end
+end
+
+--- Move the cursor to the next (`dir` 1) or previous (-1) row with a
+--- comment. At the last or first one the cursor stays.
+---@param dir 1|-1
+function View:jump_comment(dir)
+    if not self:is_shown() then
+        return
+    end
+
+    local lnum = vim.api.nvim_win_get_cursor(self.win)[1]
+    local first = dir == 1 and 1 or #self.marks
+    local last = dir == 1 and #self.marks or 1
+
+    for i = first, last, dir do
+        local target = self.marks[i].lnum
+
+        if (target - lnum) * dir > 0 then
+            vim.api.nvim_win_set_cursor(self.win, { target, 0 })
+            return
+        end
     end
 end
 

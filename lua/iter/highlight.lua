@@ -95,10 +95,12 @@ function M.apply()
         IterDiffHunk = { link = 'Comment' },
         IterDiffGap = { link = 'Folded' },
         IterDiffComment = { link = 'NormalFloat' },
+        IterDiffCommentOutdated = { link = 'Comment' },
         IterDrawerTitle = { link = 'Title' },
         IterDrawerSelected = { link = 'Visual' },
         IterDrawerKey = { link = 'Special' },
         IterDrawerHint = { link = 'Comment' },
+        IterDrawerCount = { link = 'Special' },
     }
 
     for name, spec in pairs(FOREGROUNDS) do

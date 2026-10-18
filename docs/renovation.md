@@ -512,7 +512,7 @@ Each slice leaves `just checks` green and the plugin usable.
   unchanged, shifted, edited, deleted, duplicated text (nearest wins), old side.
 - Removes: nothing.
 
-#### S9a · Comment marks in diff views
+#### S9a · Comment marks in diff views — done
 
 - Goal: stored comments show as `virt_lines` in diff views, with `]a`/`[a`.
 - Files: new `iter/comments/marks.lua`; `iter/diff/view.lua`, `iter/review.lua`, `iter/ui/drawer.lua`,

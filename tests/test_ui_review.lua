@@ -1078,6 +1078,8 @@ T['hunks']['? in the diff pane lists its keys'] = function()
             {
                 ' ]c    Next hunk',
                 ' [c    Previous hunk',
+                ' ]a    Next comment',
+                ' [a    Previous comment',
                 ' ]f    Next file',
                 ' [f    Previous file',
                 ' S     Stage the hunk',

@@ -158,6 +158,12 @@ function Review:view_handlers()
         prev_hunk = function()
             self.drawer.view:jump_hunk(-1)
         end,
+        next_comment = function()
+            self.drawer.view:jump_comment(1)
+        end,
+        prev_comment = function()
+            self.drawer.view:jump_comment(-1)
+        end,
         next_file = function()
             self.drawer:step_file(1)
         end,
