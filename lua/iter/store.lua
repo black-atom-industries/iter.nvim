@@ -250,6 +250,14 @@ function M.load(root)
     return read(path)
 end
 
+--- `load` for a store file whose path the caller already resolved.
+---@param path string
+---@return IterStoreFile?
+---@return string? error
+function M.read(path)
+    return read(path)
+end
+
 --- Re-read the store from disk, let `fn` change it in place, and write it
 --- back. Every write goes through here, so changes apply by comment id and
 --- path to what other instances wrote in the meantime. When `fn` returns

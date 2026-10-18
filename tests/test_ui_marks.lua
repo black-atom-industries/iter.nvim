@@ -543,6 +543,420 @@ T['counts']['the status drawer shows no counts and no marks'] = function()
     eq(state.next_comment, '')
 end
 
+T['normal buffer'] = new_set()
+
+local function setup_iter()
+    child.lua([[require('iter').setup()]])
+end
+
+--- Each comment mark of the current buffer as `<lnum> <text>`, the text
+--- being its virtual lines joined by `|` with outer blanks cut, and each
+--- sign as `<lnum> sign`.
+---@return string[]
+local function buffer_marks()
+    return child.lua_get([[(function()
+        local ns = vim.api.nvim_get_namespaces()['iter.buffer.comments']
+        if ns == nil then
+            return {}
+        end
+        local result = {}
+        for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(0, ns, 0, -1, { details = true })) do
+            local d = mark[4]
+            if d.sign_text ~= nil then
+                table.insert(result, (mark[2] + 1) .. ' sign')
+            end
+            if d.virt_lines ~= nil then
+                local lines = {}
+                for _, line in ipairs(d.virt_lines) do
+                    local text = ''
+                    for _, chunk in ipairs(line) do
+                        text = text .. chunk[1]
+                    end
+                    table.insert(lines, vim.trim(text))
+                end
+                table.insert(result, (mark[2] + 1) .. ' ' .. table.concat(lines, '|'))
+            end
+        end
+        return result
+    end)()]])
+end
+
+--- The stored comments as `<body> <start>-<end>[ outdated]`.
+---@return string[]
+local function stored()
+    return child.lua_get([[(function()
+        local result = {}
+        for _, c in ipairs(require('iter.store').load(vim.fn.getcwd()).comments) do
+            local a = c.anchor
+            table.insert(result, string.format('%s %s-%s%s', c.body,
+                tostring(a.start_line), tostring(a.end_line),
+                c.outdated and ' outdated' or ''))
+        end
+        return result
+    end)()]])
+end
+
+--- Count `iter.git.run` calls in the child from now on, in `_G.git_runs`.
+local function count_git_runs()
+    child.lua([[
+        local git = require('iter.git')
+        local run = git.run
+        _G.git_runs = 0
+        git.run = function(...)
+            _G.git_runs = _G.git_runs + 1
+            return run(...)
+        end
+    ]])
+end
+
+-- A line, a range, an outdated, a deleted-line and a file comment on
+-- `m.txt`, which has 19 lines in the worktree.
+local BUFFER_COMMENTS = {
+    COMMENTS[1],
+    COMMENTS[2],
+    COMMENTS[3],
+    COMMENTS[4],
+    COMMENTS[5],
+    COMMENTS[7],
+}
+
+T['normal buffer']['shows line and range comments with signs'] = function()
+    seed(BUFFER_COMMENTS)
+    setup_iter()
+    child.o.number = true
+    child.o.signcolumn = 'auto'
+    child.cmd('edit m.txt')
+
+    eq(buffer_marks(), {
+        '1 sign',
+        '1 ▎ Line comment',
+        '4 sign',
+        '5 sign',
+        '6 sign',
+        '6 ▎ A range comment that is long enough to wrap at the width of the diff'
+            .. '|▎ window, which is eighty columns minus the rail',
+        '9 sign',
+        '9 ▎ outdated · Outdated comment',
+    })
+    eq(child.v.errmsg, '')
+
+    helpers.expect_screenshot(child, 'marks-buffer')
+end
+
+T['normal buffer']['nothing shows without setup()'] = function()
+    seed(BUFFER_COMMENTS)
+    child.cmd('edit m.txt')
+
+    eq(buffer_marks(), {})
+    eq(
+        child.lua_get(
+            [[pcall(vim.api.nvim_get_autocmds, { group = 'iter.buffer_comments' })]]
+        ),
+        false
+    )
+end
+
+T['normal buffer']['setup() shows the buffers already in windows'] = function()
+    seed({ COMMENTS[1] })
+    child.cmd('edit m.txt')
+    setup_iter()
+
+    eq(buffer_marks(), { '1 sign', '1 ▎ Line comment' })
+end
+
+T['normal buffer']['saving after inserting lines above moves the comments'] = function()
+    seed({ COMMENTS[1], COMMENTS[2] })
+    setup_iter()
+    child.cmd('edit m.txt')
+    child.api.nvim_buf_set_lines(0, 0, 0, false, { 'new a', 'new b' })
+    child.cmd('write')
+
+    eq(stored(), {
+        'Line comment 3-3',
+        COMMENTS[2].body .. ' 6-8',
+    })
+    eq(buffer_marks()[1], '3 sign')
+    eq(buffer_marks()[2], '3 ▎ Line comment')
+    eq(buffer_marks()[5], '8 sign')
+end
+
+T['normal buffer']['a reload after an outside edit moves the marks'] = function()
+    seed({ COMMENTS[1], COMMENTS[2] })
+    setup_iter()
+    child.cmd('edit m.txt')
+
+    local lines = child.api.nvim_buf_get_lines(0, 0, -1, false)
+    table.insert(lines, 1, 'agent a')
+    table.insert(lines, 1, 'agent b')
+    helpers.write_file(vim.fs.joinpath(repo, 'm.txt'), lines)
+    child.o.autoread = true
+    child.cmd('checktime')
+
+    eq(child.api.nvim_buf_get_lines(0, 0, 1, false), { 'agent b' })
+    eq(buffer_marks(), {
+        '3 sign',
+        '3 ▎ Line comment',
+        '6 sign',
+        '7 sign',
+        '8 sign',
+        '8 ▎ A range comment that is long enough to wrap at the width of the diff window,'
+            .. '|▎ which is eighty columns minus the rail',
+    })
+end
+
+T['normal buffer']['saving after deleting the anchored line outdates it'] = function()
+    seed({ COMMENTS[1], COMMENTS[2] })
+    setup_iter()
+    child.cmd('edit m.txt')
+    child.cmd('1delete')
+    child.cmd('write')
+
+    eq(stored(), {
+        'Line comment 1-1 outdated',
+        COMMENTS[2].body .. ' 3-5',
+    })
+    eq(buffer_marks()[2], '1 ▎ outdated · Line comment')
+    eq(child.v.errmsg, '')
+end
+
+T['normal buffer']['saving the last line away keeps the comment on the buffer'] = function()
+    seed({
+        {
+            scope = 'line',
+            body = 'Last line',
+            anchor = {
+                path = 'm.txt',
+                side = 'new',
+                start_line = 19,
+                end_line = 19,
+                lines = { 'l20' },
+            },
+        },
+    })
+    setup_iter()
+    child.cmd('edit m.txt')
+    child.cmd('10,$delete')
+    child.cmd('write')
+
+    eq(stored(), { 'Last line 19-19 outdated' })
+    eq(buffer_marks(), { '9 sign', '9 ▎ outdated · Last line' })
+    eq(child.v.errmsg, '')
+end
+
+T['normal buffer']['an unchanged save leaves the store file alone'] = function()
+    seed({ COMMENTS[1] })
+    setup_iter()
+    child.cmd('edit m.txt')
+
+    local stat = [[(function()
+        local s = vim.uv.fs_stat(require('iter.store').path(vim.fn.getcwd()))
+        return { s.ino, s.mtime.sec, s.mtime.nsec }
+    end)()]]
+    local before = child.lua_get(stat)
+    child.cmd('write')
+
+    eq(child.lua_get(stat), before)
+end
+
+T['normal buffer']['writing to another file does not move the comments'] = function()
+    seed({ COMMENTS[1] })
+    setup_iter()
+    child.cmd('edit m.txt')
+    child.api.nvim_buf_set_lines(0, 0, 0, false, { 'new a' })
+    child.cmd('write other.txt')
+
+    eq(stored(), { 'Line comment 1-1' })
+end
+
+T['normal buffer']['buffers outside repos and non-file buffers spawn no git'] = function()
+    local outside = vim.fn.resolve(vim.fn.tempname())
+    vim.fn.mkdir(outside, 'p')
+    helpers.write_file(vim.fs.joinpath(outside, 'x.txt'), { 'x' })
+
+    seed({ COMMENTS[1] })
+    setup_iter()
+    count_git_runs()
+    child.cmd('enew')
+    child.cmd('help')
+    child.cmd('only')
+    child.cmd('edit ' .. vim.fn.fnameescape(outside .. '/x.txt'))
+    child.cmd('edit ' .. vim.fn.fnameescape(outside .. '/x.txt'))
+
+    eq(child.lua_get('_G.git_runs'), 0)
+    eq(buffer_marks(), {})
+
+    helpers.cleanup(outside)
+end
+
+T['normal buffer']['showing a repo buffer again spawns no git'] = function()
+    seed({ COMMENTS[1] })
+    setup_iter()
+    child.cmd('edit m.txt')
+    count_git_runs()
+    child.cmd('edit n.txt')
+    child.cmd('buffer m.txt')
+
+    eq(child.lua_get('_G.git_runs'), 0)
+    eq(buffer_marks(), { '1 sign', '1 ▎ Line comment' })
+end
+
+T['normal buffer']['a comment written meanwhile shows on the next enter'] = function()
+    setup_iter()
+    child.cmd('edit m.txt')
+    eq(buffer_marks(), {})
+
+    seed({ COMMENTS[1] })
+    child.cmd('edit n.txt')
+    child.cmd('buffer m.txt')
+
+    eq(buffer_marks(), { '1 sign', '1 ▎ Line comment' })
+end
+
+T['normal buffer']['a branch switch shows the other branch comments'] = function()
+    seed({ COMMENTS[1] })
+    setup_iter()
+    child.cmd('edit m.txt')
+    helpers.git(repo, { 'checkout', '--quiet', '-b', 'other' })
+    child.cmd('edit n.txt')
+    child.cmd('buffer m.txt')
+
+    eq(buffer_marks(), {})
+
+    helpers.git(repo, { 'checkout', '--quiet', 'main' })
+    child.cmd('edit n.txt')
+    child.cmd('buffer m.txt')
+
+    eq(buffer_marks(), { '1 sign', '1 ▎ Line comment' })
+end
+
+T['normal buffer']['a linked worktree shows its branch comments'] = function()
+    local linked = vim.fn.resolve(vim.fn.tempname())
+    helpers.git(repo, { 'worktree', 'add', '--quiet', '-b', 'wt', linked })
+    child.cmd('cd ' .. vim.fn.fnameescape(linked))
+    seed({ COMMENTS[1] })
+    setup_iter()
+    child.cmd('edit m.txt')
+
+    eq(buffer_marks(), { '1 sign', '1 ▎ Line comment' })
+
+    helpers.cleanup(linked)
+end
+
+T['normal buffer']['adds no keymaps and no buffer-local autocmds'] = function()
+    seed({ COMMENTS[1] })
+    setup_iter()
+
+    local count =
+        [[#vim.api.nvim_get_autocmds({ group = 'iter.buffer_comments' })]]
+    local autocmds = child.lua_get(count)
+    child.cmd('edit m.txt')
+
+    eq(child.lua_get([[vim.api.nvim_buf_get_keymap(0, 'n')]]), {})
+    eq(child.lua_get(BUFFER_MAP), 0)
+
+    child.cmd('edit n.txt')
+    child.cmd('bwipeout m.txt')
+    child.cmd('edit m.txt')
+    child.cmd('bwipeout m.txt')
+
+    eq(child.lua_get(count), autocmds)
+    eq(
+        child.lua_get(
+            [[#vim.api.nvim_get_autocmds({ group = 'iter.buffer_comments', buffer = 0 })]]
+        ),
+        0
+    )
+end
+
+T['normal buffer']['a second setup() adds no autocmds'] = function()
+    setup_iter()
+
+    local count =
+        [[#vim.api.nvim_get_autocmds({ group = 'iter.buffer_comments' })]]
+    local autocmds = child.lua_get(count)
+    setup_iter()
+
+    eq(child.lua_get(count), autocmds)
+end
+
+T['normal buffer']['rewraps when the window width changes'] = function()
+    seed({ COMMENTS[2] })
+    setup_iter()
+    child.cmd('edit m.txt')
+    child.cmd('vsplit')
+    child.cmd('vertical resize 40')
+
+    eq(#vim.split(buffer_marks()[4], '|', { plain = true }) > 2, true)
+end
+
+T['normal buffer']['a buffer without comments reads none of its lines'] = function()
+    seed({ COMMENTS[1] })
+    setup_iter()
+    child.lua([[
+        local get_lines = vim.api.nvim_buf_get_lines
+        _G.line_reads = 0
+        vim.api.nvim_buf_get_lines = function(...)
+            if debug.getinfo(2, 'S').source:find('iter/comments/marks', 1, true) then
+                _G.line_reads = _G.line_reads + 1
+            end
+            return get_lines(...)
+        end
+    ]])
+    child.cmd('edit n.txt')
+    eq(child.lua_get('_G.line_reads'), 0)
+
+    child.cmd('edit m.txt')
+    eq(child.lua_get('_G.line_reads') > 0, true)
+end
+
+T['normal buffer']['a failing save of moved comments warns once'] = function()
+    seed({ COMMENTS[1] })
+    setup_iter()
+    child.cmd('edit m.txt')
+    child.lua([[require('iter.store').update = function()
+        return nil, 'disk full'
+    end]])
+
+    for _ = 1, 2 do
+        child.api.nvim_buf_set_lines(0, 0, 0, false, { 'new' })
+        child.cmd('write')
+    end
+
+    eq(child.lua_get('_G.notes'), {
+        { '[iter] Cannot save the moved comments: disk full', 3 },
+    })
+    eq(stored(), { 'Line comment 1-1' })
+end
+
+T['normal buffer'][':file and :saveas re-render for the new name'] = function()
+    seed({ COMMENTS[1] })
+    setup_iter()
+    child.cmd('edit n.txt')
+    eq(buffer_marks(), {})
+
+    child.cmd('file m.txt')
+    eq(buffer_marks(), { '1 sign', '1 ▎ outdated · Line comment' })
+
+    child.cmd('silent saveas copy.txt')
+    eq(buffer_marks(), {})
+end
+
+T['normal buffer']['a float showing the buffer keeps the normal window wrap'] = function()
+    seed({ COMMENTS[2] })
+    setup_iter()
+    child.cmd('edit m.txt')
+
+    local before = buffer_marks()
+    child.lua(
+        [[vim.api.nvim_open_win(vim.api.nvim_create_buf(false, true), true, {
+        relative = 'editor', row = 1, col = 1, width = 30, height = 5,
+    })]]
+    )
+    child.cmd('buffer m.txt')
+
+    eq(buffer_marks(), before)
+end
+
 T['place()'] = new_set()
 
 ---@param side 'unstaged'|'staged'

@@ -523,7 +523,7 @@ Each slice leaves `just checks` green and the plugin usable.
 - Tests: child UI screenshot of a diff with each comment kind; `]a`/`[a` order; no counts in the status drawer.
 - Removes: nothing.
 
-#### S9b · Comment marks in normal buffers
+#### S9b · Comment marks in normal buffers — done
 
 - Goal: normal file buffers in the repo show their comments and keep them anchored as the file changes.
 - Files: `iter/comments/marks.lua`, `iter/init.lua`, `tests/test_ui_marks.lua`.
