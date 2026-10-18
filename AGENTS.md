@@ -12,15 +12,17 @@ This is a Neovim plugin, written in Lua, that provides a lightweight Git status 
     - Do not over-split code. Long files are okay. Long files that handle more functionalities than what it should, no.
 - Write the code.
 - Format the code.
-- Do not commit/push until indicated.
+- Commit only when indicated, or when `docs/renovation.md` says the run commits per slice. Never push.
+
+The renovation plan, scope and build decisions live in `docs/renovation.md`. Read it before working on the renovation
+and keep its Phases section current.
 
 ## Tests
 
-- Use `plenary.nvim` for creating/managing tests.
-- Get information about how to create tests from this URL: https://raw.githubusercontent.com/nvim-lua/plenary.nvim/refs/heads/master/TESTS_README.md
+- Use `mini.test` (from mini.nvim) for creating/managing tests: https://github.com/echasnovski/mini.nvim/blob/main/TESTING.md
 - There should be:
     - Functional tests: only for functions that are part of each module's API. Do NOT create tests for local functions
-    - UI tests: check whether windows are created/deleted correctly, ensuring the UI is shown as expected during and after the execution of the plugin.
+    - UI tests: drive a child Neovim and check windows, buffers and screenshots, ensuring the UI is shown as expected during and after the execution of the plugin.
 - Use temporary directories as git repositories for testing, do not use real repositories.
 
 ## Formatting
@@ -30,3 +32,6 @@ Use `stylua` for formatting.
 ---
 
 For coding conventions, structure, and project practices, see `docs/CONVENTIONS.md`.
+
+All UI designs live in the "iter.nvim" Design canvas artifact
+(https://claude.ai/artifact/N3QkZ8nf9AuZvRTnR3geRQ), one page per milestone. Create and iterate designs there.
