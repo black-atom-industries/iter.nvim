@@ -1,36 +1,150 @@
 ---@class IterTestHelpers
----@field run fun(args: string[], cwd: string): string
----@field write_file fun(path: string, lines: string[])
+local M = {}
 
-local git_env = {
-    GIT_CONFIG_GLOBAL = vim.uv.os_uname().sysname == 'Windows_NT' and 'NUL'
-        or '/dev/null',
-    GIT_CONFIG_NOSYSTEM = '1',
-    GIT_TERMINAL_PROMPT = '0',
-}
+local project_root = vim.fs.dirname(
+    vim.fs.dirname(
+        vim.fn.fnamemodify(debug.getinfo(1, 'S').source:sub(2), ':p')
+    )
+)
 
----@type IterTestHelpers
-local M = {
-    ---@param args string[]
-    ---@param cwd string
-    ---@return string
-    run = function(args, cwd)
-        local result = vim.system(args, {
-            text = true,
-            cwd = cwd,
-            env = git_env,
-        }):wait()
-        ---@diagnostic disable-next-line: undefined-field
-        assert.are.equal(0, result.code, result.stderr)
-        return result.stdout or ''
-    end,
+M.minimal_init = vim.fs.joinpath(project_root, 'tests', 'minimal_init.lua')
 
-    ---@param path string
-    ---@param lines string[]
-    write_file = function(path, lines)
-        vim.fn.mkdir(vim.fs.dirname(path), 'p')
-        vim.fn.writefile(lines, path)
-    end,
-}
+--- Run git in `repo` and return stdout. Raises on a non-zero exit.
+---@param repo string
+---@param args string[]
+---@return string
+function M.git(repo, args)
+    local result = vim.system(vim.list_extend({ 'git' }, args), {
+        text = true,
+        cwd = repo,
+    }):wait()
+
+    if result.code ~= 0 then
+        error(
+            string.format(
+                'git %s failed (%d): %s',
+                table.concat(args, ' '),
+                result.code,
+                result.stderr or ''
+            ),
+            2
+        )
+    end
+
+    return result.stdout or ''
+end
+
+---@param path string
+---@param lines string[]
+function M.write_file(path, lines)
+    vim.fn.mkdir(vim.fs.dirname(path), 'p')
+    vim.fn.writefile(lines, path)
+end
+
+--- Create a git repository in a fresh temporary directory on branch `main`
+--- with `files` (relative path -> lines) committed as the initial commit.
+---@param files table<string, string[]>
+---@return string repo
+function M.create_repo(files)
+    local repo = vim.fn.resolve(vim.fn.tempname())
+    vim.fn.mkdir(repo, 'p')
+
+    M.git(repo, { 'init', '--quiet', '-b', 'main' })
+
+    for path, lines in pairs(files) do
+        M.write_file(vim.fs.joinpath(repo, path), lines)
+    end
+
+    M.git(repo, { 'add', '--all' })
+    M.git(repo, { 'commit', '--quiet', '--allow-empty', '-m', 'initial' })
+
+    return repo
+end
+
+--- Create a repository whose working tree holds one entry of each kind:
+--- `modified.txt` (unstaged change), `staged.txt` (staged change),
+--- `deleted.txt` (deleted in the working tree), `untracked.txt` and
+--- `untracked_dir/` with two files.
+---@return string repo
+function M.create_fixture_repo()
+    local repo = M.create_repo({
+        ['modified.txt'] = { 'one', 'two', 'three' },
+        ['staged.txt'] = { 'alpha' },
+        ['deleted.txt'] = { 'gone soon' },
+    })
+
+    M.write_file(
+        vim.fs.joinpath(repo, 'modified.txt'),
+        { 'one', 'two changed', 'three' }
+    )
+    M.write_file(vim.fs.joinpath(repo, 'staged.txt'), { 'alpha', 'beta' })
+    M.git(repo, { 'add', 'staged.txt' })
+    vim.fn.delete(vim.fs.joinpath(repo, 'deleted.txt'))
+    M.write_file(vim.fs.joinpath(repo, 'untracked.txt'), { 'new' })
+    M.write_file(vim.fs.joinpath(repo, 'untracked_dir', 'a.txt'), { 'a' })
+    M.write_file(vim.fs.joinpath(repo, 'untracked_dir', 'b.txt'), { 'b' })
+
+    return repo
+end
+
+---@param repo string?
+function M.cleanup(repo)
+    if repo ~= nil and repo ~= '' then
+        vim.fn.delete(repo, 'rf')
+    end
+end
+
+--- Start `child` with the plugin loaded, cwd in `repo` and a screen setup
+--- that renders the same on every machine: fixed size, no statusline,
+--- ruler or showmode, and a cmdheight that never triggers hit-enter.
+---@param child table MiniTest child Neovim
+---@param repo string
+---@param opts? { lines?: integer, columns?: integer }
+function M.start_child(child, repo, opts)
+    opts = opts or {}
+    child.start({ '-u', M.minimal_init })
+    child.o.lines = opts.lines or 24
+    child.o.columns = opts.columns or 80
+    child.o.laststatus = 0
+    child.o.ruler = false
+    child.o.showmode = false
+    child.o.showcmd = false
+    child.o.cmdheight = 1
+    child.o.shortmess = child.o.shortmess .. 'IFW'
+    child.cmd('cd ' .. vim.fn.fnameescape(repo))
+end
+
+--- Compare the child's screen with `tests/screenshots/<name>`. A missing
+--- reference is created locally but fails when `CI` is set, so CI never
+--- passes by writing its own reference.
+---@param child table MiniTest child Neovim
+---@param name string
+function M.expect_screenshot(child, name)
+    local path = vim.fs.joinpath(project_root, 'tests', 'screenshots', name)
+
+    if vim.env.CI ~= nil and vim.fn.filereadable(path) == 0 then
+        error('Missing reference screenshot: ' .. path, 2)
+    end
+
+    MiniTest.expect.reference_screenshot(child.get_screenshot(), path)
+end
+
+--- Wait in the child until the Lua expression `condition` is truthy.
+---@param child table MiniTest child Neovim
+---@param condition string Lua expression evaluated in the child
+---@param timeout? integer milliseconds, default 2000
+function M.wait_until(child, condition, timeout)
+    local ok = child.lua_get(
+        string.format(
+            'vim.wait(%d, function() return (%s) and true or false end, 10)',
+            timeout or 2000,
+            condition
+        )
+    )
+
+    if not ok then
+        error('Timed out waiting for: ' .. condition, 2)
+    end
+end
 
 return M

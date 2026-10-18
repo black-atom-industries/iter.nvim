@@ -95,7 +95,6 @@ function M.attach_diff_stacked(buf_id, keymaps, actions)
     end
 end
 
-
 ---@param buf_id integer
 ---@param keymaps IterKeymapEntry[]
 ---@param close_fn fun()

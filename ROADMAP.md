@@ -35,7 +35,7 @@ Priority tiers: **P0** (must fix — gaps or debt that blocks quality),
     type is still missing.)
   - Audit every config access site for type safety (LuaLS annotations).
   - Keep the tree clean — flat or minimal nesting, one concept per file.
-- [ ] **Remove vendored plenary.nvim** — replace with `mini.test` for
+- [x] **Remove vendored plenary.nvim** — replace with `mini.test` for
       the test runner. Delete vendored copy (~20MB), update CI, `justfile`,
       and `tests/minimal_init.lua`. Move off a deprecated dependency.
 
@@ -100,7 +100,7 @@ Priority tiers: **P0** (must fix — gaps or debt that blocks quality),
   - Rethink fragile default-value assertions (e.g. `assert.are.equal(0.3, height)`) —
     prefer behavior-based tests that verify the _effect_ of a config value rather
     than asserting specific magic numbers.
-- [ ] **Remove stale `.github/workflows/test.yml`** — duplicate of
+- [x] **Remove stale `.github/workflows/test.yml`** — duplicate of
       `tests.yml` that runs nvim directly without cloning plenary or
       diffs.nvim, so it cannot pass. Delete it; `tests.yml` (via
       `just test`) is the real workflow.
