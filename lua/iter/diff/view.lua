@@ -21,6 +21,7 @@ local words = require('iter.diff.words')
 ---@field saved_winopts? table<string, any> restored when the view leaves a user window
 ---@field width integer digits of the widest line number
 ---@field keys table<string, string[]>
+---@field handlers table<string, fun()> bound actions, for help
 ---@field expand_step integer
 ---@field syntax_max_lines integer versions longer than this get no syntax
 ---@field word_diff boolean
@@ -132,16 +133,12 @@ function View.new(opts)
         end,
     })
 
-    keymap.attach(
-        self.buf,
-        'diff',
-        self.keys,
-        vim.tbl_extend('force', opts.handlers or {}, {
-            expand = function()
-                self:expand()
-            end,
-        })
-    )
+    self.handlers = vim.tbl_extend('force', opts.handlers or {}, {
+        expand = function()
+            self:expand()
+        end,
+    })
+    keymap.attach(self.buf, 'diff', self.keys, self.handlers)
 
     return self
 end

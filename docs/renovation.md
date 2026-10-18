@@ -485,11 +485,11 @@ Each slice leaves `just checks` green and the plugin usable.
   values; borrowed `vim.wo` values after tab close.
 - Removes: nothing.
 
-#### S7 · Hunk staging in the diff pane
+#### S7 · Hunk staging in the diff pane — done
 
 - Goal: `s`/`u` in the review diff pane stage or unstage the hunk under the cursor.
 - Files: new `iter/diff/patch.lua`; `iter/review.lua`, `tests/test_diff_patch.lua`, `tests/test_ui_review.lua`.
-- Accept: the patch is exactly git's hunk with the file header; `s` only on unstaged rows, `u` only on staged rows,
+- Accept: the patch is exactly git's hunk with the file header minus mode lines; `s` only on unstaged rows, `u` only on staged rows,
   else a warning; `git apply --check` runs first, and on failure iter refreshes and warns without applying; after
   apply the cursor stays on the nearest remaining hunk and the drawer updates.
 - Tests: functional patch for first, middle and last hunks, new and deleted files; child UI stage and unstage of one

@@ -1,6 +1,8 @@
 local Drawer = require('iter.ui.drawer')
 local git = require('iter.git')
+local help = require('iter.ui.help')
 local model = require('iter.diff.model')
+local patch = require('iter.diff.patch')
 local util = require('iter.util')
 
 ---@class IterReviewOpenOptions
@@ -17,6 +19,7 @@ local util = require('iter.util')
 ---@field spacer_win integer bottom split the drawer float covers
 ---@field buf integer empty buffer of the split and of the diff window without a diff
 ---@field drawer IterDrawer
+---@field help? IterHelp help float of the diff pane
 ---@field group integer
 ---@field closed boolean
 ---@field on_close? fun(review: IterReview)
@@ -161,13 +164,122 @@ function Review:view_handlers()
         prev_file = function()
             self.drawer:step_file(-1)
         end,
+        stage = function()
+            self:apply_hunk('stage')
+        end,
+        unstage = function()
+            self:apply_hunk('unstage')
+        end,
         goto_file = function()
             self:goto_file()
         end,
         close = function()
             self:close()
         end,
+        help = function()
+            self:toggle_help()
+        end,
     }
+end
+
+--- Put the cursor on the `@@` row of hunk `index`, else of the last hunk.
+---@param view IterDiffView
+---@param index integer
+local function cursor_to_hunk(view, index)
+    local file = view.files[1]
+    local target = math.min(index, #file.hunks)
+
+    for lnum, row in ipairs(view.rows) do
+        if row.kind == 'hunk' and row.hunk == target then
+            vim.api.nvim_win_set_cursor(view.win, { lnum, 0 })
+            return
+        end
+    end
+end
+
+--- Stage (`stage`) or unstage (`unstage`) the hunk under the cursor of the
+--- diff pane. The patch comes from git's diff text of this moment, byte for
+--- byte, and only when that text is still the one on screen; `git apply
+--- --check` runs before the apply. Afterwards the cursor goes to the hunk
+--- that took its place, else the last one.
+---@param kind 'stage'|'unstage'
+function Review:apply_hunk(kind)
+    local view = self.drawer.view
+    local file = view:is_shown() and view.files[1] or nil
+
+    if file == nil then
+        return
+    end
+
+    if kind == 'stage' and file.side ~= 'unstaged' then
+        util.warn('The hunk is staged already')
+        return
+    elseif kind == 'unstage' and file.side ~= 'staged' then
+        util.warn('The hunk is not staged')
+        return
+    end
+
+    local row = view:row()
+
+    if row == nil or row.hunk == nil then
+        util.warn('No hunk under the cursor')
+        return
+    end
+
+    local root = self.drawer.changes.root
+    local raw = git.file_diff_bytes(root, file)
+
+    if raw == nil or not vim.deep_equal(patch.text(raw), file.raw) then
+        self.drawer:refresh()
+        util.warn(
+            file.path .. ' changed since it was shown; nothing was applied'
+        )
+        return
+    end
+
+    local lines = assert(patch.hunk(raw, row.hunk))
+    local ok, err = git.apply_hunk(root, lines, kind, { check = true })
+
+    if ok then
+        ok, err = git.apply_hunk(root, lines, kind)
+    end
+
+    self.drawer:refresh()
+
+    if not ok then
+        util.warn(string.format('Cannot %s the hunk: %s', kind, err))
+        return
+    end
+
+    local shown = view.files[1]
+
+    if
+        view:is_shown()
+        and shown ~= nil
+        and shown.path == file.path
+        and shown.side == file.side
+    then
+        cursor_to_hunk(view, row.hunk)
+    end
+end
+
+--- Open the help float with the diff pane's keys, or close it.
+function Review:toggle_help()
+    if self.help ~= nil and self.help:is_open() then
+        self.help:close()
+        return
+    end
+
+    local view = self.drawer.view
+    local config = self.drawer.config
+
+    self.help = help.open({
+        view = 'diff',
+        keys = view.keys,
+        handlers = view.handlers,
+        close_keys = config.keys.help,
+        zindex = config.options.drawer.zindex + 10,
+    })
 end
 
 function Review:attach()
@@ -217,6 +329,10 @@ function Review:close()
 
     self.closed = true
     pcall(vim.api.nvim_del_augroup_by_id, self.group)
+
+    if self.help ~= nil then
+        self.help:close()
+    end
 
     local current = vim.api.nvim_get_current_tabpage() == self.tab
 
