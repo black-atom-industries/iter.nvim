@@ -145,7 +145,7 @@ function M.attach_autocmds(self, buf, actions)
             callback = function()
                 keymaps_mod.attach_diff_stacked(
                     buf,
-                    self.config.keymaps_diff_stacked,
+                    self.config.keys.diff,
                     actions
                 )
             end,
@@ -169,7 +169,7 @@ function M.attach_autocmds(self, buf, actions)
 
                 keymaps_mod.attach_diff_stacked(
                     buf,
-                    self.config.keymaps_diff_stacked,
+                    self.config.keys.diff,
                     actions
                 )
             end,

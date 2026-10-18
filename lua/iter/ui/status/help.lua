@@ -1,13 +1,9 @@
 local Buffer = require('iter.ui.buffer')
 local common = require('iter.ui.status.common')
+local keymap = require('iter.keymap')
 local keymaps = require('iter.ui.status.keymaps')
 
 local M = {}
-
-local AREA_TITLES = {
-    status = 'Status window mappings',
-    diff_stacked = 'Diff preview mappings',
-}
 
 ---@param text string
 ---@param width integer
@@ -20,65 +16,22 @@ local function pad(text, width)
     return text .. string.rep(' ', width - #text)
 end
 
----@param self GitStatusWindow
+---@param entries IterKeymapEntry[]
 ---@return string[]
-local function help_lines(self)
-    local lines = {}
-    local all_entries = {}
-
-    -- Collect all keymap entries across areas, deduplicating by key+desc.
-    local seen = {}
-
-    local function add_entries(entries)
-        for _, entry in ipairs(entries) do
-            local sig = entry.key .. '\0' .. entry.desc
-            if not seen[sig] then
-                seen[sig] = true
-                all_entries[#all_entries + 1] = entry
-            end
-        end
-    end
-
-    add_entries(self.config.keymaps_status)
-    add_entries(self.config.keymaps_diff_stacked)
-
-    -- Compute max key width.
+local function help_lines(entries)
     local key_width = 0
 
-    for _, entry in ipairs(all_entries) do
-        local display_key = entry.key
-        if #entry.modes > 0 and entry.modes[1] ~= 'n' then
-            display_key = entry.modes[1] .. ' ' .. entry.key
-        end
-        key_width = math.max(key_width, #display_key)
+    for _, entry in ipairs(entries) do
+        key_width = math.max(key_width, #table.concat(entry.lhs, ' '))
     end
 
-    table.insert(lines, 'Mappings')
-    table.insert(lines, '')
+    local lines = {}
 
-    -- Render each area section.
-    local areas_rendered = {}
-
-    for _, entry in ipairs(all_entries) do
-        local title = AREA_TITLES[entry.area]
-
-        if title ~= nil and not areas_rendered[entry.area] then
-            areas_rendered[entry.area] = true
-
-            table.insert(lines, title)
-            table.insert(lines, pad('Key', key_width) .. '  Action')
-            table.insert(
-                lines,
-                string.rep('-', key_width) .. '  ' .. string.rep('-', 32)
-            )
-        end
-
-        local display_key = entry.key
-        if #entry.modes > 0 and entry.modes[1] ~= 'n' then
-            display_key = entry.modes[1] .. ' ' .. entry.key
-        end
-
-        table.insert(lines, pad(display_key, key_width) .. '  ' .. entry.desc)
+    for _, entry in ipairs(entries) do
+        table.insert(
+            lines,
+            pad(table.concat(entry.lhs, ' '), key_width) .. '  ' .. entry.desc
+        )
     end
 
     return lines
@@ -136,18 +89,22 @@ function M.close(self)
         and self.win ~= nil
         and common.is_valid_win(self.win)
     then
-        keymaps.attach_status(self.buf.id, self.config.keymaps_status, self)
+        keymaps.attach_status(self.buf.id, self)
     end
 end
 
+--- Toggle a float listing the keys of `view`.
 ---@param self GitStatusWindow
-function M.toggle(self)
+---@param view IterView
+---@param handlers table<string, fun()> the view's handlers, as bound
+function M.toggle(self, view, handlers)
     if M.has_open_help(self) then
         M.close(self)
         return
     end
 
-    local lines = help_lines(self)
+    local lines =
+        help_lines(keymap.list(view, self.config.keys[view], handlers))
     local max_width = math.min(vim.o.columns, math.max(24, vim.o.columns - 4))
     local max_height = math.min(vim.o.lines, math.max(6, vim.o.lines - 4))
     local width = math.min(content_width(lines) + 4, max_width)
@@ -184,7 +141,7 @@ function M.toggle(self)
     vim.wo[self.help_win].wrap = false
     vim.wo[self.help_win].cursorline = false
 
-    keymaps.attach_help(self.help_buf.id, self.config.keymaps_help, function()
+    keymaps.attach_help(self.help_buf.id, self.config.keys.help, function()
         M.close(self)
     end)
 end

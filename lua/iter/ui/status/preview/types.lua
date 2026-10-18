@@ -1,8 +1,6 @@
 ---@class IterPreviewBufferActions
 ---@field close_diff fun()
 ---@field jump_hunk fun(delta: integer)
----@field toggle_wrap fun()
----@field open_split_diff fun()
 ---@field stage_current_hunk fun()
 ---@field unstage_current_hunk fun()
 ---@field discard_current_hunk fun()

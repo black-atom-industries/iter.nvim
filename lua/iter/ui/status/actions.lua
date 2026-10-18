@@ -4,18 +4,6 @@ local selection = require('iter.ui.status.selection')
 
 local M = {}
 
-local function stop_visual_mode()
-    local mode = vim.fn.mode()
-
-    if mode == 'v' or mode == 'V' or mode == '\22' then
-        vim.api.nvim_feedkeys(
-            vim.api.nvim_replace_termcodes('<Esc>', true, false, true),
-            'nx',
-            false
-        )
-    end
-end
-
 ---@param item GitStatusEntryItem
 ---@param kind 'stage'|'unstage'
 ---@return boolean
@@ -40,18 +28,6 @@ local function entries_for_action(items, kind)
     end
 
     return entries
-end
-
----@param items GitStatusEntryItem[]
----@return boolean
-local function all_items_in_section(items, section)
-    for _, item in ipairs(items) do
-        if item.section ~= section then
-            return false
-        end
-    end
-
-    return #items > 0
 end
 
 ---@param item GitStatusEntryItem
@@ -127,8 +103,6 @@ function M.update_entry_items(self, action, items, kind)
         return false
     end
 
-    stop_visual_mode()
-
     local entries = entries_for_action(items, kind)
 
     if #entries == 0 then
@@ -187,51 +161,7 @@ end
 
 ---@param self GitStatusWindow
 ---@return boolean
-function M.stage_all_entries(self)
-    return M.update_entries(
-        self,
-        git.stage_entries,
-        selection.all_entries(self)
-    )
-end
-
----@param self GitStatusWindow
----@return boolean
-function M.unstage_all_entries(self)
-    return M.update_entries(
-        self,
-        git.unstage_entries,
-        selection.all_entries(self)
-    )
-end
-
----@param self GitStatusWindow
----@return boolean
-function M.stage_selected_entries(self)
-    local items = selection.selected_entry_items(self)
-
-    if all_items_in_section(items, 'staged') then
-        return M.update_entry_items(self, git.unstage_entries, items, 'unstage')
-    end
-
-    return M.update_entry_items(self, git.stage_entries, items, 'stage')
-end
-
----@param self GitStatusWindow
----@return boolean
-function M.unstage_selected_entries(self)
-    return M.update_entry_items(
-        self,
-        git.unstage_entries,
-        selection.selected_entry_items(self),
-        'unstage'
-    )
-end
-
----@param self GitStatusWindow
----@param force boolean
----@return boolean
-function M.discard_entry(self, force)
+function M.discard_entry(self)
     local item = selection.current_entry_item(self)
 
     if item == nil then
@@ -244,12 +174,8 @@ function M.discard_entry(self, force)
         return false
     end
 
-    local confirm_flag = force
-            and self.config.options.confirmations.force_discard
-        or (not force and self.config.options.confirmations.discard)
-
     if
-        confirm_flag
+        self.config.options.confirm.discard
         and vim.fn.confirm(discard_message(item), '&Discard\n&No', 2) ~= 1
     then
         return false
@@ -264,167 +190,6 @@ function M.discard_entry(self, force)
     end
 
     self:refresh(cursor_state)
-
-    return true
-end
-
----@param self GitStatusWindow
----@return boolean
-function M.commit(self)
-    if self.win == nil or not common.is_valid_win(self.win) then
-        common.notify_error(nil, 'Status window is not open')
-        return false
-    end
-
-    local path = vim.fn.tempname() .. '.gitcommit'
-    vim.fn.writefile(git.commit_template(), path)
-
-    if self.win ~= nil and common.is_valid_win(self.win) then
-        self._retain_win = true
-        vim.api.nvim_set_current_win(self.win)
-        vim.cmd('edit ' .. vim.fn.fnameescape(path))
-    end
-
-    vim.bo.filetype = 'gitcommit'
-
-    local commit_win = vim.api.nvim_get_current_win()
-
-    vim.wo[commit_win].signcolumn = 'no'
-    vim.wo[commit_win].number = false
-    vim.wo[commit_win].relativenumber = false
-
-    vim.api.nvim_create_autocmd('BufWritePost', {
-        buffer = vim.api.nvim_get_current_buf(),
-        callback = function(args)
-            local ok, output = git.commit_file(path)
-            local level = ok and vim.log.levels.INFO or vim.log.levels.ERROR
-
-            vim.notify('[iter] ' .. output, level)
-
-            if not ok then
-                return false
-            end
-
-            vim.schedule(function()
-                self:refresh()
-
-                if self.win ~= nil and common.is_valid_win(self.win) then
-                    vim.api.nvim_set_current_win(self.win)
-                    vim.api.nvim_win_set_buf(self.win, self.buf.id)
-                else
-                    self:show()
-                end
-
-                if vim.api.nvim_buf_is_valid(args.buf) then
-                    vim.api.nvim_buf_delete(args.buf, { force = true })
-                end
-
-                vim.fn.delete(path)
-            end)
-
-            return true
-        end,
-    })
-
-    return true
-end
-
----@param self GitStatusWindow
----@return boolean
-function M.push(self)
-    if self.win == nil or not common.is_valid_win(self.win) then
-        common.notify_error(nil, 'Status window is not open')
-        return false
-    end
-
-    if self.loading_message ~= nil then
-        common.notify_warn('Git command already running')
-        return false
-    end
-
-    self:start_loading('Pushing commits')
-
-    git.push_async(function(ok, output)
-        output = output or ''
-        self:stop_loading()
-
-        if not ok then
-            if
-                output == 'No unpushed commits to push'
-                or output:match('^No upstream')
-                or output:match('^Cannot push')
-            then
-                common.notify_warn(output)
-            else
-                common.notify_error(output, 'Push failed')
-            end
-
-            self:render_cached()
-            return
-        end
-
-        common.notify(
-            output ~= '' and output or 'Pushed commits',
-            vim.log.levels.INFO
-        )
-        self:refresh()
-    end)
-
-    return true
-end
-
----@param self GitStatusWindow
----@return boolean
-function M.push_force(self)
-    if self.win == nil or not common.is_valid_win(self.win) then
-        common.notify_error(nil, 'Status window is not open')
-        return false
-    end
-
-    if self.loading_message ~= nil then
-        common.notify_warn('Git command already running')
-        return false
-    end
-
-    if
-        self.config.options.confirmations.force_push
-        and vim.fn.confirm(
-                'Force push with lease?',
-                '&Force push\n&Cancel',
-                2
-            )
-            ~= 1
-    then
-        return false
-    end
-
-    self:start_loading('Pushing commits (force with lease)')
-
-    git.push_async(function(ok, output)
-        output = output or ''
-        self:stop_loading()
-
-        if not ok then
-            if
-                output == 'No unpushed commits to push'
-                or output:match('^No upstream')
-                or output:match('^Cannot push')
-            then
-                common.notify_warn(output)
-            else
-                common.notify_error(output, 'Push (force) failed')
-            end
-
-            self:render_cached()
-            return
-        end
-
-        common.notify(
-            output ~= '' and output or 'Force-pushed commits (with lease)',
-            vim.log.levels.INFO
-        )
-        self:refresh()
-    end, { '--force-with-lease' })
 
     return true
 end

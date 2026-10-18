@@ -14,6 +14,7 @@ local display = require('iter.ui.status.preview.display')
 local window = require('iter.ui.status.window')
 local window_state = require('iter.ui.status.preview.window_state')
 local preview_util = require('iter.ui.status.preview.util')
+local help = require('iter.ui.status.help')
 local keymaps = require('iter.ui.status.keymaps')
 
 local M = {}
@@ -173,9 +174,6 @@ local function preview_actions(self)
         jump_hunk = function(delta)
             M.jump_hunk(self, delta)
         end,
-        toggle_wrap = function()
-            M.toggle_wrap(self)
-        end,
         stage_current_hunk = function()
             M.stage_current_hunk(self)
         end,
@@ -185,14 +183,15 @@ local function preview_actions(self)
         discard_current_hunk = function()
             M.discard_current_hunk(self)
         end,
-        open_split_diff = function()
-            M.open_split_diff(self)
-        end,
         goto_code = function()
             M.goto_code(self)
         end,
         toggle_help = function()
-            self:toggle_help()
+            help.toggle(
+                self,
+                'diff',
+                keymaps.diff_handlers(preview_actions(self))
+            )
         end,
         has_open_diff = function()
             return M.has_open_diff(self)
@@ -234,76 +233,6 @@ function M.jump_hunk(self, delta)
 
     common.notify_warn('No more hunks')
     return false
-end
-
----@param self GitStatusWindow
----@return boolean
-function M.toggle_wrap(self)
-    if not M.has_open_diff(self) then
-        common.notify_warn('Diff preview is not open')
-        return false
-    end
-
-    self.diff_wrap = not self.diff_wrap
-
-    if common.is_valid_win(self.diff_win) then
-        vim.wo[self.diff_win].wrap = self.diff_wrap
-    end
-
-    return true
-end
-
---- Open a side-by-side view of the current entry by delegating to
---- diffs.nvim's `:Diff ++layout=split` (plugin-aligned paired windows).
---- The view is owned by diffs.nvim; iter does not track its windows.
----@param self GitStatusWindow
----@return boolean
-function M.open_split_diff(self)
-    local item = selection.current_entry_item(self)
-
-    if item == nil then
-        common.notify_warn('No git status entry under cursor')
-        return false
-    end
-
-    if not diffs_nvim.is_available() then
-        common.notify_error(diffs_nvim.error_msg, 'Cannot open split diff')
-        return false
-    end
-
-    -- :Diff's public object forms always compare against the worktree, so
-    -- the staged edge (HEAD vs index) cannot be expressed.
-    if item.section == 'staged' then
-        common.notify_warn(
-            'diffs.nvim cannot show the staged edge side-by-side; '
-                .. 'use the stacked preview'
-        )
-        return false
-    end
-
-    local entry = item.entry
-
-    if not window.entry_is_openable(entry) then
-        common.notify_warn('Split diff needs a worktree file')
-        return false
-    end
-
-    if M.has_open_diff(self) then
-        M.close_diff(self)
-    end
-
-    if not window.open_entry(entry, self.win) then
-        return false
-    end
-
-    local ok, err = pcall(vim.cmd, 'Diff ++layout=split')
-
-    if not ok then
-        common.notify_error(tostring(err), 'Cannot open split diff')
-        return false
-    end
-
-    return true
 end
 
 ---@param self GitStatusWindow
@@ -354,10 +283,6 @@ function M.open_commit_diff(self, commit, opts)
         preview_actions(self)
     )
 
-    if ok and self.diff_buf ~= nil then
-        preview_buffers.clear_goto_code_keymap(self.diff_buf.id)
-    end
-
     return ok
 end
 
@@ -385,7 +310,7 @@ function M.close_diff(self)
         -- Re-attach status keymaps after diff close. Window/buffer transitions
         -- during diff operations can cause buffer-local keymaps to be lost;
         -- BufEnter may not fire if we never left the status buffer.
-        keymaps.attach_status(self.buf.id, self.config.keymaps_status, self)
+        keymaps.attach_status(self.buf.id, self)
     end
 end
 
@@ -476,13 +401,6 @@ function M.open_diff(self, entry, section, opts)
 
     if ok then
         set_diff_context(self, lines, raw_rows, parsed_hunks, section, entry)
-
-        if self.diff_buf ~= nil then
-            preview_buffers.set_goto_code_keymap(
-                self.diff_buf.id,
-                preview_actions(self)
-            )
-        end
     end
 
     return ok

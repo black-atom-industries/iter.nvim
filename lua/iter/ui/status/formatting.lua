@@ -23,11 +23,6 @@ local conflict_statuses = {
 ---@field entry GitStatusEntry
 ---@field section GitStatusSectionName
 
----@class GitStatusRenderOpts
----@field filter string?
----@field loading_message string?
----@field loading_frame string?
-
 ---@param commit GitCommit
 ---@param groups table<string, string>
 ---@return IterRenderLine
@@ -126,19 +121,6 @@ local function message_line(text, group)
     return line
 end
 
----@param message string
----@param frame string
----@param groups table<string, string>
----@return IterRenderLine
-local function loading_line(message, frame, groups)
-    local text = frame .. ' ' .. message
-    local line = render.line(text)
-
-    render.add_highlight(line, groups.loading, 0, #text)
-
-    return line
-end
-
 ---@param entry GitStatusEntry
 ---@param groups table<string, string>
 ---@param section GitStatusSectionName
@@ -205,35 +187,6 @@ local function is_unstaged(entry)
         and entry.unstaged ~= '!'
 end
 
----@param entry GitStatusEntry
----@param query string?
----@return boolean
-local function matches_filter(entry, query)
-    if query == nil or query == '' then
-        return true
-    end
-
-    local needle = query:lower()
-    local path = entry.path:lower()
-    local orig_path = entry.orig_path and entry.orig_path:lower() or ''
-
-    return path:find(needle, 1, true) ~= nil
-        or orig_path:find(needle, 1, true) ~= nil
-end
-
----@param entries GitStatusEntry[]
----@param query string?
----@return GitStatusEntry[]
-local function filtered_entries(entries, query)
-    if query == nil or query == '' then
-        return entries
-    end
-
-    return vim.tbl_filter(function(entry)
-        return matches_filter(entry, query)
-    end, entries)
-end
-
 ---@param entries GitStatusEntry[]
 ---@return GitStatusSection[]
 local function sections(entries)
@@ -283,20 +236,9 @@ end
 
 ---@param snapshot GitStatusSnapshot
 ---@param groups table<string, string>
----@param opts? GitStatusRenderOpts
 ---@return IterRenderLine[]
-function M.render(snapshot, groups, opts)
-    opts = opts or {}
-
+function M.render(snapshot, groups)
     local lines = { M.head_line(snapshot.branch, groups) }
-    local entries = filtered_entries(snapshot.entries, opts.filter)
-
-    if opts.loading_message ~= nil and opts.loading_frame ~= nil then
-        table.insert(
-            lines,
-            loading_line(opts.loading_message, opts.loading_frame, groups)
-        )
-    end
 
     if snapshot.error ~= nil then
         table.insert(lines, render.line(''))
@@ -310,27 +252,11 @@ function M.render(snapshot, groups, opts)
         return lines
     end
 
-    if opts.filter ~= nil and opts.filter ~= '' then
-        table.insert(lines, render.line(''))
-        table.insert(lines, message_line('filter=' .. opts.filter, 'Comment'))
-
-        if #entries == 0 then
-            table.insert(
-                lines,
-                message_line('No entries match filter', 'Comment')
-            )
-            return lines
-        end
-    end
-
-    for _, section in ipairs(sections(entries)) do
+    for _, section in ipairs(sections(snapshot.entries)) do
         append_section(lines, section, groups)
     end
 
-    if
-        #snapshot.unpushed_commits > 0
-        and (opts.filter == nil or opts.filter == '')
-    then
+    if #snapshot.unpushed_commits > 0 then
         table.insert(lines, render.line(''))
         table.insert(
             lines,

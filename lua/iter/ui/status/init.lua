@@ -25,7 +25,6 @@ local git = require('iter.git')
 ---@field diff_section GitStatusSectionName?
 ---@field diff_context_entry GitStatusEntry?
 ---@field diff_prev_winopts GitStatusWindowOptions?
----@field diff_wrap boolean
 ---@field help_buf Buffer?
 ---@field help_win number?
 ---@field help_prev_win number?
@@ -37,10 +36,6 @@ local git = require('iter.git')
 ---@field highlights table<string, { ensure: fun() }>
 ---@field lines IterRenderLine[]
 ---@field snapshot GitStatusSnapshot?
----@field filter string
----@field loading_message string?
----@field loading_frame integer
----@field loading_timer table?
 ---@field autocmd_group integer?
 ---@field _fs_watchers table[]?
 ---@field _refresh_timer table?
@@ -232,7 +227,7 @@ local function ensure_autocmds(self)
 
             -- Refresh buffer-local keymaps on every entry to stay reliable
             -- through window navigation and bufhidden hide/show cycles.
-            keymaps.attach_status(self.buf.id, self.config.keymaps_status, self)
+            keymaps.attach_status(self.buf.id, self)
         end,
     })
 
@@ -267,7 +262,7 @@ local function ensure_autocmds(self)
             end
 
             window.configure_status_win(win)
-            keymaps.attach_status(self.buf.id, self.config.keymaps_status, self)
+            keymaps.attach_status(self.buf.id, self)
         end,
     })
 
@@ -313,7 +308,7 @@ function GitStatusWindow:show()
 
     -- Re-register buffer-local keymaps on every show to ensure they survive
     -- bufhidden='hide' / show cycles without relying on autocmd persistence.
-    keymaps.attach_status(self.buf.id, self.config.keymaps_status, self)
+    keymaps.attach_status(self.buf.id, self)
 
     if
         self.win
@@ -334,7 +329,7 @@ function GitStatusWindow:show()
     end
 
     self.win, self.win_prev_winopts =
-        window.create_status_win(self.buf, self.config.options.status)
+        window.create_status_win(self.buf, self.config.options.drawer)
 
     selection.move_to_first_entry(self)
 end
@@ -424,75 +419,8 @@ function GitStatusWindow:unstage_entry()
 end
 
 ---@return boolean
-function GitStatusWindow:stage_all_entries()
-    return actions.stage_all_entries(self)
-end
-
----@return boolean
-function GitStatusWindow:unstage_all_entries()
-    return actions.unstage_all_entries(self)
-end
-
----@return boolean
-function GitStatusWindow:stage_selected_entries()
-    return actions.stage_selected_entries(self)
-end
-
----@return boolean
-function GitStatusWindow:unstage_selected_entries()
-    return actions.unstage_selected_entries(self)
-end
-
----@param force boolean
----@return boolean
-function GitStatusWindow:discard_entry(force)
-    return actions.discard_entry(self, force)
-end
-
----@return boolean
-function GitStatusWindow:commit()
-    return actions.commit(self)
-end
-
----@return boolean
-function GitStatusWindow:push()
-    return actions.push(self)
-end
-
----@return boolean
-function GitStatusWindow:push_force()
-    return actions.push_force(self)
-end
-
----@return boolean
-function GitStatusWindow:enter_entry()
-    local entry = selection.current_entry(self)
-    log.debug('enter_entry: ' .. (entry ~= nil and entry.path or 'nil'))
-
-    local commit_item = selection.current_commit_item(self)
-
-    if commit_item ~= nil then
-        return preview.preview_current_commit(self, {
-            force = true,
-            notify = true,
-        })
-    end
-
-    if entry == nil then
-        common.notify_warn('No git status entry under cursor')
-        return false
-    end
-
-    -- Deleted files have no worktree path to open — show their diff instead.
-    if not window.entry_is_openable(entry) then
-        return preview.preview_current_entry(self, { notify = true })
-    end
-
-    if preview.has_open_diff(self) then
-        preview.close_diff(self)
-    end
-
-    return window.open_entry(entry, self.win)
+function GitStatusWindow:discard_entry()
+    return actions.discard_entry(self)
 end
 
 function GitStatusWindow:enter_entry_and_close()
@@ -539,12 +467,11 @@ function GitStatusWindow:enter_entry_and_close()
 end
 
 function GitStatusWindow:toggle_help()
-    help.toggle(self)
+    help.toggle(self, 'drawer', keymaps.status_handlers(self))
 end
 
 ---@return boolean closed
 function GitStatusWindow:close()
-    self:stop_loading()
     help.close(self)
 
     if preview.has_open_diff(self) then
@@ -609,50 +536,13 @@ function GitStatusWindow:destroy()
     return true
 end
 
-function GitStatusWindow:filter_entries()
-    vim.ui.input({
-        prompt = 'Filter git status entries: ',
-        default = self.filter,
-    }, function(input)
-        if input == nil then
-            return
-        end
-
-        local state = selection.capture_cursor_state(self)
-        state.follow_entry = false
-        self.filter = vim.trim(input)
-        self:refresh(state)
-    end)
-end
-
-function GitStatusWindow:clear_filter()
-    if self.filter == '' then
-        return
-    end
-
-    local state = selection.capture_cursor_state(self)
-    state.follow_entry = false
-    self.filter = ''
-    self:refresh(state)
-end
-
 function GitStatusWindow:render_cached()
     assert(self.buf ~= nil)
     assert(self.buf:is_valid())
     assert(self.groups ~= nil)
 
     self.snapshot = self.snapshot or git.status_snapshot()
-    local loading_frame
-
-    if self.loading_message ~= nil then
-        loading_frame = self.config.spinner_frames[self.loading_frame]
-    end
-
-    self.lines = formatting.render(self.snapshot, self.groups, {
-        filter = self.filter,
-        loading_message = self.loading_message,
-        loading_frame = loading_frame,
-    })
+    self.lines = formatting.render(self.snapshot, self.groups)
 
     vim.bo[self.buf.id].modifiable = true
     self.buf:set_lines(render.text_lines(self.lines))
@@ -662,110 +552,6 @@ end
 function GitStatusWindow:render()
     self.snapshot = git.status_snapshot()
     self:render_cached()
-end
-
----@param message string
-function GitStatusWindow:start_loading(message)
-    if self.loading_message ~= nil then
-        return
-    end
-
-    self.loading_message = message
-    self.loading_frame = 1
-    self:render_cached()
-
-    self.loading_timer = vim.uv.new_timer()
-
-    if self.loading_timer == nil then
-        return
-    end
-
-    self.loading_timer:start(
-        120,
-        120,
-        vim.schedule_wrap(function()
-            if self.loading_message == nil then
-                return
-            end
-
-            self.loading_frame = (
-                self.loading_frame % #self.config.spinner_frames
-            ) + 1
-
-            if self.buf ~= nil and self.buf:is_valid() then
-                self:render_cached()
-            end
-        end)
-    )
-end
-
-function GitStatusWindow:stop_loading()
-    self.loading_message = nil
-
-    if self.loading_timer ~= nil then
-        self.loading_timer:stop()
-
-        if not self.loading_timer:is_closing() then
-            self.loading_timer:close()
-        end
-
-        self.loading_timer = nil
-    end
-end
-
----@param direction 'down'|'up'
----@return boolean
-function GitStatusWindow:scroll_diff(direction)
-    local current_win = vim.api.nvim_get_current_win()
-    log.debug('scroll_diff: ' .. direction)
-
-    -- Set scrolling flag to prevent debounced preview from running
-    keymaps.set_scrolling(true)
-
-    local preview_mod = require('iter.ui.status.preview')
-
-    if not preview_mod.has_open_diff(self) then
-        keymaps.set_scrolling(false)
-        return false
-    end
-
-    -- Determine which window(s) to scroll
-    local wins = {}
-
-    if self.diff_win ~= nil and vim.api.nvim_win_is_valid(self.diff_win) then
-        table.insert(wins, self.diff_win)
-    end
-
-    if #wins == 0 then
-        keymaps.set_scrolling(false)
-        return false
-    end
-
-    -- Scroll each diff window
-    for _, win in ipairs(wins) do
-        local win_height = vim.api.nvim_win_get_height(win)
-        local scroll_amount = math.floor(win_height / 2)
-
-        -- Build the normal! command with proper control characters
-        -- Ctrl-D is byte 4, Ctrl-U is byte 21
-        local ctrl_char = direction == 'down' and string.char(4)
-            or string.char(21)
-        local cmd = 'normal! ' .. scroll_amount .. ctrl_char
-
-        vim.fn.win_execute(win, cmd)
-
-        local after_win = vim.api.nvim_get_current_win()
-        if after_win ~= current_win then
-            vim.api.nvim_set_current_win(current_win)
-        end
-    end
-
-    -- Clear scrolling flag after a short delay to allow j/k to register
-    vim.defer_fn(function()
-        keymaps.set_scrolling(false)
-    end, 100)
-
-    return true
 end
 
 ---@param config IterConfig
@@ -778,9 +564,6 @@ function GitStatusWindow.new(config)
     self.highlights = create_highlights(config)
     self.lines = {}
     self.diff_created_win = false
-    self.diff_wrap = config.options.preview.wrap
-    self.filter = ''
-    self.loading_frame = 1
 
     ensure_highlights(self)
 
@@ -792,11 +575,11 @@ function GitStatusWindow.new(config)
     vim.bo[self.buf.id].swapfile = false
     vim.bo[self.buf.id].filetype = 'iter'
 
-    keymaps.attach(self, config.keymaps_status)
+    keymaps.attach(self)
     self:render()
 
     self.win, self.win_prev_winopts =
-        window.create_status_win(self.buf, self.config.options.status)
+        window.create_status_win(self.buf, self.config.options.drawer)
 
     selection.move_to_first_entry(self)
     ensure_autocmds(self)

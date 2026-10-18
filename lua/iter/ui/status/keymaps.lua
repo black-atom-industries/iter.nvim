@@ -1,134 +1,80 @@
+local keymap = require('iter.keymap')
 local log = require('iter.log')
 
 local M = {}
 
--- Flag to prevent debounced preview during scroll operations
-local scrolling = false
-
-function M.set_scrolling(value)
-    scrolling = value
-end
-
-function M.is_scrolling()
-    return scrolling
+---@param self GitStatusWindow
+---@return table<string, fun()>
+function M.status_handlers(self)
+    return {
+        open = function()
+            self:enter_entry_and_close()
+        end,
+        preview = function()
+            self:diff_entry()
+        end,
+        stage = function()
+            self:stage_entry()
+        end,
+        unstage = function()
+            self:unstage_entry()
+        end,
+        discard = function()
+            self:discard_entry()
+        end,
+        close = function()
+            self:close()
+        end,
+        help = function()
+            self:toggle_help()
+        end,
+    }
 end
 
 ---@param buf_id integer
----@param keymaps IterKeymapEntry[]
 ---@param self GitStatusWindow
-function M.attach_status(buf_id, keymaps, self)
+function M.attach_status(buf_id, self)
     assert(self ~= nil)
 
-    for _, entry in ipairs(keymaps) do
-        if entry.area == 'status' then
-            local action = entry.action
-
-            -- Resolve action name to a function on self, with special-casing
-            -- for actions that need arguments or call module-level helpers.
-            local callback
-            if action == 'discard_entry' then
-                local force = entry.args ~= nil and entry.args.force or false
-                callback = function()
-                    self:discard_entry(force)
-                end
-            elseif action == 'open_split_diff' then
-                callback = function()
-                    local preview_mod = require('iter.ui.status.preview')
-                    preview_mod.open_split_diff(self)
-                end
-            elseif action == 'scroll_diff_down' then
-                callback = function()
-                    self:scroll_diff('down')
-                end
-            elseif action == 'scroll_diff_up' then
-                callback = function()
-                    self:scroll_diff('up')
-                end
-            else
-                callback = function()
-                    self[action](self)
-                end
-            end
-
-            for _, mode in ipairs(entry.modes) do
-                vim.keymap.set(mode, entry.key, callback, {
-                    buffer = buf_id,
-                    desc = entry.desc,
-                    silent = true,
-                    nowait = true,
-                })
-            end
-        end
-    end
+    keymap.attach(
+        buf_id,
+        'drawer',
+        self.config.keys.drawer,
+        M.status_handlers(self)
+    )
 end
 
----@param buf_id integer
----@param keymaps IterKeymapEntry[]
 ---@param actions IterPreviewBufferActions
-function M.attach_diff_stacked(buf_id, keymaps, actions)
-    for _, entry in ipairs(keymaps) do
-        if entry.area == 'diff_stacked' then
-            local callback
-            if entry.action == 'jump_hunk_next' then
-                callback = function()
-                    actions.jump_hunk(1)
-                end
-            elseif entry.action == 'jump_hunk_prev' then
-                callback = function()
-                    actions.jump_hunk(-1)
-                end
-            else
-                callback = actions[entry.action]
-            end
-
-            if callback ~= nil then
-                for _, mode in ipairs(entry.modes) do
-                    vim.keymap.set(mode, entry.key, callback, {
-                        buffer = buf_id,
-                        desc = entry.desc,
-                        silent = true,
-                        nowait = true,
-                    })
-                end
-            end
-        end
-    end
+---@return table<string, fun()>
+function M.diff_handlers(actions)
+    return {
+        next_hunk = function()
+            actions.jump_hunk(1)
+        end,
+        prev_hunk = function()
+            actions.jump_hunk(-1)
+        end,
+        stage = actions.stage_current_hunk,
+        unstage = actions.unstage_current_hunk,
+        discard = actions.discard_current_hunk,
+        goto_file = actions.goto_code,
+        close = actions.close_diff,
+        help = actions.toggle_help,
+    }
 end
 
 ---@param buf_id integer
----@param keymaps IterKeymapEntry[]
+---@param keys table<string, string[]> resolved keys of the diff view
+---@param actions IterPreviewBufferActions
+function M.attach_diff_stacked(buf_id, keys, actions)
+    keymap.attach(buf_id, 'diff', keys, M.diff_handlers(actions))
+end
+
+---@param buf_id integer
+---@param keys table<string, string[]> resolved keys of the help view
 ---@param close_fn fun()
-function M.attach_help(buf_id, keymaps, close_fn)
-    for _, entry in ipairs(keymaps) do
-        if entry.area == 'help' then
-            for _, mode in ipairs(entry.modes) do
-                vim.keymap.set(mode, entry.key, close_fn, {
-                    buffer = buf_id,
-                    desc = entry.desc,
-                    silent = true,
-                    nowait = true,
-                })
-            end
-        end
-    end
-end
-
----@param bufnr integer
----@param actions IterPreviewBufferActions
-function M.set_goto_code_keymap(bufnr, actions)
-    vim.keymap.set('n', '<CR>', actions.goto_code, {
-        buffer = bufnr,
-        desc = 'Go to code under git diff cursor',
-        silent = true,
-        nowait = true,
-    })
-end
-
----@param bufnr integer?
-function M.clear_goto_code_keymap(bufnr)
-    if bufnr ~= nil and vim.api.nvim_buf_is_valid(bufnr) then
-        pcall(vim.keymap.del, 'n', '<CR>', { buffer = bufnr })
-    end
+function M.attach_help(buf_id, keys, close_fn)
+    keymap.attach(buf_id, 'help', keys, { close = close_fn })
 end
 
 ---@param self GitStatusWindow
@@ -201,12 +147,6 @@ function M.attach_cursor_autocmd(self)
                         return
                     end
 
-                    -- Skip preview update if we're currently scrolling
-                    if scrolling then
-                        log.debug('debounce: skipping during scroll')
-                        return
-                    end
-
                     local preview_mod = require('iter.ui.status.preview')
 
                     if preview_mod.has_open_diff(self) then
@@ -231,12 +171,11 @@ function M.attach_cursor_autocmd(self)
 end
 
 ---@param self GitStatusWindow
----@param keymaps IterKeymapEntry[]
-function M.attach(self, keymaps)
+function M.attach(self)
     assert(self.buf ~= nil)
     assert(self.buf:is_valid())
 
-    M.attach_status(self.buf.id, keymaps, self)
+    M.attach_status(self.buf.id, self)
     M.attach_cursor_autocmd(self)
 end
 

@@ -1,31 +1,37 @@
 -- All user-facing option fields are optional: setup() deep-merges partial
 -- tables with M.options, so the resolved config always has every field.
 
----@class IterPreviewOptions
----@field wrap? boolean
+---@class IterDrawerOptions
+---@field height? number Fraction of the editor height, in (0, 1]
+---@field zindex? integer
+---@field breakpoint? integer Drawer width below which the columns stack
 
----@class IterStatusOptions
----@field height? number
+---@class IterDiffOptions
+---@field expand_step? integer Hidden context lines revealed per expand
+---@field syntax_max_lines? integer Files longer than this get no syntax
+---@field word_diff? boolean
+
+---@class IterExportOptions
+---@field intro? string Text placed before the exported comments
+
+---@class IterRefreshOptions
+---@field poll_ms? integer
 
 ---@class IterConfirmOptions
----@field discard? boolean Ask before discarding changes (d)
----@field force_discard? boolean Ask before force-discarding changes (D)
----@field force_push? boolean Ask before force-pushing with lease (P)
+---@field discard? boolean Ask before discarding changes
+
+---@alias IterView 'drawer'|'review_drawer'|'diff'|'comment'|'picker'|'help'
+
+---@alias IterKeyValue string|string[]|false
 
 ---@class IterOptions
----@field preview? IterPreviewOptions
----@field status? IterStatusOptions
----@field confirmations? IterConfirmOptions
----@field keymaps? table
+---@field drawer? IterDrawerOptions
+---@field diff? IterDiffOptions
+---@field export? IterExportOptions
+---@field refresh? IterRefreshOptions
+---@field confirm? IterConfirmOptions
+---@field keys? table<IterView, table<string, IterKeyValue>>
 ---@field debug? boolean
-
----@class IterKeymapEntry
----@field key string
----@field modes string[]
----@field desc string
----@field action string
----@field area string
----@field args? table
 
 local M = {}
 
@@ -35,271 +41,104 @@ local M = {}
 
 M.options = {
     debug = false,
-    preview = {
-        wrap = false,
+    drawer = {
+        height = 0.3,
+        zindex = 40,
+        breakpoint = 80,
     },
-    status = {
-        height = 0.25,
+    diff = {
+        expand_step = 20,
+        syntax_max_lines = 20000,
+        word_diff = true,
     },
-    confirmations = {
+    export = {
+        intro = 'I reviewed your changes and have these comments. '
+            .. 'Please address them.',
+    },
+    refresh = {
+        poll_ms = 2000,
+    },
+    confirm = {
         discard = true,
-        force_discard = true,
-        force_push = true,
     },
 }
 
 -- ---------------------------------------------------------------------------
--- Keymaps
+-- Keys
 -- ---------------------------------------------------------------------------
 
----@type IterKeymapEntry[]
-M.keymaps_status = {
-    {
-        key = '<CR>',
-        modes = { 'n' },
-        desc = 'Open git status entry',
-        action = 'enter_entry',
-        area = 'status',
+-- Every view and action a user may set in `keys`. A value is an lhs, a list of
+-- lhs, or false to leave the action unmapped.
+---@type table<IterView, table<string, IterKeyValue>>
+M.keys = {
+    drawer = {
+        open = '<CR>',
+        preview = '=',
+        stage = 's',
+        unstage = 'u',
+        discard = 'd',
+        expand = '<Tab>',
+        review = 'r',
+        close = 'q',
+        help = '?',
+        column_left = 'h',
+        column_right = 'l',
     },
-    {
-        key = '<C-]>',
-        modes = { 'n' },
-        desc = 'Open entry and close status',
-        action = 'enter_entry_and_close',
-        area = 'status',
+    review_drawer = {
+        open = '<CR>',
+        stage = 's',
+        unstage = 'u',
+        discard = 'd',
+        expand = '<Tab>',
+        viewed = 'v',
+        mode = 'm',
+        comment_file = 'C',
+        picker = 'L',
+        yank = 'y',
+        close = 'q',
+        help = '?',
+        column_left = 'h',
+        column_right = 'l',
     },
-    {
-        key = '=',
-        modes = { 'n' },
-        desc = 'Show git status entry diff',
-        action = 'diff_entry',
-        area = 'status',
+    diff = {
+        next_hunk = ']c',
+        prev_hunk = '[c',
+        next_comment = ']a',
+        prev_comment = '[a',
+        next_file = ']f',
+        prev_file = '[f',
+        stage = 's',
+        unstage = 'u',
+        discard = 'd',
+        comment = 'c',
+        comment_file = 'C',
+        edit = 'e',
+        delete = 'x',
+        expand = '<CR>',
+        goto_file = 'gf',
+        viewed = 'v',
+        mode = 'm',
+        picker = 'L',
+        yank = 'y',
+        close = 'q',
+        help = '?',
     },
-    {
-        key = 'q',
-        modes = { 'n' },
-        desc = 'Close git status window',
-        action = 'close',
-        area = 'status',
+    comment = {
+        save = '<C-s>',
+        toggle = '<C-t>',
+        cancel = '<C-c>',
+        close = 'q',
     },
-    {
-        key = '/',
-        modes = { 'n' },
-        desc = 'Filter git status entries',
-        action = 'filter_entries',
-        area = 'status',
+    picker = {
+        next = '<C-n>',
+        prev = '<C-p>',
+        jump = '<CR>',
+        edit = '<C-e>',
+        delete = '<C-x>',
+        close = '<Esc>',
     },
-    {
-        key = '<BS>',
-        modes = { 'n' },
-        desc = 'Clear git status filter',
-        action = 'clear_filter',
-        area = 'status',
-    },
-    {
-        key = 'r',
-        modes = { 'n' },
-        desc = 'Refresh git status',
-        action = 'refresh',
-        area = 'status',
-    },
-    {
-        key = 's',
-        modes = { 'n' },
-        desc = 'Stage git status entry',
-        action = 'stage_entry',
-        area = 'status',
-    },
-    {
-        key = 'u',
-        modes = { 'n' },
-        desc = 'Unstage git status entry',
-        action = 'unstage_entry',
-        area = 'status',
-    },
-    {
-        key = 'S',
-        modes = { 'n' },
-        desc = 'Stage all git status entries',
-        action = 'stage_all_entries',
-        area = 'status',
-    },
-    {
-        key = 'U',
-        modes = { 'n' },
-        desc = 'Unstage all git status entries',
-        action = 'unstage_all_entries',
-        area = 'status',
-    },
-    {
-        key = 'd',
-        modes = { 'n' },
-        desc = 'Discard git status entry',
-        action = 'discard_entry',
-        area = 'status',
-    },
-    {
-        key = 'D',
-        modes = { 'n' },
-        desc = 'Force discard git status entry',
-        action = 'discard_entry',
-        args = { force = true },
-        area = 'status',
-    },
-    {
-        key = 'c',
-        modes = { 'n' },
-        desc = 'Commit staged changes',
-        action = 'commit',
-        area = 'status',
-    },
-    {
-        key = 'p',
-        modes = { 'n' },
-        desc = 'Push unpushed commits',
-        action = 'push',
-        area = 'status',
-    },
-    {
-        key = 'P',
-        modes = { 'n' },
-        desc = 'Force push with lease',
-        action = 'push_force',
-        area = 'status',
-    },
-    {
-        key = '?',
-        modes = { 'n' },
-        desc = 'Toggle git status mappings',
-        action = 'toggle_help',
-        area = 'status',
-    },
-    {
-        key = 'l',
-        modes = { 'n' },
-        desc = 'Open side-by-side diff via diffs.nvim',
-        action = 'open_split_diff',
-        area = 'status',
-    },
-    {
-        key = '<C-d>',
-        modes = { 'n' },
-        desc = 'Scroll diff preview down',
-        action = 'scroll_diff_down',
-        area = 'status',
-    },
-    {
-        key = '<C-u>',
-        modes = { 'n' },
-        desc = 'Scroll diff preview up',
-        action = 'scroll_diff_up',
-        area = 'status',
-    },
-    {
-        key = 's',
-        modes = { 'x' },
-        desc = 'Stage selected git status entries',
-        action = 'stage_selected_entries',
-        area = 'status',
-    },
-    {
-        key = 'u',
-        modes = { 'x' },
-        desc = 'Unstage selected git status entries',
-        action = 'unstage_selected_entries',
-        area = 'status',
-    },
-}
-
----@type IterKeymapEntry[]
-M.keymaps_diff_stacked = {
-    {
-        key = 'q',
-        modes = { 'n' },
-        desc = 'Close git diff preview',
-        action = 'close_diff',
-        area = 'diff_stacked',
-    },
-    {
-        key = ']h',
-        modes = { 'n' },
-        desc = 'Jump to next git diff hunk',
-        action = 'jump_hunk_next',
-        area = 'diff_stacked',
-    },
-    {
-        key = '[h',
-        modes = { 'n' },
-        desc = 'Jump to previous git diff hunk',
-        action = 'jump_hunk_prev',
-        area = 'diff_stacked',
-    },
-    {
-        key = 'aw',
-        modes = { 'n' },
-        desc = 'Toggle git diff preview wrap',
-        action = 'toggle_wrap',
-        area = 'diff_stacked',
-    },
-    {
-        key = 's',
-        modes = { 'n' },
-        desc = 'Stage current git diff hunk',
-        action = 'stage_current_hunk',
-        area = 'diff_stacked',
-    },
-    {
-        key = 'u',
-        modes = { 'n' },
-        desc = 'Unstage current git diff hunk',
-        action = 'unstage_current_hunk',
-        area = 'diff_stacked',
-    },
-    {
-        key = 'd',
-        modes = { 'n' },
-        desc = 'Discard current git diff hunk',
-        action = 'discard_current_hunk',
-        area = 'diff_stacked',
-    },
-    {
-        key = 'al',
-        modes = { 'n' },
-        desc = 'Open side-by-side diff via diffs.nvim',
-        action = 'open_split_diff',
-        area = 'diff_stacked',
-    },
-    {
-        key = '?',
-        modes = { 'n' },
-        desc = 'Toggle git mappings help',
-        action = 'toggle_help',
-        area = 'diff_stacked',
-    },
-}
-
----@type IterKeymapEntry[]
-M.keymaps_help = {
-    {
-        key = 'q',
-        modes = { 'n' },
-        desc = 'Close git mappings help',
-        action = 'close',
-        area = 'help',
-    },
-    {
-        key = '?',
-        modes = { 'n' },
-        desc = 'Close git mappings help',
-        action = 'close',
-        area = 'help',
-    },
-    {
-        key = '<Esc>',
-        modes = { 'n' },
-        desc = 'Close git mappings help',
-        action = 'close',
-        area = 'help',
+    help = {
+        close = { 'q', '?', '<Esc>' },
     },
 }
 
@@ -349,18 +188,11 @@ M.highlight_specs = {
         sources = { 'Constant', 'Number' },
         fallback_fg = 0xD19A66,
     },
-    loading = {
-        name = 'IterLoading',
-        sources = { 'DiagnosticInfo', 'Identifier' },
-        fallback_fg = 0x61AFEF,
-    },
 }
 
 -- ---------------------------------------------------------------------------
 -- Constants
 -- ---------------------------------------------------------------------------
-
-M.spinner_frames = { '-', '\\', '|', '/' }
 
 M.owned_buffer_fields = {
     'buf',

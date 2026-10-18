@@ -1,10 +1,15 @@
+---@class IterResolvedOptions
+---@field drawer { height: number, zindex: integer, breakpoint: integer }
+---@field diff { expand_step: integer, syntax_max_lines: integer, word_diff: boolean }
+---@field export { intro: string }
+---@field refresh { poll_ms: integer }
+---@field confirm { discard: boolean }
+---@field debug boolean
+
 ---@class IterConfig
----@field options IterOptions
----@field keymaps_status IterKeymapEntry[]
----@field keymaps_diff_stacked IterKeymapEntry[]
----@field keymaps_help IterKeymapEntry[]
+---@field options IterResolvedOptions
+---@field keys table<IterView, table<string, string[]>> Empty list: unmapped
 ---@field highlight_specs table<string, IterHighlightSpec>
----@field spinner_frames string[]
 ---@field owned_buffer_fields string[]
 ---@field highlight_namespace string
 ---@field debug boolean Whether to write debug-level logs to the iter log file
@@ -13,193 +18,202 @@ local defaults = require('iter.config.defaults')
 
 local M = {}
 
----@param opts IterOptions?
----@return string?
+---@param value any
+---@return boolean
+local function is_integer(value)
+    return type(value) == 'number' and value == math.floor(value)
+end
+
+-- Option name -> type for leaves, or a nested schema for tables.
+local SCHEMA = {
+    debug = 'boolean',
+    drawer = { height = 'number', zindex = 'integer', breakpoint = 'integer' },
+    diff = {
+        expand_step = 'integer',
+        syntax_max_lines = 'integer',
+        word_diff = 'boolean',
+    },
+    export = { intro = 'string' },
+    refresh = { poll_ms = 'integer' },
+    confirm = { discard = 'boolean' },
+}
+
+---@param tbl table
+---@return string
+local function sorted_names(tbl)
+    local names = vim.tbl_keys(tbl)
+    table.sort(names)
+
+    return table.concat(names, ', ')
+end
+
+---@param opts table
+---@param schema table
+---@param prefix string
+local function validate_options(opts, schema, prefix)
+    for name, value in pairs(opts) do
+        local path = prefix .. '.' .. name
+        local expected = schema[name]
+
+        if expected == nil then
+            error(path .. ' is not an option', 0)
+        end
+
+        if type(expected) == 'table' then
+            vim.validate(path, value, 'table')
+            validate_options(value, expected, path)
+        elseif expected == 'integer' then
+            vim.validate(path, value, is_integer, false, 'integer')
+        else
+            vim.validate(path, value, expected)
+        end
+    end
+end
+
+---@param value any
+---@return boolean
+local function is_key_value(value)
+    if value == false then
+        return true
+    end
+
+    if type(value) == 'string' then
+        return value ~= ''
+    end
+
+    if type(value) ~= 'table' or #value == 0 then
+        return false
+    end
+
+    for _, lhs in ipairs(value) do
+        if type(lhs) ~= 'string' or lhs == '' then
+            return false
+        end
+    end
+
+    return #value == vim.tbl_count(value)
+end
+
+---@param keys table
+local function validate_keys(keys)
+    vim.validate('opts.keys', keys, 'table')
+
+    for view, actions in pairs(keys) do
+        local path = 'opts.keys.' .. tostring(view)
+        local known = defaults.keys[view]
+
+        if known == nil then
+            error(
+                path
+                    .. ' is not a view (use: '
+                    .. sorted_names(defaults.keys)
+                    .. ')',
+                0
+            )
+        end
+
+        vim.validate(path, actions, 'table')
+
+        for action, value in pairs(actions) do
+            local action_path = path .. '.' .. tostring(action)
+
+            if known[action] == nil then
+                error(
+                    string.format(
+                        '%s is not an action of %s (use: %s)',
+                        action_path,
+                        view,
+                        sorted_names(known)
+                    ),
+                    0
+                )
+            end
+
+            if not is_key_value(value) then
+                error(
+                    action_path .. ' must be a key, a list of keys, or false',
+                    0
+                )
+            end
+        end
+    end
+end
+
+---@param opts IterOptions
 local function validate(opts)
-    vim.validate('opts', opts, 'table', true, '`opts` should be a table')
+    local keys = opts.keys
+    local options = vim.deepcopy(opts)
+    options.keys = nil
 
-    opts = opts or {}
-    vim.validate('opts.preview', opts.preview, 'table', true)
-    vim.validate('opts.status', opts.status, 'table', true)
-    vim.validate('opts.keymaps', opts.keymaps, 'table', true)
+    validate_options(options, SCHEMA, 'opts')
 
-    if opts.preview ~= nil then
-        vim.validate('opts.preview.wrap', opts.preview.wrap, 'boolean', true)
+    local height = opts.drawer and opts.drawer.height
+
+    if height ~= nil and (height <= 0 or height > 1) then
+        error('opts.drawer.height must be a number between 0 and 1', 0)
     end
 
-    if opts.status ~= nil then
-        vim.validate('opts.status.height', opts.status.height, 'number', true)
+    if keys ~= nil then
+        validate_keys(keys)
+    end
+end
 
-        if opts.status.height ~= nil then
-            if opts.status.height <= 0 or opts.status.height > 1 then
-                return 'opts.status.height must be a number between 0 and 1'
-            end
-        end
+---@param value IterKeyValue
+---@return string[]
+local function normalize_lhs(value)
+    if value == false then
+        return {}
     end
 
-    if opts.confirmations ~= nil then
-        vim.validate('opts.confirmations', opts.confirmations, 'table', true)
-
-        if opts.confirmations.force_discard ~= nil then
-            vim.validate(
-                'opts.confirmations.force_discard',
-                opts.confirmations.force_discard,
-                'boolean',
-                true
-            )
-        end
-
-        if opts.confirmations.force_push ~= nil then
-            vim.validate(
-                'opts.confirmations.force_push',
-                opts.confirmations.force_push,
-                'boolean',
-                true
-            )
-        end
+    if type(value) == 'string' then
+        return { value }
     end
 
-    -- Validate keymap overrides via opts.keymaps.<area>
-    if opts.keymaps ~= nil then
-        if type(opts.keymaps) ~= 'table' then
-            return 'opts.keymaps must be a table'
-        end
+    return vim.deepcopy(value)
+end
 
-        local valid_areas = {
-            'status',
-            'diff_stacked',
-            'help',
-        }
+---@param user_keys table<IterView, table<string, IterKeyValue>>?
+---@return table<IterView, table<string, string[]>>
+local function resolve_keys(user_keys)
+    user_keys = user_keys or {}
+    local resolved = {}
 
-        for area, _ in pairs(opts.keymaps) do
-            local found = false
-            for _, v in ipairs(valid_areas) do
-                if area == v then
-                    found = true
-                    break
-                end
+    for view, actions in pairs(defaults.keys) do
+        local overrides = user_keys[view] or {}
+        resolved[view] = {}
+
+        for action, value in pairs(actions) do
+            local override = overrides[action]
+
+            if override == nil then
+                override = value
             end
 
-            if not found then
-                return 'opts.keymaps.'
-                    .. area
-                    .. ' is not a valid area (use: status, diff_stacked, help)'
-            end
-        end
-
-        for _, area_key in ipairs(valid_areas) do
-            local raw = opts.keymaps[area_key]
-            if raw ~= nil then
-                if type(raw) ~= 'table' then
-                    return 'opts.keymaps.' .. area_key .. ' must be a table'
-                end
-
-                local keys_seen = {}
-
-                for i, entry in ipairs(raw) do
-                    if type(entry) ~= 'table' then
-                        return 'opts.keymaps.'
-                            .. area_key
-                            .. '['
-                            .. i
-                            .. '] must be a table'
-                    end
-
-                    if entry.key == nil or type(entry.key) ~= 'string' then
-                        return 'opts.keymaps.'
-                            .. area_key
-                            .. '['
-                            .. i
-                            .. '].key must be a string'
-                    end
-
-                    if keys_seen[entry.key] then
-                        return 'opts.keymaps.'
-                            .. area_key
-                            .. ' contains duplicate key: '
-                            .. entry.key
-                    end
-
-                    keys_seen[entry.key] = true
-                end
-            end
+            resolved[view][action] = normalize_lhs(override)
         end
     end
 
-    return nil
+    return resolved
 end
 
 ---@param user_opts IterOptions?
 ---@return IterConfig
 function M.resolve(user_opts)
+    vim.validate('opts', user_opts, 'table', true)
     user_opts = user_opts or {}
 
-    local err = validate(user_opts)
-    if err ~= nil then
-        error(err)
-    end
+    validate(user_opts)
+
+    local options = vim.deepcopy(user_opts)
+    options.keys = nil
 
     local merged =
-        vim.tbl_deep_extend('force', vim.deepcopy(defaults.options), user_opts)
-
-    -- Keymaps: replace whole table when user provides overrides, otherwise
-    -- use the defaults as-is. This keeps customisation simple: users can
-    -- selectively override individual entries by providing an array of
-    -- { key = '...', modes = {...}, desc = '...' } tables.
-    local function resolve_keymaps(user_raw, default_list)
-        if user_raw == nil then
-            return vim.deepcopy(default_list)
-        end
-
-        -- User provided a table — deep-merge at the entry level so they can
-        -- override desc/modes/action while keeping defaults for other entries.
-        -- If an entry only has 'key' and 'desc', match by key to the default.
-        local merged_list = {}
-
-        for _, default_entry in ipairs(default_list) do
-            local matched = nil
-            for _, user_entry in ipairs(user_raw) do
-                if
-                    type(user_entry) == 'table'
-                    and user_entry.key == default_entry.key
-                then
-                    matched = user_entry
-                    break
-                end
-            end
-
-            if matched then
-                merged_list[#merged_list + 1] = vim.tbl_deep_extend(
-                    'force',
-                    vim.deepcopy(default_entry),
-                    matched
-                )
-            else
-                merged_list[#merged_list + 1] = vim.deepcopy(default_entry)
-            end
-        end
-
-        return merged_list
-    end
-
-    local keymap_overrides = user_opts.keymaps or {}
+        vim.tbl_deep_extend('force', vim.deepcopy(defaults.options), options)
 
     return {
         options = merged,
-        keymaps_status = resolve_keymaps(
-            keymap_overrides.status,
-            defaults.keymaps_status
-        ),
-        keymaps_diff_stacked = resolve_keymaps(
-            keymap_overrides.diff_stacked,
-            defaults.keymaps_diff_stacked
-        ),
-        keymaps_help = resolve_keymaps(
-            keymap_overrides.help,
-            defaults.keymaps_help
-        ),
+        keys = resolve_keys(user_opts.keys),
         highlight_specs = defaults.highlight_specs,
-        spinner_frames = defaults.spinner_frames,
         owned_buffer_fields = defaults.owned_buffer_fields,
         highlight_namespace = defaults.highlight_namespace,
         debug = merged.debug,

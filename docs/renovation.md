@@ -378,7 +378,7 @@ Rules the sketch relies on:
 
 Each slice leaves `just checks` green and the plugin usable.
 
-#### S1 · Config, keymap layer, `:Iter` subcommands
+#### S1 · Config, keymap layer, `:Iter` subcommands — done
 
 - Goal: `setup()` takes `keys.<view>.<action>` (lhs or `false`) and the new options; `:Iter` and `:Iter status` open
   the existing status window through the new keymap layer.
