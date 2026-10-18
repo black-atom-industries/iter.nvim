@@ -467,7 +467,7 @@ Each slice leaves `just checks` green and the plugin usable.
   (bundled parser) showing syntax and word emphasis.
 - Removes: nothing.
 
-#### S6 · Review tab
+#### S6 · Review tab — done
 
 - Goal: `r` in the drawer and `:Iter review` open the review tab (or switch to it) with the diff pane, the drawer on a
   spacer split, and navigation.

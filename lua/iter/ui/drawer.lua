@@ -22,10 +22,17 @@ local watch = require('iter.watch')
 ---@field pane integer window the float is anchored to
 ---@field config IterConfig
 ---@field path? string absolute path of a file to select when it changed
+---@field side? IterSide side to look for `path` on first
+---@field context? 'status'|'review'
+---@field view_win? integer window the diff view borrows, the pane by default
+---@field view_handlers? table<string, fun()> diff view actions
+---@field height? number float height, `drawer.height` by default
 ---@field on_close? fun(drawer: IterDrawer)
 
 ---@class IterDrawer
----@field context 'status'
+---@field context 'status'|'review'
+---@field keys_view IterView view whose keys the drawer maps
+---@field keys table<string, string[]>
 ---@field pane integer
 ---@field win integer
 ---@field buf integer
@@ -43,6 +50,7 @@ local watch = require('iter.watch')
 ---@field layout 'columns'|'stacked'
 ---@field expanded table<string, boolean> untracked directories shown open
 ---@field previewed? string key of the item the view shows
+---@field previewed_stat? string worktree stat of that item when it was read
 ---@field preview_tick integer bumped per scheduled preview; only the last one runs
 ---@field group integer
 ---@field closed boolean
@@ -111,6 +119,34 @@ local function flatten(items)
     end
 
     return entries
+end
+
+--- Every item in drawer order: Unstaged, then Staged, children after their
+--- directory.
+---@param result IterChanges
+---@return IterChange[]
+local function ordered(result)
+    local items = {}
+
+    for _, side in ipairs(SIDES) do
+        for _, entry in ipairs(flatten(result[side])) do
+            table.insert(items, entry.item)
+        end
+    end
+
+    return items
+end
+
+---@param path string
+---@return string
+local function stat_key(path)
+    local stat = vim.uv.fs_stat(path)
+
+    if stat == nil then
+        return ''
+    end
+
+    return string.format('%d.%d:%d', stat.mtime.sec, stat.mtime.nsec, stat.size)
 end
 
 --- One cell: code letter and path, the path cut from the left to fit.
@@ -376,9 +412,16 @@ function Drawer.open(opts)
     vim.validate('opts.pane', opts.pane, 'number')
     vim.validate('opts.config', opts.config, 'table')
     vim.validate('opts.path', opts.path, 'string', true)
+    vim.validate('opts.side', opts.side, 'string', true)
+    vim.validate('opts.context', opts.context, 'string', true)
+    vim.validate('opts.view_win', opts.view_win, 'number', true)
+    vim.validate('opts.view_handlers', opts.view_handlers, 'table', true)
+    vim.validate('opts.height', opts.height, 'number', true)
     vim.validate('opts.on_close', opts.on_close, 'function', true)
 
-    if is_stuck(vim.api.nvim_win_get_buf(opts.pane)) then
+    local view_win = opts.view_win or opts.pane
+
+    if is_stuck(vim.api.nvim_win_get_buf(view_win)) then
         util.warn('The pane has unsaved changes')
         return nil
     end
@@ -389,9 +432,15 @@ function Drawer.open(opts)
     vim.bo[buf].bufhidden = 'wipe'
     vim.bo[buf].modifiable = false
     vim.bo[buf].filetype = 'iter'
+    vim.api.nvim_buf_set_name(buf, 'iter://drawer/' .. buf)
+
+    local context = opts.context or 'status'
+    local keys_view = context == 'review' and 'review_drawer' or 'drawer'
 
     local self = setmetatable({
-        context = 'status',
+        context = context,
+        keys_view = keys_view,
+        keys = opts.config.keys[keys_view],
         pane = opts.pane,
         buf = buf,
         config = opts.config,
@@ -412,12 +461,16 @@ function Drawer.open(opts)
     end
 
     self.handlers = self:make_handlers()
-    self.view = View.new({ win = opts.pane, keys = opts.config.keys.diff })
+    self.view = View.new({
+        win = view_win,
+        keys = opts.config.keys.diff,
+        handlers = opts.view_handlers,
+    })
     self.float = float.open({
         pane = opts.pane,
         buf = buf,
         zindex = opts.config.options.drawer.zindex,
-        height = opts.config.options.drawer.height,
+        height = opts.height or opts.config.options.drawer.height,
         enter = true,
         chrome = true,
     })
@@ -429,7 +482,7 @@ function Drawer.open(opts)
     )
 
     self:render()
-    self:restore_selection(self:find_path(opts.path))
+    self:restore_selection(self:find_path(opts.path, opts.side))
     self:attach()
     self:preview(true)
     self.watch = watch.start({
@@ -451,8 +504,9 @@ function Drawer:make_handlers()
         end
     end
 
-    return {
+    local handlers = {
         open = act('open_file'),
+        review = act('open_review'),
         stage = act('stage'),
         unstage = act('unstage'),
         discard = act('discard'),
@@ -466,6 +520,13 @@ function Drawer:make_handlers()
             self:switch('staged')
         end,
     }
+
+    if self.context == 'review' then
+        handlers.open = act('enter_view')
+        handlers.review = nil
+    end
+
+    return handlers
 end
 
 function Drawer:attach()
@@ -506,7 +567,7 @@ function Drawer:attach()
         end,
     })
 
-    keymap.attach(self.buf, 'drawer', self.config.keys.drawer, self.handlers)
+    keymap.attach(self.buf, self.keys_view, self.keys, self.handlers)
 end
 
 ---@return boolean
@@ -566,6 +627,10 @@ function Drawer:render()
 
     self.rows, self.cells = layout.rows, layout.cells
 
+    if self.context == 'review' then
+        self:fit_pane(#layout.lines)
+    end
+
     vim.bo[self.buf].modifiable = true
     vim.api.nvim_buf_set_lines(
         self.buf,
@@ -582,10 +647,34 @@ function Drawer:render()
         fit = #layout.lines,
         title = header_chunks(self.changes, self.layout),
         footer = hint_chunks(
-            keymap.list('drawer', self.config.keys.drawer, self.handlers),
+            keymap.list(self.keys_view, self.keys, self.handlers),
             width
         ),
     })
+end
+
+--- Size the pane, a split of its own in the review tab, to the drawer's
+--- lines and chrome: at least `drawer.height` of the pane and the view's
+--- window together, at most half of them.
+---@param count integer
+function Drawer:fit_pane(count)
+    if not util.is_valid_win(self.view.win) then
+        return
+    end
+
+    local current = vim.api.nvim_win_get_height(self.pane)
+    local total = current + vim.api.nvim_win_get_height(self.view.win)
+    local option = self.config.options.drawer.height
+    local base = option <= 1 and math.floor(total * option) or option
+    local height = math.max(
+        3,
+        math.floor(base),
+        math.min(count + 2, math.floor(total / 2))
+    )
+
+    if height ~= current then
+        vim.api.nvim_win_set_height(self.pane, height)
+    end
 end
 
 ---@return IterChange?
@@ -620,15 +709,19 @@ function Drawer:find(lnum, sides, dir)
     return nil, nil
 end
 
---- Line and side of the item at `path`, an absolute file path.
+--- Line and side of the item at `path`, an absolute file path, looking on
+--- `first` before the other side.
 ---@param path? string
+---@param first? IterSide
 ---@return { lnum: integer, side: IterSide }?
-function Drawer:find_path(path)
+function Drawer:find_path(path, first)
     if path == nil or path == '' then
         return nil
     end
 
-    for _, side in ipairs(SIDES) do
+    local sides = first == 'staged' and { 'staged', 'unstaged' } or SIDES
+
+    for _, side in ipairs(sides) do
         for lnum, row in ipairs(self.rows) do
             local item = row[side]
 
@@ -794,6 +887,20 @@ function Drawer:refresh(reason)
     end
 
     if reason == 'poll' and vim.deep_equal(before, self.changes) then
+        local item = self:selected()
+
+        -- The review's diff also follows writes from outside Neovim, which
+        -- leave the status as it was.
+        if
+            self.context == 'review'
+            and item ~= nil
+            and key(item) == self.previewed
+            and stat_key(vim.fs.joinpath(self.changes.root, item.path))
+                ~= self.previewed_stat
+        then
+            self:preview(true)
+        end
+
         return
     end
 
@@ -849,12 +956,15 @@ function Drawer:preview(force)
         return
     end
 
+    local stat = stat_key(vim.fs.joinpath(self.changes.root, item.path))
     local source, err = git.file_diff(self.changes.root, item)
 
     if source == nil then
         util.error(err, 'Cannot read the diff of ' .. item.path)
         return
     end
+
+    self.previewed_stat = stat
 
     -- The same diff again keeps the view as it is, expanded gaps included.
     local shown = self.view.files[1]
@@ -1066,6 +1176,86 @@ function Drawer:open_file()
     end
 end
 
+--- Show the selected file's diff and move into the diff view.
+function Drawer:enter_view()
+    local item = self:selected()
+
+    if item == nil then
+        return
+    end
+
+    if item.dir then
+        return self:toggle()
+    end
+
+    self:preview(false)
+
+    if self.view:is_shown() then
+        vim.api.nvim_set_current_win(self.view.win)
+    end
+end
+
+--- Close the drawer and open the review tab on the selected file.
+function Drawer:open_review()
+    local item = self:selected()
+    local target
+
+    if item ~= nil and not item.dir then
+        target = {
+            path = vim.fs.joinpath(self.changes.root, item.path),
+            side = item.side,
+        }
+    end
+
+    self:close()
+    require('iter').review(target)
+end
+
+--- Files in drawer order, directories left out.
+---@return IterChange[]
+function Drawer:files()
+    return vim.tbl_filter(function(item)
+        return not item.dir
+    end, ordered(self.changes))
+end
+
+--- Select the next (`dir` 1) or previous (-1) file in drawer order and show
+--- its diff now. At the last or first file nothing changes.
+---@param dir 1|-1
+function Drawer:step_file(dir)
+    local items = ordered(self.changes)
+    local current = self:selected()
+    local index = dir == 1 and 0 or #items + 1
+
+    for i, item in ipairs(items) do
+        if current ~= nil and key(item) == key(current) then
+            index = i
+        end
+    end
+
+    index = index + dir
+
+    while items[index] ~= nil and items[index].dir do
+        index = index + dir
+    end
+
+    local target = items[index]
+
+    if target == nil then
+        return
+    end
+
+    for lnum, row in ipairs(self.rows) do
+        local item = row[target.side]
+
+        if item ~= nil and key(item) == key(target) then
+            self:select(lnum, target.side)
+            self:preview(false)
+            return
+        end
+    end
+end
+
 --- Close the float and give the pane back its buffer and options.
 function Drawer:close()
     if self.closed then
@@ -1112,8 +1302,8 @@ function Drawer:toggle_help()
     end
 
     self.help = help.open({
-        view = 'drawer',
-        keys = self.config.keys.drawer,
+        view = self.keys_view,
+        keys = self.keys,
         handlers = self.handlers,
         close_keys = self.config.keys.help,
         zindex = self.config.options.drawer.zindex + 10,

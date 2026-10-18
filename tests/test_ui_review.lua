@@ -1,0 +1,850 @@
+local helpers = dofile('tests/helpers.lua')
+
+local new_set = MiniTest.new_set
+local eq = MiniTest.expect.equality
+
+local child = MiniTest.new_child_neovim()
+---@type string
+local repo
+
+-- Window options the diff view borrows, set to values the view never uses,
+-- so a changed one shows up.
+local PANE_OPTS = {
+    number = true,
+    relativenumber = true,
+    signcolumn = 'yes',
+    foldcolumn = '1',
+    foldenable = true,
+    wrap = true,
+    list = true,
+    spell = true,
+    statuscolumn = '%l ',
+}
+
+local R = [[require('iter').current_review]]
+
+---@param prefix string
+---@param from integer
+---@param to integer
+---@return string[]
+local function numbered(prefix, from, to)
+    local lines = {}
+
+    for i = from, to do
+        table.insert(lines, prefix .. i)
+    end
+
+    return lines
+end
+
+--- `a.txt` has two unstaged hunks with gaps around them; `b.txt` has a
+--- staged line after b2 and two unstaged lines at the top, so its index and
+--- worktree line numbers differ; `c.txt` and `d/x.txt` are untracked.
+---@return string
+local function create_review_repo()
+    local path = helpers.create_repo({
+        ['a.txt'] = numbered('a', 1, 30),
+        ['b.txt'] = numbered('b', 1, 10),
+    })
+
+    local a = numbered('a', 1, 30)
+    a[3] = 'a3 changed'
+    a[25] = 'a25 changed'
+    helpers.write_file(vim.fs.joinpath(path, 'a.txt'), a)
+
+    local b = numbered('b', 1, 10)
+    table.insert(b, 3, 'staged')
+    helpers.write_file(vim.fs.joinpath(path, 'b.txt'), b)
+    helpers.git(path, { 'add', 'b.txt' })
+    table.insert(b, 1, 'top2')
+    table.insert(b, 1, 'top1')
+    helpers.write_file(vim.fs.joinpath(path, 'b.txt'), b)
+
+    helpers.write_file(vim.fs.joinpath(path, 'c.txt'), { 'c' })
+    helpers.write_file(vim.fs.joinpath(path, 'd', 'x.txt'), { 'x' })
+
+    return path
+end
+
+local function stub_ui()
+    child.lua([[
+        _G.notes = {}
+        vim.notify = function(msg, level)
+            table.insert(_G.notes, { msg, level })
+        end
+    ]])
+end
+
+---@param options string Lua table passed to setup()
+local function setup(options)
+    child.lua('require("iter").setup(' .. options .. ')')
+end
+
+--- Wait until the review's diff pane shows `expected` (`side path`).
+---@param expected string
+local function wait_diff(expected)
+    helpers.wait_until(
+        child,
+        string.format(
+            [[(function()
+                local r = %s
+                local f = r and r.drawer.view.files[1]
+                return f ~= nil and f.side .. ' ' .. f.path == %q
+                    and r.drawer.view:is_shown()
+            end)()]],
+            R,
+            expected
+        )
+    )
+end
+
+--- Run `:Iter review` (or `command`) and wait for the review drawer.
+---@param command? string
+local function open_review(command)
+    child.cmd(command or 'Iter review')
+    helpers.wait_until(
+        child,
+        R .. [[ ~= nil and ]] .. R .. [[.drawer.win ~= nil]]
+    )
+end
+
+---@return string?
+local function selected()
+    return child.lua_get([[(function()
+        local item = ]] .. R .. [[.drawer:selected()
+        return item and (item.side .. ' ' .. item.path) or vim.NIL
+    end)()]])
+end
+
+--- Select the `side` item with `path` in the review drawer.
+---@param side string
+---@param path string
+local function select_item(side, path)
+    child.lua(
+        [[
+        local side, path = ...
+        local d = require('iter').current_review.drawer
+        for lnum, row in ipairs(d.rows) do
+            if row[side] ~= nil and row[side].path == path then
+                vim.api.nvim_win_set_cursor(d.win, { lnum, 0 })
+                d:select(lnum, side)
+                return
+            end
+        end
+        error('no row for ' .. side .. ' ' .. path)
+    ]],
+        { side, path }
+    )
+end
+
+--- Focus the diff pane and put its cursor on the first row whose text is
+--- `text`.
+---@param text string
+local function cursor_on(text)
+    child.lua(
+        [[
+        local text = ...
+        local r = require('iter').current_review
+        vim.api.nvim_set_current_win(r.diff_win)
+        for lnum, row in ipairs(r.drawer.view.rows) do
+            if row.text == text then
+                vim.api.nvim_win_set_cursor(r.diff_win, { lnum, 0 })
+                return
+            end
+        end
+        error('no row ' .. text)
+    ]],
+        { text }
+    )
+end
+
+---@return string kind and text of the diff pane's cursor row
+local function cursor_row()
+    return child.lua_get([[(function()
+        local r = require('iter').current_review
+        local lnum = vim.api.nvim_win_get_cursor(r.diff_win)[1]
+        local row = r.drawer.view.rows[lnum]
+        return row.kind .. ' ' .. row.text
+    end)()]])
+end
+
+local function set_pane_opts()
+    child.lua(
+        [[
+        _G.pane = vim.api.nvim_get_current_win()
+        for name, value in pairs(...) do
+            vim.api.nvim_set_option_value(name, value, { win = _G.pane })
+        end
+    ]],
+        { PANE_OPTS }
+    )
+end
+
+--- Local values of the borrowed options in `_G.pane` and their global values.
+---@return table
+local function pane_opts()
+    return child.lua_get(
+        [[(function(names)
+            local values = { win = {}, global = {} }
+            for name in pairs(names) do
+                values.win[name] = vim.api.nvim_get_option_value(name, { scope = 'local', win = _G.pane })
+                values.global[name] = vim.api.nvim_get_option_value(name, { scope = 'global' })
+            end
+            return values
+        end)(...)]],
+        { PANE_OPTS }
+    )
+end
+
+-- Handles, autocmds, augroups and buffers that a closed review must not
+-- leave behind.
+local RESOURCES = [[(function()
+    local counts = { fs_event = 0, timer = 0 }
+    vim.uv.walk(function(handle)
+        local kind = handle:get_type()
+        if counts[kind] ~= nil and not handle:is_closing() then
+            counts[kind] = counts[kind] + 1
+        end
+    end)
+    local groups = 0
+    for _, line in ipairs(vim.split(vim.fn.execute('augroup'), '%s+')) do
+        if vim.startswith(line, 'iter.') then
+            groups = groups + 1
+        end
+    end
+    counts.groups = groups
+    counts.autocmds = #vim.api.nvim_get_autocmds({})
+    counts.bufs = #vim.api.nvim_list_bufs()
+    counts.wins = #vim.api.nvim_list_wins()
+    counts.tabs = #vim.api.nvim_list_tabpages()
+    return counts
+end)()]]
+
+local T = new_set({
+    hooks = {
+        pre_case = function()
+            repo = create_review_repo()
+            helpers.start_child(child, repo)
+            stub_ui()
+        end,
+        post_case = function()
+            child.stop()
+            helpers.cleanup(repo)
+        end,
+    },
+})
+
+T['open'] = new_set()
+
+T['open'][':Iter review opens the tab with the diff above the drawer'] = function()
+    child.cmd('edit a.txt')
+    open_review()
+    wait_diff('unstaged a.txt')
+
+    eq(#child.api.nvim_list_tabpages(), 2)
+    eq(child.lua_get(R .. '.tab == vim.api.nvim_get_current_tabpage()'), true)
+    eq(
+        child.lua_get(R .. '.drawer.win == vim.api.nvim_get_current_win()'),
+        true
+    )
+    eq(selected(), 'unstaged a.txt')
+
+    local config =
+        child.lua_get('vim.api.nvim_win_get_config(' .. R .. '.drawer.win)')
+    eq(config.relative, 'win')
+    eq(config.win, child.lua_get(R .. '.spacer_win'))
+    eq(config.anchor, 'SW')
+    eq(config.zindex, 40)
+
+    -- The float covers the whole spacer split: its rows plus the two chrome
+    -- rows are the spacer's rows.
+    eq(
+        config.height + 2,
+        child.lua_get('vim.api.nvim_win_get_height(' .. R .. '.spacer_win)')
+    )
+    eq(child.v.errmsg, '')
+
+    helpers.expect_screenshot(child, 'review-tab')
+end
+
+T['open']['opening twice gives one tab'] = function()
+    open_review()
+    open_review()
+
+    eq(#child.api.nvim_list_tabpages(), 2)
+
+    child.cmd('tabfirst')
+    open_review()
+
+    eq(#child.api.nvim_list_tabpages(), 2)
+    eq(child.lua_get(R .. '.tab == vim.api.nvim_get_current_tabpage()'), true)
+    eq(
+        child.lua_get(R .. '.drawer.win == vim.api.nvim_get_current_win()'),
+        true
+    )
+end
+
+T['open']['r in the status drawer opens the review and closes the drawer'] = function()
+    child.cmd('Iter')
+    helpers.wait_until(child, [[require('iter').drawer ~= nil]])
+    child.type_keys('r')
+    helpers.wait_until(child, R .. ' ~= nil')
+
+    eq(child.lua_get([[require('iter').drawer]]), vim.NIL)
+    eq(#child.api.nvim_list_tabpages(), 2)
+
+    child.cmd('tabfirst')
+    child.cmd('Iter')
+    helpers.wait_until(child, [[require('iter').drawer ~= nil]])
+    child.type_keys('r')
+
+    eq(#child.api.nvim_list_tabpages(), 2)
+    eq(child.lua_get(R .. '.tab == vim.api.nvim_get_current_tabpage()'), true)
+end
+
+T['open']['r selects the file selected in the status drawer'] = function()
+    child.cmd('Iter')
+    helpers.wait_until(child, [[require('iter').drawer ~= nil]])
+    child.lua([[
+        local d = require('iter').drawer
+        for lnum, row in ipairs(d.rows) do
+            if row.staged ~= nil then
+                d:select(lnum, 'staged')
+            end
+        end
+    ]])
+    child.type_keys('r')
+    helpers.wait_until(child, R .. ' ~= nil')
+
+    eq(selected(), 'staged b.txt')
+end
+
+T['open'][':Iter status inside the review focuses its drawer'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.lua('vim.api.nvim_set_current_win(' .. R .. '.diff_win)')
+    child.cmd('Iter status')
+
+    eq(child.lua_get([[require('iter').drawer]]), vim.NIL)
+    eq(
+        child.lua_get(R .. '.drawer.win == vim.api.nvim_get_current_win()'),
+        true
+    )
+end
+
+T['open'][':Iter completes review'] = function()
+    eq(child.fn.getcompletion('Iter ', 'cmdline'), { 'review', 'status' })
+    eq(child.fn.getcompletion('Iter re', 'cmdline'), { 'review' })
+end
+
+T['open']['outside a git repository warns and opens nothing'] = function()
+    child.stop()
+    helpers.cleanup(repo)
+    repo = vim.fn.resolve(vim.fn.tempname())
+    vim.fn.mkdir(repo, 'p')
+    helpers.start_child(child, repo)
+    stub_ui()
+
+    child.cmd('Iter review')
+
+    eq(child.lua_get([[_G.notes]]), {
+        { '[iter] Not inside a git repository', vim.log.levels.WARN },
+    })
+    eq(child.lua_get(R), vim.NIL)
+    eq(#child.api.nvim_list_tabpages(), 1)
+end
+
+T['drawer'] = new_set()
+
+T['drawer']['j moves and the diff follows; no r'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+
+    child.type_keys('j')
+    wait_diff('unstaged b.txt')
+
+    eq(selected(), 'unstaged b.txt')
+    eq(child.lua_get([[vim.fn.maparg('r', 'n', false, true).buffer or 0]]), 0)
+    eq(child.lua_get([[vim.fn.maparg('q', 'n', false, true).desc]]), 'Close')
+end
+
+T['drawer']['<CR> moves into the diff pane'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.type_keys('j', '<CR>')
+
+    eq(child.lua_get(R .. '.diff_win == vim.api.nvim_get_current_win()'), true)
+    eq(child.lua_get(R .. '.drawer.view.files[1].path'), 'b.txt')
+end
+
+T['drawer']['s stages and <Tab> expands a directory'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.type_keys('s')
+    helpers.wait_until(child, [[(function()
+            for _, item in ipairs(]] .. R .. [[.drawer.changes.staged) do
+                if item.path == 'a.txt' then
+                    return true
+                end
+            end
+        end)()]])
+
+    select_item('unstaged', 'd/')
+    child.type_keys('<Tab>')
+
+    eq(child.lua_get(R .. '.drawer.expanded["d/"]'), true)
+end
+
+T['drawer']['q closes the tab and returns to the tab it came from'] = function()
+    child.cmd('tabnew')
+    child.cmd('tabfirst')
+    local origin = child.api.nvim_get_current_tabpage()
+    open_review()
+    wait_diff('unstaged a.txt')
+
+    child.type_keys('q')
+
+    eq(#child.api.nvim_list_tabpages(), 2)
+    eq(child.api.nvim_get_current_tabpage(), origin)
+    eq(child.lua_get(R), vim.NIL)
+end
+
+T['diff'] = new_set()
+
+T['diff'][']c and [c jump between hunks'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.type_keys('<CR>')
+    child.api.nvim_win_set_cursor(0, { 1, 0 })
+
+    child.type_keys(']c')
+    eq(cursor_row(), 'hunk @@ -1,6 +1,6 @@')
+    child.type_keys(']c')
+    eq(cursor_row(), 'hunk @@ -22,7 +22,7 @@ a21')
+    child.type_keys(']c')
+    eq(cursor_row(), 'hunk @@ -22,7 +22,7 @@ a21')
+    child.type_keys('[c')
+    eq(cursor_row(), 'hunk @@ -1,6 +1,6 @@')
+end
+
+T['diff'][']f and [f follow the drawer order, skipping directories'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.type_keys('<CR>')
+
+    local order = {}
+
+    for _ = 1, 4 do
+        child.type_keys(']f')
+        table.insert(order, selected())
+        eq(cursor_row():sub(1, 7), 'header ')
+    end
+
+    eq(order, {
+        'unstaged b.txt',
+        'unstaged c.txt',
+        'staged b.txt',
+        'staged b.txt',
+    })
+    eq(child.lua_get(R .. '.drawer.view.files[1].side'), 'staged')
+    eq(child.lua_get(R .. '.diff_win == vim.api.nvim_get_current_win()'), true)
+
+    child.type_keys('[f')
+    eq(selected(), 'unstaged c.txt')
+    eq(child.lua_get(R .. '.drawer.view.files[1].path'), 'c.txt')
+end
+
+T['diff']['<CR> on a gap expands it'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    local before = child.lua_get('#' .. R .. '.drawer.view.rows')
+    child.type_keys('<CR>')
+    child.lua([[
+        local r = require('iter').current_review
+        for lnum, row in ipairs(r.drawer.view.rows) do
+            if row.kind == 'gap' then
+                vim.api.nvim_win_set_cursor(r.diff_win, { lnum, 0 })
+                return
+            end
+        end
+    ]])
+    child.type_keys('<CR>')
+
+    eq(child.lua_get('#' .. R .. '.drawer.view.rows') > before, true)
+end
+
+T['diff']['q closes the tab'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.type_keys('<CR>', 'q')
+
+    eq(#child.api.nvim_list_tabpages(), 1)
+    eq(child.lua_get(R), vim.NIL)
+end
+
+T['diff']['the cursor at the last row stays visible above the drawer'] = function()
+    child.lua([[
+        local lines = {}
+        for i = 1, 200 do lines[i] = 'line ' .. i end
+        vim.fn.writefile(lines, 'long.txt')
+    ]])
+    open_review()
+    select_item('unstaged', 'long.txt')
+    wait_diff('unstaged long.txt')
+    child.type_keys('<CR>', 'G')
+
+    local last = child.lua_get('#' .. R .. '.drawer.view.rows')
+    eq(child.api.nvim_win_get_cursor(0)[1], last)
+
+    local pos = child.lua_get([[(function()
+        local r = require('iter').current_review
+        local screen = vim.fn.screenpos(r.diff_win, ]] .. last .. [[, 1)
+        local float = vim.fn.win_screenpos(r.drawer.win)
+        local spacer = vim.fn.win_screenpos(r.spacer_win)
+        return { row = screen.row, float = float[1], spacer = spacer[1] }
+    end)()]])
+
+    eq(pos.row > 0, true)
+    eq(pos.row < pos.spacer, true)
+    eq(pos.row < pos.float, true)
+end
+
+---@return { line: integer, text: string, tab: integer, name: string }
+local function goto_target()
+    return child.lua_get([[{
+        line = vim.api.nvim_win_get_cursor(0)[1],
+        text = vim.api.nvim_get_current_line(),
+        tab = vim.api.nvim_get_current_tabpage(),
+        name = vim.fs.basename(vim.api.nvim_buf_get_name(0)),
+    }]])
+end
+
+T['goto'] = new_set()
+
+T['goto']['gf on an unstaged row opens the worktree line in the previous tab'] = function()
+    local origin = child.api.nvim_get_current_tabpage()
+    open_review()
+    select_item('unstaged', 'b.txt')
+    wait_diff('unstaged b.txt')
+    cursor_on('b2')
+    child.type_keys('gf')
+
+    eq(goto_target(), { line = 4, text = 'b2', tab = origin, name = 'b.txt' })
+    eq(#child.api.nvim_list_tabpages(), 2)
+end
+
+T['goto']['gf on a staged row maps through the unstaged diff'] = function()
+    local origin = child.api.nvim_get_current_tabpage()
+    open_review()
+    select_item('staged', 'b.txt')
+    wait_diff('staged b.txt')
+
+    cursor_on('staged')
+    child.type_keys('gf')
+    eq(
+        goto_target(),
+        { line = 5, text = 'staged', tab = origin, name = 'b.txt' }
+    )
+
+    child.cmd('tablast')
+    cursor_on('b5')
+    child.type_keys('gf')
+    eq(goto_target(), { line = 8, text = 'b5', tab = origin, name = 'b.txt' })
+end
+
+T['goto']['gf on an unstaged del row lands on the line that replaced it'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.lua([[
+        local r = require('iter').current_review
+        vim.api.nvim_set_current_win(r.diff_win)
+        for lnum, row in ipairs(r.drawer.view.rows) do
+            if row.kind == 'del' and row.text == 'a25' then
+                vim.api.nvim_win_set_cursor(r.diff_win, { lnum, 0 })
+            end
+        end
+    ]])
+    child.type_keys('gf')
+
+    eq(goto_target().line, 25)
+    eq(goto_target().text, 'a25 changed')
+end
+
+T['goto']['gf avoids a float in the previous tab'] = function()
+    child.lua([[
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_open_win(buf, true, {
+            relative = 'editor', row = 1, col = 1, width = 10, height = 2,
+        })
+    ]])
+    open_review()
+    select_item('unstaged', 'b.txt')
+    wait_diff('unstaged b.txt')
+    cursor_on('b2')
+    child.type_keys('gf')
+
+    eq(child.api.nvim_win_get_config(0).relative, '')
+    eq(goto_target().name, 'b.txt')
+end
+
+T['goto']['gf with nohidden and unsaved changes warns and stays'] = function()
+    child.o.hidden = false
+    child.api.nvim_buf_set_lines(0, 0, -1, false, { 'unsaved' })
+    open_review()
+    select_item('unstaged', 'b.txt')
+    wait_diff('unstaged b.txt')
+    cursor_on('b2')
+    child.lua('_G.notes = {}')
+    child.type_keys('gf')
+
+    eq(child.lua_get('_G.notes'), {
+        { '[iter] The pane has unsaved changes', vim.log.levels.WARN },
+    })
+    eq(child.lua_get(R .. '.diff_win == vim.api.nvim_get_current_win()'), true)
+    eq(child.v.errmsg, '')
+end
+
+T['goto']['the spacer and the view buffer are hermetic'] = function()
+    child.lua([[
+        vim.o.foldenable = true
+        vim.o.colorcolumn = '10'
+        vim.o.cursorcolumn = true
+    ]])
+    open_review()
+    wait_diff('unstaged a.txt')
+
+    eq(
+        child.lua_get([[(function()
+            local w = vim.wo[require('iter').current_review.spacer_win]
+            return { w.colorcolumn, w.cursorcolumn, w.foldenable }
+        end)()]]),
+        { '', false, false }
+    )
+    eq(
+        child.lua_get(
+            [[vim.api.nvim_buf_get_name(]] .. R .. [[.drawer.view.buf)]]
+        ),
+        'iter://diff/' .. child.lua_get(R .. '.drawer.view.buf')
+    )
+    eq(child.lua_get('vim.bo[' .. R .. '.drawer.view.buf].buftype'), 'nofile')
+end
+
+T['refresh'] = new_set({
+    hooks = {
+        pre_case = function()
+            setup([[{ refresh = { poll_ms = 100 } }]])
+        end,
+    },
+})
+
+T['refresh']['an external write re-renders the diff and keeps the cursor near its row'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    cursor_on('a25 changed')
+    child.lua('_G.generation = ' .. R .. '.drawer.view.generation')
+
+    local a = numbered('a', 1, 30)
+    a[3] = 'a3 changed'
+    a[25] = 'a25 changed'
+    table.insert(a, 10, 'inserted')
+    helpers.write_file(vim.fs.joinpath(repo, 'a.txt'), a)
+
+    helpers.wait_until(child, [[(function()
+            for _, row in ipairs(]] .. R .. [[.drawer.view.rows) do
+                if row.text == 'inserted' then
+                    return true
+                end
+            end
+        end)()]])
+
+    eq(cursor_row(), 'add a25 changed')
+    eq(child.lua_get(R .. '.drawer.view.generation > _G.generation'), true)
+end
+
+T['refresh']['a refresh in the background refits the spacer only'] = function()
+    child.cmd('vsplit')
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.cmd('tabfirst')
+
+    local layout = [[{
+        heights = vim.tbl_map(vim.api.nvim_win_get_height, vim.api.nvim_tabpage_list_wins(0)),
+        cmdheight = vim.o.cmdheight,
+    }]]
+    local before = child.lua_get(layout)
+
+    for i = 1, 6 do
+        helpers.write_file(vim.fs.joinpath(repo, 'n' .. i .. '.txt'), { 'n' })
+    end
+
+    helpers.wait_until(child, '#' .. R .. '.drawer.rows == 11')
+
+    eq(child.lua_get(layout), before)
+
+    child.cmd('tabnext')
+
+    local fit = child.lua_get([[(function()
+        local r = require('iter').current_review
+        local spacer = vim.api.nvim_win_get_height(r.spacer_win)
+        local total = spacer + vim.api.nvim_win_get_height(r.diff_win)
+        local diff_row = vim.fn.win_screenpos(r.diff_win)[1]
+        return {
+            spacer = spacer,
+            expected = math.max(3, math.floor(total * 0.3), math.min(#r.drawer.rows + 2, math.floor(total / 2))),
+            float = vim.api.nvim_win_get_config(r.drawer.win).height + 2,
+            spacer_row = vim.fn.win_screenpos(r.spacer_win)[1],
+            below_diff = diff_row + vim.api.nvim_win_get_height(r.diff_win) + 1,
+        }
+    end)()]])
+
+    eq(fit.spacer, fit.expected)
+    eq(fit.float, fit.spacer)
+    eq(fit.spacer_row, fit.below_diff)
+    eq(child.v.errmsg, '')
+end
+
+T['clean'] = new_set({
+    hooks = {
+        pre_case = function()
+            child.stop()
+            helpers.cleanup(repo)
+            repo = helpers.create_repo({ ['a.txt'] = { 'a' } })
+            helpers.start_child(child, repo)
+            stub_ui()
+        end,
+    },
+})
+
+T['clean']['a clean tree opens the tab with an empty diff pane'] = function()
+    open_review()
+
+    eq(#child.api.nvim_list_tabpages(), 2)
+    eq(
+        child.lua_get(
+            [[vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(]]
+                .. R
+                .. [[.diff_win), 0, -1, false)]]
+        ),
+        { '' }
+    )
+    eq(child.lua_get(R .. '.drawer.view:is_shown()'), false)
+    eq(child.lua_get([[require('iter').statusline()]]), 'review')
+end
+
+T['statusline'] = new_set()
+
+T['statusline']['names the file and its position inside the tab only'] = function()
+    eq(child.lua_get([[require('iter').statusline()]]), '')
+
+    open_review()
+    wait_diff('unstaged a.txt')
+    eq(
+        child.lua_get([[require('iter').statusline()]]),
+        'review · a.txt · 1/4'
+    )
+
+    select_item('staged', 'b.txt')
+    wait_diff('staged b.txt')
+    eq(
+        child.lua_get([[require('iter').statusline()]]),
+        'review · b.txt · 4/4'
+    )
+
+    child.cmd('tabfirst')
+    eq(child.lua_get([[require('iter').statusline()]]), '')
+end
+
+T['close'] = new_set()
+
+T['close']['the previous tab keeps its window options'] = function()
+    set_pane_opts()
+    local before = pane_opts()
+
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.type_keys('<CR>')
+    child.type_keys(']f')
+    wait_diff('unstaged b.txt')
+    child.type_keys('q')
+
+    eq(pane_opts(), before)
+
+    open_review()
+    select_item('unstaged', 'b.txt')
+    wait_diff('unstaged b.txt')
+    cursor_on('b2')
+    child.type_keys('gf')
+
+    eq(pane_opts().global, before.global)
+    eq(child.lua_get('vim.wo[_G.pane].statuscolumn'), PANE_OPTS.statuscolumn)
+end
+
+T['close']['repeated open and close leaves nothing behind'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.type_keys('q')
+    child.lua('vim.wait(200)')
+
+    local before = child.lua_get(RESOURCES)
+
+    for _ = 1, 3 do
+        open_review()
+        wait_diff('unstaged a.txt')
+        child.type_keys('<CR>', ']f')
+        wait_diff('unstaged b.txt')
+        child.type_keys('q')
+        child.lua('vim.wait(200)')
+        eq(child.lua_get(RESOURCES), before)
+    end
+end
+
+--- Every way out of the tab clears the review and stops its watchers.
+---@param leave fun()
+local function expect_clean_exit(leave)
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.type_keys('q')
+    child.lua('vim.wait(200)')
+    local before = child.lua_get(RESOURCES)
+
+    open_review()
+    wait_diff('unstaged a.txt')
+    leave()
+    child.lua('vim.wait(200)')
+
+    eq(child.lua_get(R), vim.NIL)
+    eq(child.lua_get(RESOURCES), before)
+    eq(child.v.errmsg, '')
+end
+
+T['close'][':tabclose clears the review'] = function()
+    expect_clean_exit(function()
+        child.cmd('tabclose')
+    end)
+end
+
+T['close'][':q in the diff pane closes the tab'] = function()
+    expect_clean_exit(function()
+        child.lua('vim.api.nvim_set_current_win(' .. R .. '.diff_win)')
+        child.cmd('quit')
+    end)
+end
+
+T['close'][':q in the drawer closes the tab'] = function()
+    expect_clean_exit(function()
+        child.cmd('quit')
+    end)
+end
+
+T['close']['q after :tabonly leaves one empty tab'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.cmd('tabonly')
+    child.type_keys('q')
+
+    eq(#child.api.nvim_list_tabpages(), 1)
+    eq(child.lua_get(R), vim.NIL)
+    eq(child.v.errmsg, '')
+end
+
+return T

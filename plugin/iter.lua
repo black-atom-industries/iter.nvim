@@ -3,6 +3,9 @@ local subcommands = {
     status = function()
         require('iter').status()
     end,
+    review = function()
+        require('iter').review()
+    end,
 }
 
 vim.api.nvim_create_user_command('Iter', function(args)
