@@ -455,7 +455,7 @@ Each slice leaves `just checks` green and the plugin usable.
   each refresh the drawer.
 - Removes: the diffs.nvim pin in `justfile`, its rtp entry in `tests/minimal_init.lua`, the health check for it.
 
-#### S5 · Syntax and word diff
+#### S5 · Syntax and word diff — done
 
 - Goal: diff rows get treesitter syntax from the full blobs and word emphasis on paired changed lines.
 - Files: new `iter/diff/syntax.lua`, `iter/diff/words.lua`; `iter/diff/view.lua`, `tests/test_diff_words.lua`,
