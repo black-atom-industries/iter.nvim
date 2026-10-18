@@ -135,14 +135,88 @@ function M.review(target)
     })
 end
 
---- `review · <file> · <i>/<n>` inside the review tab, `''` elsewhere.
----@return string
-function M.statusline()
-    if M.current_review == nil then
-        return ''
+--- Refresh the open review's comments after a write from outside it.
+local function refresh_review()
+    if M.current_review ~= nil and M.current_review:is_open() then
+        M.current_review.drawer:refresh_comments()
+    end
+end
+
+--- Open the comment float: on the cursor line or the visual range of a
+--- repo file's buffer, or with `scope = 'review'` on the whole review.
+---@param opts? { scope?: 'review' }
+function M.comment(opts)
+    vim.validate('opts', opts, 'table', true)
+    opts = opts or {}
+
+    local editor = require('iter.comments.editor')
+
+    if opts.scope == 'review' then
+        local root = require('iter.git').root()
+
+        if root == '' then
+            util.warn('Not inside a git repository')
+            return
+        end
+
+        editor.open({
+            root = root,
+            comment = { scope = 'review', anchor = { side = 'new' } },
+            config = M.config,
+            on_save = refresh_review,
+        })
+        return
     end
 
-    return M.current_review:statusline()
+    local marks = require('iter.comments.marks')
+    local buf = vim.api.nvim_get_current_buf()
+    local first, last = editor.selection()
+    local target = marks.target(buf)
+
+    if target == nil then
+        util.warn('Not a file in a git repository')
+        return
+    end
+
+    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+
+    editor.open({
+        root = target.root,
+        comment = {
+            scope = first == last and 'line' or 'range',
+            anchor = require('iter.comments.anchor').create({
+                path = target.path,
+                side = 'new',
+                start_line = first,
+                end_line = last,
+            }, lines),
+        },
+        config = M.config,
+        on_save = function()
+            marks.render_buffer(buf)
+            refresh_review()
+        end,
+    })
+end
+
+--- `review · <file> · <i>/<n>` inside the review tab, `''` elsewhere, with
+--- `draft comment` while a comment draft is hidden.
+---@return string
+function M.statusline()
+    local parts = {}
+
+    if M.current_review ~= nil then
+        table.insert(parts, M.current_review:statusline())
+    end
+
+    table.insert(parts, require('iter.comments.editor').statusline())
+
+    return table.concat(
+        vim.tbl_filter(function(part)
+            return part ~= ''
+        end, parts),
+        ' · '
+    )
 end
 
 ---@param opts IterOptions?

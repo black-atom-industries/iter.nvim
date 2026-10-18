@@ -603,6 +603,7 @@ function Drawer:make_handlers()
     if self.context == 'review' then
         handlers.open = act('enter_view')
         handlers.review = nil
+        handlers.comment_file = act('comment_file')
     end
 
     return handlers
@@ -1035,6 +1036,36 @@ function Drawer:refresh(reason)
     self:render()
     self:restore_selection(mark)
     self:preview(true)
+end
+
+--- Read the stored comments again whatever the store file's stat says,
+--- then refresh. For writes of this instance, which can keep the stat.
+function Drawer:refresh_comments()
+    self.store_stat = nil
+    self:refresh()
+end
+
+--- Open the comment float on the selected file.
+function Drawer:comment_file()
+    local item = self:selected()
+
+    if item == nil or item.dir then
+        util.warn('No file selected')
+        return
+    end
+
+    require('iter.comments.editor').open({
+        root = self.changes.root,
+        comment = {
+            scope = 'file',
+            anchor = { path = item.path, side = 'new' },
+        },
+        config = self.config,
+        pane = self.view.win,
+        on_save = function()
+            self:refresh_comments()
+        end,
+    })
 end
 
 --- Reload after a git action and show the selection's new diff.

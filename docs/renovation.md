@@ -533,7 +533,7 @@ Each slice leaves `just checks` green and the plugin usable.
   deleting the anchored line.
 - Removes: nothing.
 
-#### S10 · Comment float
+#### S10 · Comment float — done
 
 - Goal: `c` (line or visual range), `C` (file), `e` (edit), `x` (delete) and `require('iter').comment()` write
   comments through a float editor with the draft lifecycle.
