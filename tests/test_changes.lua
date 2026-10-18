@@ -25,7 +25,6 @@ local function snapshot(entries, extra)
     return vim.tbl_extend('force', {
         branch = 'main',
         entries = entries,
-        unpushed_commits = {},
         root = '/nowhere',
     }, extra or {})
 end

@@ -441,7 +441,7 @@ Each slice leaves `just checks` green and the plugin usable.
   `tests/test_diff_model.lua`), `line_at_raw_row` and `assign_stacked_rows` with their tests,
   `tests/test_ui_status.lua`, `tests/screenshots/status-fixture-entries`, `tests/test_diff_position.lua`.
 
-#### S4 · Drawer header, help, empty states, refresh
+#### S4 · Drawer header, help, empty states, refresh — done
 
 - Goal: the drawer shows its header and key hint line, opens a help float on `?`, handles a clean tree, and
   refreshes itself in normal and linked worktrees.

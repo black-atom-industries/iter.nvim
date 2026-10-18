@@ -97,6 +97,8 @@ function M.apply()
         IterDiffComment = { link = 'NormalFloat' },
         IterDrawerTitle = { link = 'Title' },
         IterDrawerSelected = { link = 'Visual' },
+        IterDrawerKey = { link = 'Special' },
+        IterDrawerHint = { link = 'Comment' },
     }
 
     for name, spec in pairs(FOREGROUNDS) do

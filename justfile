@@ -1,7 +1,5 @@
 mini_ref := "66b9e643b6dabe15079be7197ee4b4d59ff98c61"
 mini_url := "https://github.com/echasnovski/mini.nvim"
-diffs_ref := "ef4db615efb4bdecfd54225dee137d703e422503"
-diffs_url := "https://github.com/barrettruth/diffs.nvim"
 minimal_init := justfile_directory() / "tests/minimal_init.lua"
 
 _default:
@@ -51,4 +49,3 @@ deps:
 	}
 
 	pin {{ mini_url }} {{ mini_ref }} mini.nvim
-	pin {{ diffs_url }} {{ diffs_ref }} diffs.nvim

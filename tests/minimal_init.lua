@@ -3,7 +3,6 @@ local tests_dir = vim.fs.dirname(vim.fn.fnamemodify(source, ':p'))
 local project_root = vim.fs.dirname(tests_dir)
 
 vim.opt.runtimepath:prepend(project_root)
-vim.opt.runtimepath:append(project_root .. '/deps/diffs.nvim')
 vim.opt.runtimepath:append(project_root .. '/deps/mini.nvim')
 
 vim.g.mapleader = ' '
