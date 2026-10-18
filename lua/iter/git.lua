@@ -433,6 +433,59 @@ function git.git_paths(root, names)
     return vim.split(return_result(out), '\n', { plain = true })
 end
 
+---The identity of the repository `root` belongs to, the same for all of its
+---linked worktrees: `<name>-<sha8>`, where name is the main worktree's
+---directory and sha8 the first 8 hex of the sha256 of the resolved common
+---git dir.
+---@param root string
+---@return string? id nil outside a repository
+---@return string? error
+function git.repo_id(root)
+    local out = git.run(
+        { 'rev-parse', '--path-format=absolute', '--git-common-dir' },
+        { cwd = root, ignore_error = true }
+    )
+
+    if out.exit_code ~= 0 then
+        return nil, return_result(out)
+    end
+
+    local common = return_result(out)
+    common = vim.uv.fs_realpath(common) or common
+
+    local name = vim.fs.basename(common)
+
+    if name == '.git' then
+        name = vim.fs.basename(vim.fs.dirname(common))
+    else
+        name = name:gsub('%.git$', '')
+    end
+
+    return name .. '-' .. vim.fn.sha256(common):sub(1, 8)
+end
+
+---The branch HEAD of `root` is on, also when it has no commit yet.
+---@param root string
+---@return string? branch nil when HEAD is detached or outside a repository
+function git.head_branch(root)
+    local out = git.run(
+        { 'symbolic-ref', '--quiet', 'HEAD' },
+        { cwd = root, ignore_error = true }
+    )
+
+    if out.exit_code ~= 0 then
+        return nil
+    end
+
+    local ref = return_result(out)
+
+    if not vim.startswith(ref, 'refs/heads/') then
+        return nil
+    end
+
+    return ref:sub(#'refs/heads/' + 1)
+end
+
 ---Untracked files under `dir`, relative to `root`. Ignored files are left
 ---out. A nested repository is listed as its directory, with a trailing `/`.
 ---@param root string

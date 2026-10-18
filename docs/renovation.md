@@ -497,7 +497,7 @@ Each slice leaves `just checks` green and the plugin usable.
   nothing.
 - Removes: nothing.
 
-#### S8 · Store and anchors
+#### S8 · Store and anchors — done
 
 - Goal: comments and viewed records persist per repo and branch, and anchors resolve against changed text.
 - Files: new `iter/store.lua`, `iter/comments/anchor.lua`; `iter/git.lua`, `tests/test_store.lua`,
