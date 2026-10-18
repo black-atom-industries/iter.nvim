@@ -187,6 +187,21 @@ T['files()']['lists afresh instead of trusting stale children'] = function()
     )
 end
 
+T['odd paths'] = new_set()
+
+T['odd paths']['keep spaces and non-ASCII characters'] = function()
+    repo = helpers.create_odd_paths_repo()
+    vim.cmd.cd(vim.fn.fnameescape(repo))
+    local result = changes.build(git.status_snapshot())
+    local dir = result.unstaged[2]
+
+    eq(paths(result.unstaged), { 'sp ace/ü.txt', 'ne w/' })
+    eq(dir.dir, true)
+    eq(changes.files(result.root, dir), { 'ne w/ö ä.txt' })
+    eq(changes.expand(result.root, dir), true)
+    eq(paths(dir.children), { 'ne w/ö ä.txt' })
+end
+
 T['truncate()'] = new_set()
 
 T['truncate()']['keeps a path that fits'] = function()

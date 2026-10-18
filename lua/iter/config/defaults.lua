@@ -2,7 +2,7 @@
 -- tables with M.options, so the resolved config always has every field.
 
 ---@class IterDrawerOptions
----@field height? number Fraction of the editor height, in (0, 1]
+---@field height? number Fraction of the pane height, in (0, 1]
 ---@field zindex? integer
 ---@field breakpoint? integer Drawer width below which the columns stack
 
@@ -73,7 +73,6 @@ M.options = {
 M.keys = {
     drawer = {
         open = '<CR>',
-        preview = '=',
         stage = 's',
         unstage = 'u',
         discard = 'd',
@@ -109,7 +108,6 @@ M.keys = {
         prev_file = '[f',
         stage = 's',
         unstage = 'u',
-        discard = 'd',
         comment = 'c',
         comment_file = 'C',
         edit = 'e',
@@ -141,67 +139,5 @@ M.keys = {
         close = { 'q', '?', '<Esc>' },
     },
 }
-
--- ---------------------------------------------------------------------------
--- Highlight specs
--- ---------------------------------------------------------------------------
-
----@class IterHighlightSpec
----@field name string
----@field sources string[]
----@field fallback_fg integer?
----@field fallback_bg integer?
-
-M.highlight_specs = {
-    staged = {
-        name = 'IterStage',
-        sources = { 'Added', 'String' },
-        fallback_fg = 0x98C379,
-    },
-    unstaged = {
-        name = 'IterUnstage',
-        sources = { 'Removed', 'Error' },
-        fallback_fg = 0xE06C75,
-    },
-    untracked = {
-        name = 'IterUntracked',
-        sources = { 'DiagnosticInfo', 'Directory', 'Identifier' },
-        fallback_fg = 0x61AFEF,
-    },
-    ignored = {
-        name = 'IterIgnored',
-        sources = { 'Comment' },
-        fallback_fg = 0x5C6370,
-    },
-    conflict = {
-        name = 'IterConflict',
-        sources = { 'DiagnosticError', 'ErrorMsg', 'Error' },
-        fallback_fg = 0xE06C75,
-    },
-    head = {
-        name = 'IterHead',
-        sources = { 'Identifier', 'Keyword' },
-        fallback_fg = 0x61AFEF,
-    },
-    unpushed = {
-        name = 'IterUnpushed',
-        sources = { 'Constant', 'Number' },
-        fallback_fg = 0xD19A66,
-    },
-}
-
--- ---------------------------------------------------------------------------
--- Constants
--- ---------------------------------------------------------------------------
-
-M.owned_buffer_fields = {
-    'buf',
-    'diff_buf',
-    'diff_left_buf',
-    'diff_right_buf',
-    'help_buf',
-}
-
-M.highlight_namespace = 'GitStatusWindow'
 
 return M

@@ -9,9 +9,6 @@
 ---@class IterConfig
 ---@field options IterResolvedOptions
 ---@field keys table<IterView, table<string, string[]>> Empty list: unmapped
----@field highlight_specs table<string, IterHighlightSpec>
----@field owned_buffer_fields string[]
----@field highlight_namespace string
 ---@field debug boolean Whether to write debug-level logs to the iter log file
 
 local defaults = require('iter.config.defaults')
@@ -213,9 +210,6 @@ function M.resolve(user_opts)
     return {
         options = merged,
         keys = resolve_keys(user_opts.keys),
-        highlight_specs = defaults.highlight_specs,
-        owned_buffer_fields = defaults.owned_buffer_fields,
-        highlight_namespace = defaults.highlight_namespace,
         debug = merged.debug,
     }
 end

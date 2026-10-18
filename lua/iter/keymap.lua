@@ -11,8 +11,7 @@ local M = {}
 ---@type table<IterView, { [1]: string, [2]: string, [3]: string[]? }[]>
 local ACTIONS = {
     drawer = {
-        { 'open', 'Open the file and close the status window' },
-        { 'preview', 'Toggle the diff preview' },
+        { 'open', 'Open the file and close the drawer' },
         { 'stage', 'Stage or unstage the file' },
         { 'unstage', 'Unstage the file' },
         { 'discard', 'Discard changes in the file' },
@@ -48,7 +47,6 @@ local ACTIONS = {
         { 'prev_file', 'Previous file' },
         { 'stage', 'Stage the hunk' },
         { 'unstage', 'Unstage the hunk' },
-        { 'discard', 'Discard the hunk' },
         { 'comment', 'Comment on the line or range' },
         { 'comment_file', 'Comment on the file' },
         { 'edit', 'Edit the comment' },
@@ -80,6 +78,15 @@ local ACTIONS = {
         { 'close', 'Close' },
     },
 }
+
+--- Every action of `view`, in help order.
+---@param view IterView
+---@return string[]
+function M.actions(view)
+    return vim.tbl_map(function(spec)
+        return spec[1]
+    end, ACTIONS[view])
+end
 
 --- The actions of `view` that have a handler and at least one key, in help
 --- order.

@@ -2,11 +2,7 @@ local git = require('iter.git')
 
 local M = {}
 
----@class IterChange one drawer item
----@field path string
----@field orig_path? string
----@field side IterSide
----@field code string porcelain letter for this side: M A D R C U ?
+---@class IterChange: IterDiffChange one drawer item
 ---@field dir? boolean untracked directory, path ends with `/`
 ---@field expanded? boolean
 ---@field children? IterChange[]

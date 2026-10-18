@@ -99,21 +99,44 @@ T['status_snapshot()']['reports every fixture state'] = function()
     })
 end
 
-T['stage(), unstage() and discard'] = function()
+T['stage(), unstage(), discard() and delete_untracked()'] = function()
     write('tracked.txt', { 'changed' })
     write('untracked.txt', { 'untracked' })
 
-    eq(git.stage(entry('tracked.txt') --[[@as GitStatusEntry]]), true)
+    eq(git.stage(repo, { 'tracked.txt' }), true)
     eq(entry('tracked.txt').staged, 'M')
 
-    eq(git.unstage(entry('tracked.txt') --[[@as GitStatusEntry]]), true)
+    eq(git.unstage(repo, { 'tracked.txt' }), true)
     eq(entry('tracked.txt').staged, ' ')
 
-    eq(git.discard_unstaged_entries({ entry('tracked.txt') }), true)
+    eq(git.discard(repo, { 'tracked.txt' }), true)
     eq(entry('tracked.txt'), nil)
 
-    eq(git.discard_untracked_entries({ entry('untracked.txt') }), true)
+    eq(git.delete_untracked(repo, { 'untracked.txt' }), true)
     eq(entry('untracked.txt'), nil)
+end
+
+T['path actions treat paths literally'] = function()
+    write('a.txt', { 'a' })
+    write('[ab].txt', { 'glob' })
+    helpers.git(repo, { 'add', '--all' })
+    helpers.git(repo, { 'commit', '--quiet', '-m', 'more' })
+    write('a.txt', { 'a changed' })
+    write('[ab].txt', { 'glob changed' })
+    write('*.log', { 'star' })
+    write('x.log', { 'x' })
+
+    eq(git.stage(repo, { '[ab].txt' }), true)
+    eq(entry('a.txt').staged, ' ')
+    eq(git.unstage(repo, { '[ab].txt' }), true)
+
+    eq(git.discard(repo, { '[ab].txt' }), true)
+    eq(entry('[ab].txt'), nil)
+    eq(entry('a.txt').unstaged, 'M')
+
+    eq(git.delete_untracked(repo, { '*.log' }), true)
+    eq(entry('*.log'), nil)
+    eq(entry('x.log').staged, '?')
 end
 
 T['file_change_counts()'] = new_set()

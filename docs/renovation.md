@@ -419,7 +419,7 @@ Each slice leaves `just checks` green and the plugin usable.
   UI float config and position after a resize.
 - Removes: nothing.
 
-#### S3 · Drawer float
+#### S3 · Drawer float — done
 
 - Goal: `:Iter status` opens the drawer float at the bottom of the current pane with Unstaged and Staged, file and
   directory staging, and the preview in the pane following the selection through `IterDiffView`.
