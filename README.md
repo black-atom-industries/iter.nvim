@@ -113,7 +113,7 @@ Runs all quality checks:
 
 - **lint** — `lua-language-server --check` with project `.luarc.json`
 - **format-check** — `stylua --check` (auto-fix with `just format`)
-- **test** — plenary.nvim test suite
+- **test** — mini.test suite
 
 Individual recipes:
 
@@ -138,37 +138,21 @@ checks`). Commits are blocked on any failure.
 
 ## Testing
 
-Tests use [plenary.nvim](https://github.com/nvim-lua/plenary.nvim)'s busted-style
-harness, vendored in the repo.
-
-### Run with just (recommended)
-
-```bash
-just test
-```
-
-This clones plenary if needed, pins it to the expected commit, and runs the
-full suite headlessly.
-
-### Run without just
+Tests use [mini.test](https://github.com/echasnovski/mini.nvim/blob/main/TESTING.md).
+`just test` clones mini.nvim and diffs.nvim into the gitignored `deps/` folder at
+pinned commits and runs the whole suite headless. It exits non-zero on any
+failure.
 
 ```bash
-nvim --headless --noplugin \
-  -u tests/minimal_init.lua \
-  -c "lua require('plenary.test_harness').test_directory('tests', { minimal_init = 'tests/minimal_init.lua' })"
+just test                           # whole suite
+just test-file tests/test_git.lua   # one file
 ```
 
-### Run a single test file
-
-```bash
-nvim --headless --noplugin \
-  -u tests/minimal_init.lua \
-  -c "lua require('plenary.test_harness').test_directory('tests/functional/diff/parser_spec.lua', { minimal_init = 'tests/minimal_init.lua' })"
-```
-
-Test files live under `tests/functional/` (pure-Lua unit/integration) and
-`tests/ui/` (end-to-end with real Neovim windows and a temporary git
-repository).
+Test files are `tests/test_*.lua`. `tests/helpers.lua` creates temporary git
+repositories with fixtures and starts a child Neovim with the plugin loaded.
+UI tests drive that child and compare screenshots against the references in
+`tests/screenshots/`. A missing reference is created on the next run; delete
+the file to regenerate it after an intended UI change.
 
 ## Credits
 

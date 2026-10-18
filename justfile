@@ -1,7 +1,8 @@
-plenary_ref := "74b06c6c75e4eeb3108ec01852001636d85a932b"
-plenary_url := "https://github.com/nvim-lua/plenary.nvim"
+mini_ref := "66b9e643b6dabe15079be7197ee4b4d59ff98c61"
+mini_url := "https://github.com/echasnovski/mini.nvim"
 diffs_ref := "ef4db615efb4bdecfd54225dee137d703e422503"
 diffs_url := "https://github.com/barrettruth/diffs.nvim"
+minimal_init := justfile_directory() / "tests/minimal_init.lua"
 
 _default:
 	just -l
@@ -17,26 +18,37 @@ format-check:
 
 checks: lint format-check test
 
-test:
+# Run the whole mini.test suite headless
+test: deps
+	@just _run-tests ""
+
+# Run one test file, e.g. `just test-file tests/test_git.lua`
+test-file FILE: deps
+	@just _run-tests {{ quote(FILE) }}
+
+# Runs ITER_TEST_FILE, or the whole suite when it is empty. A file that fails
+# to load raises inside MiniTest.run, so the pcall turns it into exit 1.
+_run-tests FILE:
+	cd {{ justfile_directory() }} && ITER_TEST_FILE={{ quote(FILE) }} nvim --headless --noplugin -u {{ minimal_init }} -c "lua local f = vim.env.ITER_TEST_FILE or '' local ok, err = pcall(function() if f == '' then MiniTest.run() else MiniTest.run_file(f) end end) if not ok then io.stderr:write(tostring(err) .. '\\n') vim.cmd('cquit 1') end"
+
+# Clone or update the pinned test dependencies into deps/
+deps:
 	#!/usr/bin/env bash
-	# Some comment
-	plenary_path="{{ justfile_directory() }}/plenary.nvim"
+	set -euo pipefail
 
-	if ! test -d "${plenary_path}"; then
-		git clone {{ plenary_url }} "${plenary_path}"
-	fi
+	pin() {
+		local url="$1" ref="$2" path="{{ justfile_directory() }}/deps/$3"
 
-	git -C "${plenary_path}" checkout "{{ plenary_ref }}"
+		if ! test -d "${path}"; then
+			git clone --quiet --filter=blob:none "${url}" "${path}"
+		fi
 
-	diffs_path="{{ justfile_directory() }}/diffs.nvim"
+		if ! git -C "${path}" cat-file -e "${ref}^{commit}" 2>/dev/null; then
+			git -C "${path}" fetch --quiet origin
+		fi
 
-	if ! test -d "${diffs_path}"; then
-		git clone {{ diffs_url }} "${diffs_path}"
-	fi
+		git -C "${path}" -c advice.detachedHead=false checkout --quiet "${ref}"
+	}
 
-	git -C "${diffs_path}" checkout "{{ diffs_ref }}"
-
-	minimal_init="{{ justfile_directory() }}/tests/minimal_init.lua"
-	nvim --headless --noplugin \
-		-u "${minimal_init}" \
-		-c "lua require('plenary.test_harness').test_directory('tests', { minimal_init = '${minimal_init}' })"
+	pin {{ mini_url }} {{ mini_ref }} mini.nvim
+	pin {{ diffs_url }} {{ diffs_ref }} diffs.nvim
