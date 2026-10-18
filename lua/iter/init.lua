@@ -1,9 +1,11 @@
 ---@class Iter
 ---@field drawer IterDrawer? the open status drawer
+---@field current_review IterReview? the open review tab
 ---@field did_setup boolean
 ---@field config IterConfig
 local M = {
     drawer = nil,
+    current_review = nil,
     did_setup = false,
     config = require('iter.config').resolve(),
 }
@@ -64,6 +66,17 @@ function M.status()
         return
     end
 
+    local review = M.current_review
+
+    if
+        review ~= nil
+        and review:is_open()
+        and vim.api.nvim_get_current_tabpage() == review.tab
+    then
+        review.drawer:focus()
+        return
+    end
+
     if M.drawer ~= nil and M.drawer:is_open() then
         M.drawer:focus()
         return
@@ -81,6 +94,55 @@ function M.status()
             end
         end,
     })
+end
+
+--- Open the review tab, or switch to it when it is open. An open status
+--- drawer closes first.
+---@param target? { path: string, side?: IterSide } file to select
+function M.review(target)
+    log.info('review command called')
+
+    if require('iter.git').root() == '' then
+        util.warn('Not inside a git repository')
+        return
+    end
+
+    if M.current_review ~= nil and M.current_review:is_open() then
+        M.current_review:focus()
+        return
+    end
+
+    if M.drawer ~= nil and M.drawer:is_open() then
+        M.drawer:close()
+    end
+
+    local path = target and target.path
+
+    if path == nil then
+        local name = vim.api.nvim_buf_get_name(0)
+        path = name ~= '' and vim.fs.normalize(vim.fn.resolve(name)) or nil
+    end
+
+    M.current_review = require('iter.review').open({
+        config = M.config,
+        path = path,
+        side = target and target.side,
+        on_close = function(review)
+            if M.current_review == review then
+                M.current_review = nil
+            end
+        end,
+    })
+end
+
+--- `review · <file> · <i>/<n>` inside the review tab, `''` elsewhere.
+---@return string
+function M.statusline()
+    if M.current_review == nil then
+        return ''
+    end
+
+    return M.current_review:statusline()
 end
 
 ---@param opts IterOptions?

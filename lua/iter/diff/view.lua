@@ -7,6 +7,7 @@ local words = require('iter.diff.words')
 ---@class IterDiffViewOptions
 ---@field win integer window the view borrows
 ---@field keys? table<string, string[]> resolved `keys.diff`
+---@field handlers? table<string, fun()> diff actions besides `expand`
 ---@field expand_step? integer
 ---@field syntax_max_lines? integer
 ---@field word_diff? boolean
@@ -83,6 +84,7 @@ function View.new(opts)
     vim.validate('opts', opts, 'table')
     vim.validate('opts.win', opts.win, 'number')
     vim.validate('opts.keys', opts.keys, 'table', true)
+    vim.validate('opts.handlers', opts.handlers, 'table', true)
     vim.validate('opts.expand_step', opts.expand_step, 'number', true)
     vim.validate('opts.syntax_max_lines', opts.syntax_max_lines, 'number', true)
     vim.validate('opts.word_diff', opts.word_diff, 'boolean', true)
@@ -113,6 +115,8 @@ function View.new(opts)
 
     vim.bo[self.buf].bufhidden = 'wipe'
     vim.bo[self.buf].modifiable = false
+    -- A 'nofile' buffer: the name only labels it, nothing writes it.
+    vim.api.nvim_buf_set_name(self.buf, 'iter://diff/' .. self.buf)
     views[self.buf] = self
 
     vim.api.nvim_create_autocmd('BufWinLeave', {
@@ -128,11 +132,16 @@ function View.new(opts)
         end,
     })
 
-    keymap.attach(self.buf, 'diff', self.keys, {
-        expand = function()
-            self:expand()
-        end,
-    })
+    keymap.attach(
+        self.buf,
+        'diff',
+        self.keys,
+        vim.tbl_extend('force', opts.handlers or {}, {
+            expand = function()
+                self:expand()
+            end,
+        })
+    )
 
     return self
 end
@@ -371,10 +380,79 @@ function View:is_shown()
         and vim.api.nvim_win_get_buf(self.win) == self.buf
 end
 
+---@param row IterDiffRow
+---@return 'new'|'old'|nil side
+---@return integer? number
+local function row_number(row)
+    if row.new ~= nil then
+        return 'new', row.new
+    elseif row.gap ~= nil then
+        return 'new', row.gap.new
+    elseif row.old ~= nil then
+        return 'old', row.old
+    end
+
+    return nil, nil
+end
+
+--- The row of `rows` nearest to `row` of an earlier render: the same kind
+--- and text closest by line number, else the closest line number on the
+--- same side, else `lnum` itself.
+---@param rows IterDiffRow[]
+---@param row IterDiffRow
+---@param lnum integer
+---@return integer
+local function nearest_row(rows, row, lnum)
+    local side, number = row_number(row)
+
+    if side == nil then
+        return math.min(lnum, #rows)
+    end
+
+    local best, best_same, distance, distance_same
+
+    for index, candidate in ipairs(rows) do
+        local candidate_side, candidate_number = row_number(candidate)
+
+        if candidate_side == side then
+            local d = math.abs(candidate_number - number)
+
+            if distance == nil or d < distance then
+                best, distance = index, d
+            end
+
+            if
+                candidate.kind == row.kind
+                and candidate.text == row.text
+                and (distance_same == nil or d < distance_same)
+            then
+                best_same, distance_same = index, d
+            end
+        end
+    end
+
+    return best_same or best or math.min(lnum, #rows)
+end
+
 --- Show `file` in the borrowed window. The window's own options are saved
---- the first time and come back as soon as the view leaves it.
+--- the first time and come back as soon as the view leaves it. The same
+--- file again keeps the cursor near its row; another file starts at the top.
 ---@param file IterFileDiff
 function View:show(file)
+    local shown = self.files[1]
+    local same = shown ~= nil
+        and shown.path == file.path
+        and shown.side == file.side
+        and self:is_shown()
+    local cursor, view
+
+    if same then
+        cursor = vim.api.nvim_win_get_cursor(self.win)
+        view = vim.api.nvim_win_call(self.win, vim.fn.winsaveview)
+    end
+
+    local previous = cursor and self.rows[cursor[1]]
+
     self.files = { file }
     self.rows = file.rows
     self:render()
@@ -398,6 +476,21 @@ function View:show(file)
     end
 
     set_winopts(self.win, WINOPTS)
+
+    if previous ~= nil and cursor ~= nil and view ~= nil then
+        local lnum = nearest_row(self.rows, previous, cursor[1])
+        local topline = math.max(1, view.topline + lnum - cursor[1])
+
+        vim.api.nvim_win_call(self.win, function()
+            vim.fn.winrestview({
+                lnum = lnum,
+                col = cursor[2],
+                topline = topline,
+            })
+        end)
+    else
+        vim.api.nvim_win_set_cursor(self.win, { 1, 0 })
+    end
 end
 
 function View:restore_winopts()
@@ -474,6 +567,26 @@ function View:expand(lnum)
 
     if cursor ~= nil then
         vim.api.nvim_win_set_cursor(self.win, cursor)
+    end
+end
+
+--- Move the cursor to the next (`dir` 1) or previous (-1) hunk row. At the
+--- last or first hunk the cursor stays.
+---@param dir 1|-1
+function View:jump_hunk(dir)
+    if not self:is_shown() then
+        return
+    end
+
+    local lnum = vim.api.nvim_win_get_cursor(self.win)[1] + dir
+
+    while lnum >= 1 and lnum <= #self.rows do
+        if self.rows[lnum].kind == 'hunk' then
+            vim.api.nvim_win_set_cursor(self.win, { lnum, 0 })
+            return
+        end
+
+        lnum = lnum + dir
     end
 end
 

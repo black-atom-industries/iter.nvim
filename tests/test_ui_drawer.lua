@@ -261,7 +261,7 @@ T['open'][':Iter with an unknown subcommand errors'] = function()
 end
 
 T['open'][':Iter completes the subcommands'] = function()
-    eq(child.fn.getcompletion('Iter ', 'cmdline'), { 'status' })
+    eq(child.fn.getcompletion('Iter ', 'cmdline'), { 'review', 'status' })
     eq(child.fn.getcompletion('Iter st', 'cmdline'), { 'status' })
     eq(child.fn.getcompletion('Iter x', 'cmdline'), {})
 end
@@ -359,7 +359,7 @@ T['keys']['a remapped key stages and the default key is unbound'] = function()
 
     eq(buf_map_desc('s'), '')
     eq(buf_map_desc('S'), 'Stage or unstage the file')
-    eq(buf_map_desc('r'), '')
+    eq(buf_map_desc('r'), 'Open the review tab')
 
     select_item('unstaged', 'modified.txt')
     child.type_keys('S')
@@ -831,7 +831,7 @@ local function chrome()
     end)()]])
 end
 
-local HINT = 's stage  u unstage  d discard  <CR> open  ? help'
+local HINT = 's stage  u unstage  d discard  <CR> open  r review  ? help'
 
 ---@param options string Lua table passed to setup()
 local function setup(options)
@@ -866,7 +866,7 @@ T['header']['the hint follows remapped keys'] = function()
     setup([[{ keys = { drawer = { stage = 'S', discard = false } } }]])
     open_drawer()
 
-    eq(chrome().hint, 'S stage  u unstage  <CR> open  ? help')
+    eq(chrome().hint, 'S stage  u unstage  <CR> open  r review  ? help')
 end
 
 T['header']['stacked, the header, hint and both titles stay on screen'] = function()
@@ -970,6 +970,7 @@ T['help']['? lists the current keys and closes on q, ? and <Esc>'] = function()
             ' S gs   Stage or unstage the file',
             ' u      Unstage the file',
             ' <Tab>  Expand or collapse the directory',
+            ' r      Open the review tab',
             ' q      Close',
             ' ?      Show the keys',
             ' h      Select the Unstaged column',
