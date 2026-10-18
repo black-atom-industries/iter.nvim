@@ -129,10 +129,28 @@ The result is the Scope section above.
 
 The Design canvas artifact holds the M1 flow, with draft keymaps as notes beside each view.
 
-### 5. Dependencies and rendering
+### 5. Dependencies and rendering — done
 
-Study how other plugins render diffs and replace diffs.nvim with an own renderer, adapting what fits. A binary
-dependency is acceptable.
+iter renders diffs itself in pure Lua; no binary dependency for M1.
+
+- Hunks come from git's unified diff, so staging applies exactly what git produced. The full old and new file
+  contents are fetched separately for syntax and context expansion; when they don't match the diff text (filters,
+  CRLF), only the hunk text is parsed.
+- Data flow: parser (git text to hunks) → model (aligned rows per file: context, delete, add, gap, header, with old
+  and new line numbers) → view (buffer lines and extmarks). Unified view is one projection of the model; side-by-side
+  in M2 is a second one with filler rows.
+- The buffer holds plain code. Row kinds show through line highlights, line numbers through a `statuscolumn` that
+  reads the model, so yanking gives clean code and syntax columns need no offset.
+- Syntax: a treesitter string parser per full file version, captures only for the rows shown, cached per blob.
+- Word emphasis: changed lines are paired with `vim.text.diff` and linematch, then token-diffed; emphasis is skipped
+  when most of the line changed.
+- Hidden context is gap rows in the model that expand in batches, not native folds.
+- Comments are `virt_lines` extmarks on the matching row; deleted-line comments sit on the delete row, file comments
+  on the header row.
+- Highlight groups (`IterDiffAdd`, `IterDiffDelete`, their `Text` and `Nr` variants, gap, header, comment) derive
+  from the colorscheme on every `ColorScheme` event.
+- A binary such as libvscode-diff would only add moved-code detection and finer changes on very long lines. That is
+  a later decision for Nik, outside M1.
 
 ### 6. Draft, inspect, plan
 
