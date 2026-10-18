@@ -25,6 +25,7 @@
 local git = {}
 
 local log = require('iter.log')
+local patch = require('iter.diff.patch')
 
 ---@param output string
 ---@param start integer
@@ -108,7 +109,7 @@ local return_result
 
 ---Executes a git command and returns the result
 ---@param args string[] List of git arguments (e.g., {"status", "--porcelain"})
----@param opts? table Options { cwd = string?, ignore_error = boolean? }
+---@param opts? table Options { cwd = string?, ignore_error = boolean?, stdin = string?, bytes = boolean? }; `bytes` keeps carriage returns in the output
 ---@return GitResult
 function git.run(args, opts)
     opts = opts or {}
@@ -129,7 +130,10 @@ function git.run(args, opts)
 
     local cwd = opts.cwd or vim.fn.getcwd()
 
-    local job = vim.system(cmd, { text = true, cwd = cwd })
+    local job = vim.system(
+        cmd,
+        { text = not opts.bytes, cwd = cwd, stdin = opts.stdin }
+    )
     local result = job:wait()
 
     local output = result.stdout or ''
@@ -542,39 +546,49 @@ function git.delete_untracked(root, paths)
     return run_on_paths(root, { 'clean', '--force' }, paths)
 end
 
+--- Apply `patch` (lines, carriage returns kept) to the index for `stage`,
+--- reversed for `unstage`. With `opts.check` git only checks that it
+--- applies. The whitespace flags pin what lands to the patch text, whatever
+--- the config.
+---@param root string
 ---@param patch string[]
----@param kind 'stage'|'unstage'|'discard'
+---@param kind 'stage'|'unstage'
+---@param opts? { check?: boolean }
 ---@return boolean
----@return string?
-function git.apply_hunk(patch, kind)
+---@return string
+function git.apply_hunk(root, patch, kind, opts)
     ensure_git()
 
     if #patch == 0 then
         return false, 'No hunk patch to apply'
     end
 
-    if kind ~= 'stage' and kind ~= 'unstage' and kind ~= 'discard' then
+    if kind ~= 'stage' and kind ~= 'unstage' then
         return false, 'Unknown hunk action: ' .. kind
     end
 
-    local path = vim.fn.tempname() .. '.patch'
-    vim.fn.writefile(patch, path)
+    local args = {
+        'apply',
+        '--cached',
+        '--whitespace=nowarn',
+        '--no-ignore-whitespace',
+    }
 
-    local args = { 'apply' }
-
-    if kind == 'stage' then
-        table.insert(args, '--cached')
-    elseif kind == 'unstage' then
-        table.insert(args, '--cached')
-        table.insert(args, '--reverse')
-    elseif kind == 'discard' then
+    if kind == 'unstage' then
         table.insert(args, '--reverse')
     end
 
-    table.insert(args, path)
+    if opts ~= nil and opts.check then
+        table.insert(args, '--check')
+    end
 
-    local out = git.run(args, root_opts())
-    vim.fn.delete(path)
+    table.insert(args, '-')
+
+    local out = git.run(args, {
+        cwd = root,
+        ignore_error = true,
+        stdin = table.concat(patch, '\n') .. '\n',
+    })
 
     return out.exit_code == 0, return_result(out)
 end
@@ -854,8 +868,15 @@ end
 ---@field new_lines? string[] nil for binary files
 ---@field binary boolean
 
--- Flags that keep the diff text parseable whatever the user's git config.
-local DIFF_FLAGS = { '--no-color', '--no-ext-diff' }
+-- Flags that keep the diff text parseable, and applicable with `-p1`,
+-- whatever the user's git config.
+local DIFF_FLAGS = {
+    '--no-color',
+    '--no-ext-diff',
+    '--no-textconv',
+    '--src-prefix=a/',
+    '--dst-prefix=b/',
+}
 
 ---@param output string
 ---@return string[]
@@ -901,16 +922,14 @@ local function is_binary_diff(raw)
     return false
 end
 
---- Diff text and both full versions of one file. Unstaged compares the index
---- with the worktree, staged compares HEAD with the index. Untracked and
---- added files have an empty old side, deleted files an empty new side.
+--- The diff text of one file, see `git.file_diff`. With `bytes` the lines
+--- keep their carriage returns.
 ---@param root string
 ---@param change { path: string, orig_path?: string, side: IterSide, code: string }
----@return IterFileSource?
+---@param bytes boolean
+---@return string[]?
 ---@return string? error
-function git.file_diff(root, change)
-    ensure_git()
-
+local function diff_text(root, change, bytes)
     local untracked = change.code == '?'
     local args
 
@@ -934,14 +953,50 @@ function git.file_diff(root, change)
         table.insert(args, change.path)
     end
 
-    local out = git.run(args, { cwd = root, ignore_error = true })
+    local out =
+        git.run(args, { cwd = root, ignore_error = true, bytes = bytes })
 
     -- `--no-index` exits 1 when the files differ.
     if out.exit_code > 1 or (out.exit_code == 1 and not untracked) then
         return nil, return_result(out)
     end
 
-    local raw = split_output(out.output)
+    return split_output(out.output)
+end
+
+--- The diff text of `git.file_diff` byte for byte: lines of a CRLF file
+--- keep their carriage returns, as a patch for `git apply` needs them.
+---@param root string
+---@param change { path: string, orig_path?: string, side: IterSide, code: string }
+---@return string[]?
+---@return string? error
+function git.file_diff_bytes(root, change)
+    ensure_git()
+
+    return diff_text(root, change, true)
+end
+
+--- Diff text and both full versions of one file. Unstaged compares the index
+--- with the worktree, staged compares HEAD with the index. Untracked and
+--- added files have an empty old side, deleted files an empty new side.
+---@param root string
+---@param change { path: string, orig_path?: string, side: IterSide, code: string }
+---@return IterFileSource?
+---@return string? error
+function git.file_diff(root, change)
+    ensure_git()
+
+    -- Read as bytes and normalized here: text mode drops CRs per output
+    -- chunk, so a CRLF split across two chunks would keep its CR.
+    local bytes, err = diff_text(root, change, true)
+
+    if bytes == nil then
+        return nil, err
+    end
+
+    local raw = patch.text(bytes)
+
+    local untracked = change.code == '?'
 
     if is_binary_diff(raw) then
         return { raw = raw, binary = true }

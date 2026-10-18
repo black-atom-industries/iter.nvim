@@ -847,4 +847,263 @@ T['close']['q after :tabonly leaves one empty tab'] = function()
     eq(child.v.errmsg, '')
 end
 
+T['hunks'] = new_set()
+
+---@param args string[]
+---@return string
+local function git_out(args)
+    return helpers.git(repo, args)
+end
+
+---@param path string
+---@param lines string[]
+local function write_crlf(path, lines)
+    local file = assert(io.open(path, 'wb'))
+    file:write(table.concat(lines, '\r\n') .. '\r\n')
+    file:close()
+end
+
+--- Wait until the diff pane's cursor sits on `expected` (kind and text).
+---@param expected string
+local function wait_cursor(expected)
+    helpers.wait_until(
+        child,
+        string.format(
+            [[(function()
+                local r = %s
+                local lnum = vim.api.nvim_win_get_cursor(r.diff_win)[1]
+                local row = r.drawer.view.rows[lnum]
+                return row ~= nil and row.kind .. ' ' .. row.text == %q
+            end)()]],
+            R,
+            expected
+        )
+    )
+end
+
+T['hunks']['s stages the hunk under the cursor and keeps the other'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    cursor_on('a3 changed')
+    child.type_keys('s')
+
+    local cached = git_out({ 'diff', '--cached', '--', 'a.txt' })
+    eq(cached:find('+a3 changed', 1, true) ~= nil, true)
+    eq(cached:find('a25 changed', 1, true), nil)
+
+    local unstaged = git_out({ 'diff', '--', 'a.txt' })
+    eq(unstaged:find('a3 changed', 1, true), nil)
+    eq(unstaged:find('+a25 changed', 1, true) ~= nil, true)
+
+    wait_cursor('hunk @@ -22,7 +22,7 @@ a21')
+    eq(
+        child.lua_get('vim.api.nvim_get_current_win() == ' .. R .. '.diff_win'),
+        true
+    )
+    eq(
+        child.lua_get(
+            'vim.tbl_map(function(item) return item.path end, '
+                .. R
+                .. '.drawer.changes.staged)'
+        ),
+        { 'a.txt', 'b.txt' }
+    )
+    eq(child.lua_get('_G.notes'), {})
+end
+
+T['hunks']['u unstages the hunk under the cursor and keeps the other'] = function()
+    helpers.git(repo, { 'add', 'a.txt' })
+    open_review()
+    select_item('staged', 'a.txt')
+    wait_diff('staged a.txt')
+    cursor_on('a25 changed')
+    child.type_keys('u')
+
+    local cached = git_out({ 'diff', '--cached', '--', 'a.txt' })
+    eq(cached:find('+a3 changed', 1, true) ~= nil, true)
+    eq(cached:find('a25 changed', 1, true), nil)
+    eq(
+        git_out({ 'diff', '--', 'a.txt' }):find('+a25 changed', 1, true) ~= nil,
+        true
+    )
+
+    wait_cursor('hunk @@ -1,6 +1,6 @@')
+    eq(child.lua_get('_G.notes'), {})
+end
+
+T['hunks']['staging and unstaging the last hunk of a file moves on'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    cursor_on('a3 changed')
+    child.type_keys('s')
+    wait_cursor('hunk @@ -22,7 +22,7 @@ a21')
+    child.type_keys('s')
+
+    eq(git_out({ 'diff', '--', 'a.txt' }), '')
+    wait_diff('unstaged b.txt')
+    eq(selected(), 'unstaged b.txt')
+
+    select_item('staged', 'a.txt')
+    wait_diff('staged a.txt')
+    cursor_on('a3 changed')
+    child.type_keys('u')
+    wait_cursor('hunk @@ -22,7 +22,7 @@ a21')
+    child.type_keys('u')
+
+    eq(git_out({ 'diff', '--cached', '--', 'a.txt' }), '')
+    wait_diff('staged b.txt')
+    eq(selected(), 'staged b.txt')
+    eq(child.lua_get('_G.notes'), {})
+    eq(child.v.errmsg, '')
+end
+
+T['hunks']['s on a staged row, u on an unstaged row and s off a hunk warn'] = function()
+    helpers.git(repo, { 'add', 'a.txt' })
+    local before = git_out({ 'diff', '--cached' })
+
+    open_review()
+    select_item('staged', 'a.txt')
+    wait_diff('staged a.txt')
+    cursor_on('a3 changed')
+    child.type_keys('s')
+
+    select_item('unstaged', 'b.txt')
+    wait_diff('unstaged b.txt')
+    cursor_on('top1')
+    child.type_keys('u')
+    child.api.nvim_win_set_cursor(0, { 1, 0 })
+    child.type_keys('s')
+
+    eq(child.lua_get('_G.notes'), {
+        { '[iter] The hunk is staged already', vim.log.levels.WARN },
+        { '[iter] The hunk is not staged', vim.log.levels.WARN },
+        { '[iter] No hunk under the cursor', vim.log.levels.WARN },
+    })
+    eq(git_out({ 'diff', '--cached' }), before)
+end
+
+T['hunks']['a hunk whose file changed after the render warns and changes nothing'] = function()
+    setup([[{ refresh = { poll_ms = 60000 } }]])
+    open_review()
+    wait_diff('unstaged a.txt')
+    cursor_on('a3 changed')
+
+    local a = numbered('a', 1, 30)
+    a[3] = 'a3 changed'
+    a[25] = 'a25 changed'
+    a[28] = 'a28 written later'
+    helpers.write_file(vim.fs.joinpath(repo, 'a.txt'), a)
+    child.type_keys('s')
+
+    eq(git_out({ 'diff', '--cached', '--', 'a.txt' }), '')
+    eq(child.lua_get('_G.notes'), {
+        {
+            '[iter] a.txt changed since it was shown; nothing was applied',
+            vim.log.levels.WARN,
+        },
+    })
+    helpers.wait_until(child, [[(function()
+            for _, row in ipairs(]] .. R .. [[.drawer.view.rows) do
+                if row.text == 'a28 written later' then
+                    return true
+                end
+            end
+        end)()]])
+end
+
+T['hunks']['a hunk git apply refuses warns and changes nothing'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    cursor_on('a3 changed')
+    local lock = vim.fs.joinpath(repo, '.git', 'index.lock')
+    helpers.write_file(lock, {})
+    child.type_keys('s')
+    vim.fn.delete(lock)
+
+    eq(git_out({ 'diff', '--cached', '--', 'a.txt' }), '')
+    local notes = child.lua_get('_G.notes')
+    eq(#notes, 1)
+    eq(vim.startswith(notes[1][1], '[iter] Cannot stage the hunk: '), true)
+    eq(notes[1][2], vim.log.levels.WARN)
+end
+
+T['hunks']['s stages one hunk of a CRLF file byte for byte'] = function()
+    local lines = numbered('e', 1, 30)
+    local path = vim.fs.joinpath(repo, 'e.txt')
+    write_crlf(path, lines)
+    helpers.git(repo, { 'add', 'e.txt' })
+    helpers.git(repo, { 'commit', '--quiet', '-m', 'crlf' })
+
+    local changed = vim.deepcopy(lines)
+    changed[3], changed[25] = 'e3 changed', 'e25 changed'
+    write_crlf(path, changed)
+
+    open_review()
+    select_item('unstaged', 'e.txt')
+    wait_diff('unstaged e.txt')
+    cursor_on('e3 changed')
+    child.type_keys('s')
+
+    local expected = vim.deepcopy(lines)
+    expected[3] = 'e3 changed'
+    local blob = vim.fn.tempname()
+    write_crlf(blob, expected)
+
+    eq(
+        vim.trim(git_out({ 'rev-parse', ':e.txt' })),
+        vim.trim(git_out({ 'hash-object', '--no-filters', blob }))
+    )
+    vim.fn.delete(blob)
+    eq(child.lua_get('_G.notes'), {})
+end
+
+T['hunks']['? in the diff pane lists its keys'] = function()
+    setup([[{ keys = { diff = { stage = 'S' } } }]])
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.type_keys('<CR>')
+
+    local help = R .. '.help'
+
+    for _, close in ipairs({ 'q', '?', '<Esc>' }) do
+        child.type_keys('?')
+        eq(
+            child.lua_get(
+                [[vim.tbl_map(function(line)
+                    return (line:gsub('%s+$', ''))
+                end, vim.api.nvim_buf_get_lines(]]
+                    .. help
+                    .. [[.buf, 0, -1, false))]]
+            ),
+            {
+                ' ]c    Next hunk',
+                ' [c    Previous hunk',
+                ' ]f    Next file',
+                ' [f    Previous file',
+                ' S     Stage the hunk',
+                ' u     Unstage the hunk',
+                ' <CR>  Expand hidden context',
+                ' gf    Go to the line in the file',
+                ' q     Close',
+                ' ?     Show the keys',
+            }
+        )
+        eq(
+            child.lua_get(
+                'vim.api.nvim_win_get_config(' .. help .. '.win).zindex'
+            ),
+            50
+        )
+
+        child.type_keys(close)
+        eq(child.lua_get(help .. ':is_open()'), false)
+        eq(
+            child.lua_get(
+                'vim.api.nvim_get_current_win() == ' .. R .. '.diff_win'
+            ),
+            true
+        )
+    end
+end
+
 return T
