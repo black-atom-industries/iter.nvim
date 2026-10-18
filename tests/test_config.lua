@@ -266,4 +266,23 @@ T['keymap']['describes every default action'] = function()
     end
 end
 
+T['keymap']['actions() match the configurable keys of every view'] = function()
+    local defaults = require('iter.config.defaults')
+
+    for view, keys in pairs(defaults.keys) do
+        local expected = vim.tbl_keys(keys)
+        local actual = keymap.actions(view)
+        table.sort(expected)
+        table.sort(actual)
+        eq({ view, actual }, { view, expected })
+    end
+
+    local views = vim.tbl_keys(defaults.keys)
+    table.sort(views)
+    eq(
+        views,
+        { 'comment', 'diff', 'drawer', 'help', 'picker', 'review_drawer' }
+    )
+end
+
 return T

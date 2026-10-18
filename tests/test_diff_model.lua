@@ -508,4 +508,37 @@ T['expand()']['returns 0 on rows that are not gaps'] = function()
     eq(#file.rows, before)
 end
 
+T['old_line_to_new_line()'] = new_set()
+
+T['old_line_to_new_line()']['translates through hunk deltas'] = function()
+    local file = model.build(
+        { path = 'file.txt', side = 'staged', code = 'M' },
+        {
+            raw = {
+                'diff --git a/file.txt b/file.txt',
+                '--- a/file.txt',
+                '+++ b/file.txt',
+                '@@ -1,3 +1,4 @@',
+                ' ctx1',
+                '-rm1',
+                '+add1',
+                ' ctx2',
+                '@@ -10,2 +10,3 @@',
+                ' ctx3',
+                '+add2',
+                ' ctx4',
+            },
+            binary = false,
+        }
+    )
+
+    -- Hunk 1 adds one line, hunk 2 adds one more.
+    eq(model.old_line_to_new_line(file, 1), 1)
+    -- A deleted line maps to the nearest surviving line after it.
+    eq(model.old_line_to_new_line(file, 2), 2)
+    eq(model.old_line_to_new_line(file, 5), 6)
+    eq(model.old_line_to_new_line(file, 11), 12)
+    eq(model.old_line_to_new_line(file, 12), 14)
+end
+
 return T

@@ -1,64 +1,46 @@
 ---@class Iter
----@field gsw GitStatusWindow?
+---@field drawer IterDrawer? the open status drawer
 ---@field did_setup boolean
 ---@field config IterConfig
 local M = {
-    gsw = nil,
+    drawer = nil,
     did_setup = false,
     config = require('iter.config').resolve(),
 }
 
 local log = require('iter.log')
+local util = require('iter.util')
 
----@param gsw GitStatusWindow?
+---@param win integer
 ---@return boolean
-local function has_valid_status_buffer(gsw)
-    if gsw == nil or gsw.buf == nil or gsw.buf.id == nil then
-        return false
-    end
-
-    local bufnr = gsw.buf.id
-
-    return vim.api.nvim_buf_is_valid(bufnr)
-        and vim.api.nvim_buf_is_loaded(bufnr)
-        and vim.bo[bufnr].buftype == 'nofile'
-        and vim.bo[bufnr].filetype == 'iter'
+local function is_normal_win(win)
+    return util.is_valid_win(win)
+        and vim.api.nvim_win_get_config(win).relative == ''
 end
 
-function M.reset()
-    if M.gsw == nil then
-        return
+--- The window the drawer anchors to: the current one, or when that is a
+--- float, the previous or else the first normal window of the tab.
+---@return integer
+local function target_pane()
+    local current = vim.api.nvim_get_current_win()
+
+    if is_normal_win(current) then
+        return current
     end
 
-    ---@type GitStatusWindow
-    local gsw = M.gsw
-    local ok, destroyed = pcall(function()
-        return gsw:destroy()
-    end)
+    local previous = vim.fn.win_getid(vim.fn.winnr('#'))
 
-    if ok and destroyed then
-        M.gsw = nil
+    if is_normal_win(previous) then
+        return previous
     end
-end
 
----@param gsw GitStatusWindow
-local function attach_status_buffer_autocmd(gsw)
-    vim.api.nvim_create_autocmd({ 'BufDelete', 'BufUnload', 'BufWipeout' }, {
-        group = gsw.autocmd_group,
-        buffer = gsw.buf.id,
-        once = true,
-        callback = function()
-            if M.gsw ~= gsw then
-                return
-            end
+    for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+        if is_normal_win(win) then
+            return win
+        end
+    end
 
-            vim.schedule(function()
-                if M.gsw == gsw then
-                    M.reset()
-                end
-            end)
-        end,
-    })
+    return current
 end
 
 ---@param path string?
@@ -78,47 +60,27 @@ function M.status()
     log.info('status command called')
 
     if require('iter.git').root() == '' then
-        require('iter.ui.status.common').notify_warn(
-            'Not inside a git repository'
-        )
+        util.warn('Not inside a git repository')
         return
     end
 
-    -- Capture the current buffer path before opening the status window so we
-    -- can pre-select the matching entry if it has changes.
-    local source_buf = vim.api.nvim_get_current_buf()
-    local source_path = vim.api.nvim_buf_is_valid(source_buf)
-            and vim.api.nvim_buf_get_name(source_buf)
-        or ''
-
-    if M.gsw ~= nil and not has_valid_status_buffer(M.gsw) then
-        M.reset()
+    if M.drawer ~= nil and M.drawer:is_open() then
+        M.drawer:focus()
+        return
     end
 
-    if M.gsw then
-        M.gsw:refresh()
-        M.gsw:show()
-    else
-        local GitStatusWindow = require('iter.ui.status')
-        local gsw = GitStatusWindow.new(M.config)
-        attach_status_buffer_autocmd(gsw)
-        M.gsw = gsw
-    end
+    local path = vim.api.nvim_buf_get_name(0)
 
-    -- Try to select the entry that matches the source buffer. Falls back to
-    -- the default first-entry position when the file has no changes.
-    if source_path ~= '' and M.gsw.win ~= nil then
-        local selection = require('iter.ui.status.selection')
-        local row = selection.row_for_path(M.gsw, source_path)
-
-        if row ~= nil then
-            selection.set_cursor_row(M.gsw, row)
-        end
-    end
-
-    log.info(
-        string.format('Window opened win=%d buf=%d', M.gsw.win, M.gsw.buf.id)
-    )
+    M.drawer = require('iter.ui.drawer').open({
+        pane = target_pane(),
+        config = M.config,
+        path = path ~= '' and vim.fs.normalize(vim.fn.resolve(path)) or nil,
+        on_close = function(drawer)
+            if M.drawer == drawer then
+                M.drawer = nil
+            end
+        end,
+    })
 end
 
 ---@param opts IterOptions?

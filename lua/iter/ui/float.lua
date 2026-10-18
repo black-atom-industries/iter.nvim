@@ -6,7 +6,7 @@ local M = {}
 ---@field pane integer window the float is anchored to
 ---@field buf integer
 ---@field zindex integer
----@field height number below 1 a fraction of the pane's height, else lines
+---@field height number up to 1 a fraction of the pane's height, else lines
 ---@field enter? boolean focus the float
 
 ---@class IterFloat
@@ -17,13 +17,20 @@ local M = {}
 local Float = {}
 Float.__index = Float
 
+--- Rows of the pane's text area, without its winbar.
+---@param pane integer
+---@return integer
+local function text_height(pane)
+    return vim.fn.getwininfo(pane)[1].height
+end
+
 ---@param opts IterFloatOpts
 ---@return integer
 local function resolve_height(opts)
-    local pane_height = vim.api.nvim_win_get_height(opts.pane)
+    local pane_height = text_height(opts.pane)
     local height = opts.height
 
-    if height < 1 then
+    if height <= 1 then
         height = math.floor(pane_height * height)
     end
 
@@ -39,7 +46,7 @@ local function win_config(opts)
         relative = 'win',
         win = opts.pane,
         anchor = 'SW',
-        row = vim.api.nvim_win_get_height(opts.pane),
+        row = text_height(opts.pane),
         col = 0,
         width = vim.api.nvim_win_get_width(opts.pane),
         height = height,
@@ -73,6 +80,15 @@ function M.open(opts)
 
     vim.api.nvim_create_autocmd({ 'WinResized', 'VimResized' }, {
         group = self.group,
+        callback = function()
+            self:reposition()
+        end,
+    })
+    -- A winbar appearing or going away resizes the text area without a
+    -- WinResized.
+    vim.api.nvim_create_autocmd('OptionSet', {
+        group = self.group,
+        pattern = 'winbar',
         callback = function()
             self:reposition()
         end,

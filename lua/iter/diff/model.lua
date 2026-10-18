@@ -283,4 +283,50 @@ function M.expand(file, index, step)
     return count
 end
 
+--- The new line number that old line `old_line` of `file` lands on. A deleted
+--- line maps to the nearest line of its hunk that survives, the next one
+--- first.
+---@param file IterFileDiff
+---@param old_line integer
+---@return integer
+function M.old_line_to_new_line(file, old_line)
+    local delta = 0
+
+    for index, hunk in ipairs(file.hunks) do
+        local first_old = hunk_first(hunk)
+
+        if old_line < first_old then
+            return old_line + delta
+        end
+
+        if old_line < first_old + hunk.old_count then
+            local rows = vim.tbl_filter(function(row)
+                return row.hunk == index and row.kind ~= 'hunk'
+            end, file.rows)
+
+            for i, row in ipairs(rows) do
+                if row.old == old_line then
+                    for j = i, #rows do
+                        if rows[j].new ~= nil then
+                            return rows[j].new
+                        end
+                    end
+
+                    for j = i - 1, 1, -1 do
+                        if rows[j].new ~= nil then
+                            return rows[j].new
+                        end
+                    end
+                end
+            end
+
+            return hunk.new_start
+        end
+
+        delta = delta + hunk.new_count - hunk.old_count
+    end
+
+    return old_line + delta
+end
+
 return M

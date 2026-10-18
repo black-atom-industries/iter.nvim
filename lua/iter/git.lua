@@ -477,143 +477,64 @@ local function entry_pathspecs(entry)
     return { entry.orig_path, entry.path }
 end
 
----@param entry GitStatusEntry
----@return string
-local function entry_worktree_path(entry)
-    return entry.path
-end
-
----@param entries GitStatusEntry[]
----@return string[]
-local function entries_worktree_paths(entries)
-    local pathspecs = {}
-    local seen = {}
-
-    for _, entry in ipairs(entries) do
-        local path = entry_worktree_path(entry)
-
-        if not seen[path] then
-            table.insert(pathspecs, path)
-            seen[path] = true
-        end
-    end
-
-    return pathspecs
-end
-
----@param entries GitStatusEntry[]
----@return string[]
-local function entries_pathspecs(entries)
-    local pathspecs = {}
-    local seen = {}
-
-    for _, entry in ipairs(entries) do
-        for _, path in ipairs(entry_pathspecs(entry)) do
-            if not seen[path] then
-                table.insert(pathspecs, path)
-                seen[path] = true
-            end
-        end
-    end
-
-    return pathspecs
-end
-
----@param entry GitStatusEntry
+--- Run `args -- <paths>` in `root`, every path a literal pathspec so glob
+--- characters in file names never widen the action.
+---@param root string
+---@param args string[]
+---@param paths string[]
 ---@return boolean
 ---@return string?
-function git.stage(entry)
-    return git.stage_entries({ entry })
-end
-
----@param entries GitStatusEntry[]
----@return boolean
----@return string?
-function git.stage_entries(entries)
+local function run_on_paths(root, args, paths)
     ensure_git()
 
-    local pathspecs = entries_pathspecs(entries)
-
-    if #pathspecs == 0 then
+    if #paths == 0 then
         return true
     end
 
-    local args = { 'add', '--' }
-    vim.list_extend(args, pathspecs)
+    local cmd = vim.list_extend(vim.deepcopy(args), { '--' })
 
-    local out = git.run(args, root_opts())
+    for _, path in ipairs(paths) do
+        table.insert(cmd, ':(literal)' .. path)
+    end
+
+    local out = git.run(cmd, { cwd = root, ignore_error = true })
 
     return out.exit_code == 0, return_result(out)
 end
 
----@param entry GitStatusEntry
+---@param root string
+---@param paths string[]
 ---@return boolean
 ---@return string?
-function git.unstage(entry)
-    return git.unstage_entries({ entry })
+function git.stage(root, paths)
+    return run_on_paths(root, { 'add' }, paths)
 end
 
----@param entries GitStatusEntry[]
+---@param root string
+---@param paths string[]
 ---@return boolean
 ---@return string?
-function git.unstage_entries(entries)
-    ensure_git()
-
-    local staged_entries = vim.tbl_filter(function(entry)
-        return entry.staged ~= ' ' and entry.staged ~= '?'
-    end, entries)
-    local pathspecs = entries_pathspecs(staged_entries)
-
-    if #pathspecs == 0 then
-        return true
-    end
-
-    local args = { 'restore', '--staged', '--' }
-    vim.list_extend(args, pathspecs)
-
-    local out = git.run(args, root_opts())
-
-    return out.exit_code == 0, return_result(out)
+function git.unstage(root, paths)
+    return run_on_paths(root, { 'restore', '--staged' }, paths)
 end
 
----@param entries GitStatusEntry[]
+--- Restore the worktree from the index; staged changes stay.
+---@param root string
+---@param paths string[]
 ---@return boolean
 ---@return string?
-function git.discard_unstaged_entries(entries)
-    ensure_git()
-
-    local pathspecs = entries_worktree_paths(entries)
-
-    if #pathspecs == 0 then
-        return true
-    end
-
-    local args = { 'restore', '--worktree', '--' }
-    vim.list_extend(args, pathspecs)
-
-    local out = git.run(args, root_opts())
-
-    return out.exit_code == 0, return_result(out)
+function git.discard(root, paths)
+    return run_on_paths(root, { 'restore', '--worktree' }, paths)
 end
 
----@param entries GitStatusEntry[]
+--- Delete untracked files. Tracked and ignored paths are left alone, and
+--- directories are not recursed into.
+---@param root string
+---@param paths string[]
 ---@return boolean
 ---@return string?
-function git.discard_untracked_entries(entries)
-    ensure_git()
-
-    local pathspecs = entries_pathspecs(entries)
-
-    if #pathspecs == 0 then
-        return true
-    end
-
-    local args = { 'clean', '-fd', '--' }
-    vim.list_extend(args, pathspecs)
-
-    local out = git.run(args, root_opts())
-
-    return out.exit_code == 0, return_result(out)
+function git.delete_untracked(root, paths)
+    return run_on_paths(root, { 'clean', '--force' }, paths)
 end
 
 ---@param patch string[]

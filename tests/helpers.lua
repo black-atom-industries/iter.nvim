@@ -87,6 +87,22 @@ function M.create_fixture_repo()
     return repo
 end
 
+--- Create a repository whose paths hold spaces and non-ASCII characters:
+--- `sp ace/ü.txt` (unstaged change) and the untracked directory `ne w/`
+--- with `ö ä.txt`.
+---@return string repo
+function M.create_odd_paths_repo()
+    local repo = M.create_repo({ ['sp ace/ü.txt'] = { 'one', 'two' } })
+
+    M.write_file(
+        vim.fs.joinpath(repo, 'sp ace', 'ü.txt'),
+        { 'one', 'two changed' }
+    )
+    M.write_file(vim.fs.joinpath(repo, 'ne w', 'ö ä.txt'), { 'neu' })
+
+    return repo
+end
+
 ---@param repo string?
 function M.cleanup(repo)
     if repo ~= nil and repo ~= '' then

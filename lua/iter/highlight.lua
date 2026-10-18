@@ -1,5 +1,5 @@
---- The `IterDiff*` groups, derived from the colorscheme's diff groups and
---- rederived on every `ColorScheme`.
+--- All `Iter*` groups, derived from the colorscheme and rederived on every
+--- `ColorScheme`.
 
 local M = {}
 
@@ -39,6 +39,24 @@ local function color(names, key)
     return nil
 end
 
+-- Drawer groups: the first foreground found in `sources`, else `fallback`.
+---@type table<string, { sources: string[], fallback: integer }>
+local FOREGROUNDS = {
+    IterStage = { sources = { 'Added', 'String' }, fallback = 0x98C379 },
+    IterUnstage = { sources = { 'Removed', 'Error' }, fallback = 0xE06C75 },
+    IterUntracked = {
+        sources = { 'DiagnosticInfo', 'Directory', 'Identifier' },
+        fallback = 0x61AFEF,
+    },
+    IterIgnored = { sources = { 'Comment' }, fallback = 0x5C6370 },
+    IterConflict = {
+        sources = { 'DiagnosticError', 'ErrorMsg', 'Error' },
+        fallback = 0xE06C75,
+    },
+    IterHead = { sources = { 'Identifier', 'Keyword' }, fallback = 0x61AFEF },
+    IterUnpushed = { sources = { 'Constant', 'Number' }, fallback = 0xD19A66 },
+}
+
 function M.apply()
     local dark = vim.o.background ~= 'light'
     local base = color({ 'Normal' }, 'bg')
@@ -77,7 +95,13 @@ function M.apply()
         IterDiffHunk = { link = 'Comment' },
         IterDiffGap = { link = 'Folded' },
         IterDiffComment = { link = 'NormalFloat' },
+        IterDrawerTitle = { link = 'Title' },
+        IterDrawerSelected = { link = 'Visual' },
     }
+
+    for name, spec in pairs(FOREGROUNDS) do
+        groups[name] = { fg = color(spec.sources, 'fg') or spec.fallback }
+    end
 
     for name, spec in pairs(groups) do
         vim.api.nvim_set_hl(0, name, spec)

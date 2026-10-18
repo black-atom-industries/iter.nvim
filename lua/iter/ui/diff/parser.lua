@@ -16,7 +16,6 @@
 ---@field new_start integer
 ---@field new_count integer
 ---@field new_end integer
----@field stacked_row integer?
 
 local M = {}
 
@@ -205,44 +204,6 @@ function M.parse_hunks(lines)
     end
 
     return hunks
-end
-
----@param raw_lines string[]?
----@param raw_row integer?
----@return IterDiffLine?
-function M.line_at_raw_row(raw_lines, raw_row)
-    if raw_lines == nil or raw_row == nil then
-        return nil
-    end
-
-    for _, line in ipairs(M.parse_lines(raw_lines)) do
-        if line.raw_row == raw_row then
-            return line
-        end
-    end
-
-    return nil
-end
-
----@param hunks IterDiffHunk[]
----@param raw_rows integer[]?
-function M.assign_stacked_rows(hunks, raw_rows)
-    if raw_rows == nil then
-        return
-    end
-
-    for _, hunk in ipairs(hunks) do
-        hunk.stacked_row = nil
-    end
-
-    for row, raw_row in ipairs(raw_rows) do
-        for _, hunk in ipairs(hunks) do
-            if raw_row == hunk.raw_header_row then
-                hunk.stacked_row = row
-                break
-            end
-        end
-    end
 end
 
 return M
