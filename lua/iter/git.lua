@@ -17,7 +17,6 @@
 ---@class GitStatusSnapshot
 ---@field branch string
 ---@field entries GitStatusEntry[]
----@field unpushed_commits GitCommit[]
 ---@field ahead integer? commits ahead of the upstream, nil without one
 ---@field detached boolean? HEAD is not on a branch
 ---@field root string
@@ -148,14 +147,7 @@ function git.run(args, opts)
         )
     end
 
-    log.info(
-        string.format(
-            'output=%s, exit_code=%d, stderr=%s',
-            output,
-            exit_code,
-            stderr
-        )
-    )
+    log.debug(string.format('%s (%d)', table.concat(cmd, ' '), exit_code))
 
     return {
         output = output,
@@ -198,13 +190,8 @@ function git.run_async(args, opts, callback)
                 )
             end
 
-            log.info(
-                string.format(
-                    'output=%s, exit_code=%d, stderr=%s',
-                    output,
-                    exit_code,
-                    stderr
-                )
+            log.debug(
+                string.format('%s (%d)', table.concat(cmd, ' '), exit_code)
             )
 
             callback(
@@ -267,25 +254,24 @@ function git.status()
     return parse_status(out.output)
 end
 
+---@param root? string worktree root, the one of the cwd when nil
 ---@return GitStatusSnapshot
-function git.status_snapshot()
+function git.status_snapshot(root)
     if not ensure_git() then
         return {
             branch = '',
             entries = {},
-            unpushed_commits = {},
             root = '',
             error = '`git` is not executable',
         }
     end
 
-    local root = git.root()
+    root = root or git.root()
 
     if root == '' then
         return {
             branch = '',
             entries = {},
-            unpushed_commits = {},
             root = '',
             error = 'Not inside a git repository',
         }
@@ -317,7 +303,6 @@ function git.status_snapshot()
         return {
             branch = branch,
             entries = {},
-            unpushed_commits = {},
             root = root,
             error = return_result(status_out),
         }
@@ -326,7 +311,6 @@ function git.status_snapshot()
     return {
         branch = branch,
         entries = parse_status(status_out.output),
-        unpushed_commits = git.unpushed_commits(root),
         ahead = git.ahead(root),
         detached = detached,
         root = root,
@@ -422,6 +406,27 @@ function git.ahead(root)
     end
 
     return tonumber(return_result(out))
+end
+
+---Absolute paths of files in the git dir, e.g. `index` and `HEAD`. In a
+---linked worktree they live under the common dir's `worktrees/<name>/`.
+---@param root string
+---@param names string[]
+---@return string[]? paths nil outside a repository
+function git.git_paths(root, names)
+    local args = { 'rev-parse', '--path-format=absolute' }
+
+    for _, name in ipairs(names) do
+        vim.list_extend(args, { '--git-path', name })
+    end
+
+    local out = git.run(args, { cwd = root, ignore_error = true })
+
+    if out.exit_code ~= 0 then
+        return nil
+    end
+
+    return vim.split(return_result(out), '\n', { plain = true })
 end
 
 ---Untracked files under `dir`, relative to `root`. Ignored files are left

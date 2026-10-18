@@ -241,18 +241,29 @@ function View:restore_winopts()
     self.saved_winopts = nil
 end
 
+--- Give the window back its previous buffer and options. The view stays
+--- usable: the next `show()` borrows the window again.
+function View:hide()
+    if not self:is_shown() then
+        return
+    end
+
+    local target = self.prev_buf
+
+    if target == nil or not vim.api.nvim_buf_is_valid(target) then
+        target = vim.api.nvim_create_buf(true, false)
+    end
+
+    -- 'bufhidden' only acts when the buffer leaves its last window.
+    vim.bo[self.buf].bufhidden = 'hide'
+    vim.api.nvim_win_set_buf(self.win, target)
+    vim.bo[self.buf].bufhidden = 'wipe'
+end
+
 --- Give the window back its previous buffer and options. The view's buffer
 --- is wiped with it.
 function View:close()
-    if self:is_shown() then
-        local target = self.prev_buf
-
-        if target == nil or not vim.api.nvim_buf_is_valid(target) then
-            target = vim.api.nvim_create_buf(true, false)
-        end
-
-        vim.api.nvim_win_set_buf(self.win, target)
-    end
+    self:hide()
 
     if vim.api.nvim_buf_is_valid(self.buf) then
         vim.api.nvim_buf_delete(self.buf, { force = true })

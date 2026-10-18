@@ -723,17 +723,21 @@ end
 
 T['float'] = new_set()
 
---- Screen row (1-based) of the last text row of `win`.
+--- Screen row (1-based) of the last text row of `win`, or of its bottom
+--- border with `border` rows around the text. A bordered float's `winrow`
+--- is its top border.
 ---@param win string Lua expression for the window id
+---@param border? integer
 ---@return integer
-local function last_row(win)
+local function last_row(win, border)
     return child.lua_get(string.format(
         [[(function()
             local w = %s
             local info = vim.fn.getwininfo(w)[1]
-            return info.winrow + info.winbar + info.height - 1
+            return info.winrow + info.winbar + info.height - 1 + %d
         end)()]],
-        win
+        win,
+        border or 0
     ))
 end
 
@@ -750,13 +754,9 @@ T['float']['keeps its place after pane resizes'] = function()
     )
 
     eq(child.lua_get(d .. '.layout'), 'stacked')
-    eq(last_row(d .. '.win'), last_row(d .. '.pane'))
-    eq(
-        child.lua_get('vim.api.nvim_win_get_height(' .. d .. '.win)'),
-        math.floor(
-            child.lua_get('vim.api.nvim_win_get_height(' .. d .. '.pane)') * 0.3
-        )
-    )
+    eq(last_row(d .. '.win', 2), last_row(d .. '.pane'))
+    -- 8 stacked lines and the 2 chrome rows fit in half of the 29-row pane.
+    eq(child.lua_get('vim.api.nvim_win_get_height(' .. d .. '.win)'), 8)
     eq(selected(), 'unstaged deleted.txt')
 
     child.o.columns = 80
@@ -782,9 +782,10 @@ T['float']['sits above a float at zindex 20'] = function()
     local first = child.lua_get(
         [[vim.fn.getwininfo(require('iter').drawer.win)[1].winrow]]
     )
-    eq(vim.startswith(rows[first], ' Unstaged (4)'), true)
-    eq(vim.startswith(rows[first + 1], ' D deleted.txt'), true)
-    eq(rows[first + 1]:find('X', 1, true), nil)
+    eq(vim.startswith(rows[first], ' HEAD main'), true)
+    eq(vim.startswith(rows[first + 1], ' Unstaged (4)'), true)
+    eq(vim.startswith(rows[first + 2], ' D deleted.txt'), true)
+    eq(rows[first + 2]:find('X', 1, true), nil)
     eq(rows[first - 1]:find('XXXX', 1, true) ~= nil, true)
 end
 
@@ -797,8 +798,8 @@ T['float']['ends on the last pane row below a winbar'] = function()
     local first = child.lua_get('vim.fn.getwininfo(' .. d .. '.win)[1].winrow')
 
     eq(last_row(d .. '.pane') < child.o.lines - 2, true)
-    eq(last_row(d .. '.win'), last_row(d .. '.pane'))
-    eq(vim.startswith(screen_lines()[first], ' Unstaged (4)'), true)
+    eq(last_row(d .. '.win', 2), last_row(d .. '.pane'))
+    eq(vim.startswith(screen_lines()[first + 1], ' Unstaged (4)'), true)
     eq(screen_lines()[1]:find('PANE WINBAR', 1, true) ~= nil, true)
     eq(child.lua_get('vim.wo[' .. d .. '.win].winbar'), '')
 end
@@ -812,8 +813,415 @@ T['float']['shows no global winbar of its own'] = function()
     local first = child.lua_get('vim.fn.getwininfo(' .. d .. '.win)[1].winrow')
 
     eq(last_row(d .. '.pane') < child.o.lines - 2, true)
-    eq(last_row(d .. '.win'), last_row(d .. '.pane'))
-    eq(vim.startswith(screen_lines()[first], ' Unstaged (4)'), true)
+    eq(last_row(d .. '.win', 2), last_row(d .. '.pane'))
+    eq(vim.startswith(screen_lines()[first + 1], ' Unstaged (4)'), true)
+end
+
+--- Text of the drawer float's header (title) and key hint line (footer).
+---@return { header: string, hint: string }
+local function chrome()
+    return child.lua_get([[(function()
+        local config = vim.api.nvim_win_get_config(require('iter').drawer.win)
+        local function text(chunks)
+            return table.concat(vim.tbl_map(function(chunk)
+                return chunk[1]
+            end, chunks or {}))
+        end
+        return { header = text(config.title), hint = text(config.footer) }
+    end)()]])
+end
+
+local HINT = 's stage  u unstage  d discard  <CR> open  ? help'
+
+---@param options string Lua table passed to setup()
+local function setup(options)
+    child.lua('require("iter").setup(' .. options .. ')')
+end
+
+T['header'] = new_set()
+
+T['header']['shows the branch, the changes and the key hint'] = function()
+    open_drawer()
+
+    eq(chrome(), { header = 'HEAD main · 5 changes', hint = HINT })
+end
+
+T['header']['shows the commits ahead of the upstream'] = function()
+    helpers.git(repo, { 'branch', 'base' })
+    helpers.git(repo, { 'branch', '--set-upstream-to=base' })
+    helpers.git(repo, { 'commit', '--quiet', '-m', 'ahead' })
+    open_drawer()
+
+    eq(chrome().header, 'HEAD main ↑1 · 4 changes')
+end
+
+T['header']['names a detached HEAD'] = function()
+    helpers.git(repo, { 'checkout', '--quiet', '--detach' })
+    open_drawer()
+
+    eq(chrome().header, 'HEAD (detached) · 5 changes')
+end
+
+T['header']['the hint follows remapped keys'] = function()
+    setup([[{ keys = { drawer = { stage = 'S', discard = false } } }]])
+    open_drawer()
+
+    eq(chrome().hint, 'S stage  u unstage  <CR> open  ? help')
+end
+
+T['header']['stacked, the header, hint and both titles stay on screen'] = function()
+    child.cmd('vsplit')
+    child.cmd('vertical resize 60')
+    open_drawer()
+    select_item('staged', 'staged.txt')
+    child.cmd('redraw')
+
+    local screen = table.concat(screen_lines(), '\n')
+
+    for _, text in ipairs({
+        'HEAD main · 4 unstaged · 1 staged',
+        ' Unstaged (4)',
+        ' Staged (1)',
+        ' M staged.txt',
+        '? help',
+    }) do
+        eq({ text, screen:find(text, 1, true) ~= nil }, { text, true })
+    end
+end
+
+T['header']['stacked with a long list, the header counts both sides'] = function()
+    for i = 1, 15 do
+        helpers.write_file(
+            vim.fs.joinpath(repo, string.format('many_%02d.txt', i)),
+            { 'x' }
+        )
+    end
+    child.cmd('vsplit')
+    child.cmd('vertical resize 60')
+    open_drawer()
+    child.cmd('redraw')
+
+    local first = child.lua_get(
+        [[vim.fn.getwininfo(require('iter').drawer.win)[1].winrow]]
+    )
+    eq(
+        vim.startswith(
+            screen_lines()[first],
+            ' HEAD main · 19 unstaged · 1 staged'
+        ),
+        true
+    )
+end
+
+T['header']['a narrow drawer with a long branch opens cleanly'] = function()
+    helpers.git(repo, { 'branch', 'base' })
+    helpers.git(
+        repo,
+        { 'checkout', '--quiet', '-b', 'feat/a-rather-long-branch-name' }
+    )
+    helpers.git(repo, { 'branch', '--set-upstream-to=base' })
+    helpers.git(repo, { 'commit', '--quiet', '-m', 'ahead' })
+    child.cmd('vsplit')
+    child.cmd('vertical resize 30')
+    open_drawer()
+    child.cmd('redraw')
+
+    eq(child.v.errmsg, '')
+    eq(child.lua_get('_G.notes'), {})
+    eq(vim.endswith(chrome().hint, '? help'), true)
+    eq(
+        child.lua_get(
+            'vim.fn.strdisplaywidth(' .. vim.inspect(chrome().hint) .. ')'
+        ) <= 30,
+        true
+    )
+    eq(
+        chrome().header,
+        'HEAD feat/a-rather-long-branch-name ↑1 · 4 unstaged · 0 staged'
+    )
+end
+
+T['help'] = new_set()
+
+--- Lines of the open help float, or nil.
+---@return string[]?
+local function help_lines()
+    return child.lua_get([[(function()
+        local help = require('iter').drawer.help
+        if help == nil or not help:is_open() then
+            return vim.NIL
+        end
+        return vim.tbl_map(function(line)
+            return (line:gsub('%s+$', ''))
+        end, vim.api.nvim_buf_get_lines(help.buf, 0, -1, false))
+    end)()]])
+end
+
+T['help']['? lists the current keys and closes on q, ? and <Esc>'] = function()
+    setup(
+        [[{ keys = { drawer = { stage = { 'S', 'gs' }, discard = false } } }]]
+    )
+    open_drawer()
+
+    for _, close in ipairs({ 'q', '?', '<Esc>' }) do
+        child.type_keys('?')
+        eq(help_lines(), {
+            ' <CR>   Open the file and close the drawer',
+            ' S gs   Stage or unstage the file',
+            ' u      Unstage the file',
+            ' <Tab>  Expand or collapse the directory',
+            ' q      Close',
+            ' ?      Show the keys',
+            ' h      Select the Unstaged column',
+            ' l      Select the Staged column',
+        })
+        eq(
+            child.lua_get(
+                [[vim.api.nvim_win_get_config(require('iter').drawer.help.win).zindex]]
+            ),
+            50
+        )
+
+        if close == 'q' then
+            helpers.expect_screenshot(child, 'drawer-help')
+        end
+
+        child.type_keys(close)
+        eq(help_lines(), vim.NIL)
+        eq(child.lua_get('require("iter").drawer:is_open()'), true)
+        eq(
+            child.lua_get(
+                'vim.api.nvim_get_current_win() == require("iter").drawer.win'
+            ),
+            true
+        )
+    end
+end
+
+T['help']['closes with the drawer'] = function()
+    open_drawer()
+    child.type_keys('?')
+    local help_win = child.lua_get('require("iter").drawer.help.win')
+
+    child.lua('require("iter").drawer:close()')
+
+    eq(child.api.nvim_win_is_valid(help_win), false)
+end
+
+T['clean'] = new_set({
+    hooks = {
+        pre_case = function()
+            child.stop()
+            helpers.cleanup(repo)
+            repo = helpers.create_repo({ ['a.txt'] = { 'a' } })
+            helpers.start_child(child, repo)
+            stub_ui()
+            set_pane_opts()
+        end,
+    },
+})
+
+T['clean']['a clean tree says Working tree clean'] = function()
+    open_drawer()
+
+    eq(drawer_lines(), { ' Working tree clean' })
+    eq(chrome(), { header = 'HEAD main · 0 changes', hint = HINT })
+    eq(selected(), vim.NIL)
+    eq(
+        child.lua_get(
+            'vim.api.nvim_win_get_buf(_G.pane) == require("iter").drawer.view.buf'
+        ),
+        false
+    )
+
+    child.type_keys('s', 'u', 'd', '<Tab>', '<CR>', 'j', 'l')
+    eq(child.v.errmsg, '')
+    eq(child.lua_get('_G.notes'), {})
+
+    helpers.expect_screenshot(child, 'drawer-clean')
+
+    child.type_keys('q')
+    eq(pane_opts(), PANE_OPTS)
+end
+
+T['clean']['turning clean keeps the drawer and gives the pane back'] = function()
+    helpers.write_file(vim.fs.joinpath(repo, 'a.txt'), { 'a', 'b' })
+    open_drawer()
+    wait_preview('unstaged a.txt')
+
+    helpers.git(repo, { 'commit', '--quiet', '-am', 'clean again' })
+    helpers.wait_until(
+        child,
+        [[require('iter').drawer.rows[1] ~= nil
+            and vim.api.nvim_buf_get_lines(require('iter').drawer.buf, 0, 1, false)[1]
+                == ' Working tree clean']]
+    )
+
+    eq(child.lua_get('require("iter").drawer:is_open()'), true)
+    eq(
+        child.lua_get(
+            'vim.api.nvim_win_get_buf(_G.pane) == require("iter").drawer.view.buf'
+        ),
+        false
+    )
+    eq(pane_opts(), PANE_OPTS)
+    eq(child.v.errmsg, '')
+
+    helpers.write_file(vim.fs.joinpath(repo, 'a.txt'), { 'a', 'b', 'c' })
+    helpers.git(repo, { 'add', 'a.txt' })
+    wait_preview('staged a.txt')
+end
+
+T['refresh'] = new_set({
+    hooks = {
+        pre_case = function()
+            setup([[{ refresh = { poll_ms = 600000 } }]])
+        end,
+    },
+})
+
+--- True in the child once the drawer lists `path` on `side`.
+---@param side string
+---@param path string
+---@return string Lua expression
+local function lists(side, path)
+    return string.format(
+        [[(function()
+            for _, row in ipairs(require('iter').drawer.rows) do
+                if row[%q] ~= nil and row[%q].path == %q then
+                    return true
+                end
+            end
+            return false
+        end)()]],
+        side,
+        side,
+        path
+    )
+end
+
+T['refresh']['two external git add in a linked worktree'] = function()
+    local worktree = vim.fs.joinpath(repo, '..', vim.fs.basename(repo) .. '-wt')
+    helpers.git(repo, { 'worktree', 'add', '--quiet', '-b', 'feat', worktree })
+    worktree = vim.fn.resolve(worktree)
+    helpers.write_file(vim.fs.joinpath(worktree, 'one.txt'), { 'one' })
+    helpers.write_file(vim.fs.joinpath(worktree, 'two.txt'), { 'two' })
+    child.cmd('cd ' .. vim.fn.fnameescape(worktree))
+    open_drawer()
+    eq(chrome().header, 'HEAD feat · 2 changes')
+
+    helpers.git(worktree, { 'add', 'one.txt' })
+    helpers.wait_until(child, lists('staged', 'one.txt'))
+
+    helpers.git(worktree, { 'add', 'two.txt' })
+    helpers.wait_until(child, lists('staged', 'two.txt'))
+
+    child.lua('require("iter").drawer:close()')
+    helpers.cleanup(worktree)
+end
+
+T['refresh']['keeps the selection on its path'] = function()
+    open_drawer()
+    select_item('unstaged', 'untracked.txt')
+
+    helpers.git(repo, { 'add', 'modified.txt' })
+    helpers.wait_until(child, lists('staged', 'modified.txt'))
+
+    eq(selected(), 'unstaged untracked.txt')
+    wait_preview('unstaged untracked.txt')
+end
+
+T['refresh']['FocusGained picks up a worktree change'] = function()
+    open_drawer()
+
+    helpers.write_file(vim.fs.joinpath(repo, 'staged.txt'), { 'edited' })
+    child.cmd('doautocmd FocusGained')
+    helpers.wait_until(child, lists('unstaged', 'staged.txt'))
+end
+
+T['refresh']['the poll picks up a new file'] = function()
+    setup([[{ refresh = { poll_ms = 50 } }]])
+    open_drawer()
+
+    helpers.write_file(vim.fs.joinpath(repo, 'polled.txt'), { 'new' })
+    helpers.wait_until(child, lists('unstaged', 'polled.txt'))
+end
+
+T['refresh']['an idle drawer does not refresh itself'] = function()
+    open_drawer()
+    wait_preview('unstaged deleted.txt')
+    child.lua([[
+        local git = require('iter.git')
+        local snapshot = git.status_snapshot
+        _G.snapshots = 0
+        git.status_snapshot = function(...)
+            _G.snapshots = _G.snapshots + 1
+            return snapshot(...)
+        end
+    ]])
+
+    child.lua('vim.wait(500)')
+
+    eq(child.lua_get('_G.snapshots'), 0)
+end
+
+T['refresh']['stays on its repository after :cd'] = function()
+    open_drawer()
+    local elsewhere = vim.fn.resolve(vim.fn.tempname())
+    vim.fn.mkdir(elsewhere, 'p')
+    child.cmd('cd ' .. vim.fn.fnameescape(elsewhere))
+
+    child.cmd('doautocmd FocusGained')
+    helpers.git(repo, { 'add', 'modified.txt' })
+    helpers.wait_until(child, lists('staged', 'modified.txt'))
+
+    eq(child.lua_get('require("iter").drawer.changes.root'), repo)
+    eq(child.lua_get('_G.notes'), {})
+    eq(child.v.errmsg, '')
+    helpers.cleanup(elsewhere)
+end
+
+T['refresh']['an unchanged diff keeps the preview as it is'] = function()
+    open_drawer()
+    select_item('unstaged', 'modified.txt')
+    wait_preview('unstaged modified.txt')
+    child.lua([[
+        local view = require('iter').drawer.view
+        local show = view.show
+        _G.shows = 0
+        view.show = function(...)
+            _G.shows = _G.shows + 1
+            return show(...)
+        end
+    ]])
+
+    helpers.git(repo, { 'add', 'untracked.txt' })
+    helpers.wait_until(child, lists('staged', 'untracked.txt'))
+
+    eq(selected(), 'unstaged modified.txt')
+    eq(child.lua_get('_G.shows'), 0)
+end
+
+T['refresh']['closing stops the watchers and timers'] = function()
+    local count = [[(function()
+        local counts = { fs_event = 0, timer = 0 }
+        vim.uv.walk(function(handle)
+            local kind = handle:get_type()
+            if counts[kind] ~= nil and not handle:is_closing() then
+                counts[kind] = counts[kind] + 1
+            end
+        end)
+        return counts
+    end)()]]
+    local before = child.lua_get(count)
+
+    open_drawer()
+    wait_preview('unstaged deleted.txt')
+    eq(child.lua_get(count).fs_event > before.fs_event, true)
+
+    child.type_keys('q')
+    child.lua('vim.wait(300)')
+    eq(child.lua_get(count), before)
 end
 
 T['odd paths'] = new_set({

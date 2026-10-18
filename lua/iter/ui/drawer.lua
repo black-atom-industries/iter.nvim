@@ -1,12 +1,14 @@
 local changes = require('iter.changes')
 local float = require('iter.ui.float')
 local git = require('iter.git')
+local help = require('iter.ui.help')
 local highlight = require('iter.highlight')
 local keymap = require('iter.keymap')
 local model = require('iter.diff.model')
 local render = require('iter.ui.render')
 local util = require('iter.util')
 local View = require('iter.diff.view')
+local watch = require('iter.watch')
 
 ---@class IterDrawerRow buffer line → cells
 ---@field unstaged? IterChange
@@ -29,6 +31,9 @@ local View = require('iter.diff.view')
 ---@field buf integer
 ---@field float IterFloat
 ---@field view IterDiffView diff of the selected file, shown in the pane
+---@field watch? IterWatch refreshes the drawer on external changes
+---@field help? IterHelp
+---@field handlers table<string, fun()> drawer actions by name
 ---@field config IterConfig
 ---@field changes IterChanges
 ---@field rows IterDrawerRow[]
@@ -50,6 +55,15 @@ local PREVIEW_DELAY_MS = 50
 local SEPARATOR = '│'
 local SIDES = { 'unstaged', 'staged' }
 local TITLES = { unstaged = 'Unstaged', staged = 'Staged' }
+-- Actions the key hint line shows, in order, with their short labels.
+local HINTS = {
+    { 'stage', 'stage' },
+    { 'unstage', 'unstage' },
+    { 'discard', 'discard' },
+    { 'open', 'open' },
+    { 'review', 'review' },
+    { 'help', 'help' },
+}
 
 ---@param item IterChange
 ---@return string
@@ -227,6 +241,119 @@ local function stacked_layout(lists, counts, width)
     return result
 end
 
+--- The line in place of the columns when nothing changed.
+---@return IterDrawerLayout
+local function clean_layout()
+    local line = render.line(' Working tree clean')
+    render.add_highlight(line, 'IterDrawerHint', 0, #line.text)
+
+    return { lines = { line }, rows = { {} }, cells = { {} } }
+end
+
+---@param chunks [string, string][]
+---@return integer
+local function chunks_width(chunks)
+    local width = 0
+
+    for _, chunk in ipairs(chunks) do
+        width = width + vim.fn.strdisplaywidth(chunk[1])
+    end
+
+    return width
+end
+
+--- `HEAD <branch> ↑<ahead> · <n> changes`; `↑` only when HEAD is ahead of
+--- its upstream. A file on both sides counts once. Stacked, the counts are
+--- per side, since the Staged title may sit below the visible lines.
+---@param result IterChanges
+---@param layout 'columns'|'stacked'
+---@return [string, string][]
+local function header_chunks(result, layout)
+    local paths = {}
+    local count = 0
+
+    for _, side in ipairs(SIDES) do
+        for _, item in ipairs(result[side]) do
+            if not paths[item.path] then
+                paths[item.path] = true
+                count = count + 1
+            end
+        end
+    end
+
+    local chunks = {
+        { 'HEAD ', 'IterDrawerHint' },
+        {
+            result.branch == 'HEAD' and '(detached)' or result.branch,
+            'IterHead',
+        },
+    }
+
+    if result.ahead ~= nil and result.ahead > 0 then
+        table.insert(chunks, { ' ↑' .. result.ahead, 'IterUnpushed' })
+    end
+
+    local summary =
+        string.format(' · %d %s', count, count == 1 and 'change' or 'changes')
+
+    if layout == 'stacked' and count > 0 then
+        summary = string.format(
+            ' · %d unstaged · %d staged',
+            #result.unstaged,
+            #result.staged
+        )
+    end
+
+    table.insert(chunks, { summary, 'IterDrawerHint' })
+
+    return chunks
+end
+
+--- The bound keys of the hint actions, as many as fit in `width`; help
+--- stays last.
+---@param entries IterKeymapEntry[]
+---@param width integer
+---@return [string, string][]
+local function hint_chunks(entries, width)
+    local lhs = {}
+
+    for _, entry in ipairs(entries) do
+        lhs[entry.action] = entry.lhs[1]
+    end
+
+    local items = {}
+
+    for _, hint in ipairs(HINTS) do
+        if lhs[hint[1]] ~= nil then
+            table.insert(items, { lhs[hint[1]], hint[2] })
+        end
+    end
+
+    local function build()
+        ---@type [string, string][]
+        local chunks = {}
+
+        for i, item in ipairs(items) do
+            table.insert(chunks, { item[1], 'IterDrawerKey' })
+            table.insert(chunks, {
+                ' ' .. item[2] .. (i < #items and '  ' or ''),
+                'IterDrawerHint',
+            })
+        end
+
+        return chunks
+    end
+
+    local chunks = build()
+
+    while #items > 1 and chunks_width(chunks) > width do
+        table.remove(items, #items - 1)
+        chunks = build()
+    end
+
+    return chunks
+end
+
 --- Open the drawer over the bottom of `opts.pane`, focused, with the diff of
 --- the selected file in the pane.
 --- With 'nohidden' a modified buffer can't leave its window (E37), so the
@@ -284,6 +411,7 @@ function Drawer.open(opts)
         return nil
     end
 
+    self.handlers = self:make_handlers()
     self.view = View.new({ win = opts.pane, keys = opts.config.keys.diff })
     self.float = float.open({
         pane = opts.pane,
@@ -291,6 +419,7 @@ function Drawer.open(opts)
         zindex = opts.config.options.drawer.zindex,
         height = opts.config.options.drawer.height,
         enter = true,
+        chrome = true,
     })
     self.win = self.float.win
     vim.api.nvim_set_option_value(
@@ -303,8 +432,40 @@ function Drawer.open(opts)
     self:restore_selection(self:find_path(opts.path))
     self:attach()
     self:preview(true)
+    self.watch = watch.start({
+        root = self.changes.root,
+        poll_ms = opts.config.options.refresh.poll_ms,
+        on_change = function(reason)
+            self:refresh(reason)
+        end,
+    })
 
     return self
+end
+
+---@return table<string, fun()>
+function Drawer:make_handlers()
+    local function act(method)
+        return function()
+            self[method](self)
+        end
+    end
+
+    return {
+        open = act('open_file'),
+        stage = act('stage'),
+        unstage = act('unstage'),
+        discard = act('discard'),
+        expand = act('toggle'),
+        close = act('close'),
+        help = act('toggle_help'),
+        column_left = function()
+            self:switch('unstaged')
+        end,
+        column_right = function()
+            self:switch('staged')
+        end,
+    }
 end
 
 function Drawer:attach()
@@ -345,26 +506,7 @@ function Drawer:attach()
         end,
     })
 
-    local function act(method)
-        return function()
-            self[method](self)
-        end
-    end
-
-    keymap.attach(self.buf, 'drawer', self.config.keys.drawer, {
-        open = act('open_file'),
-        stage = act('stage'),
-        unstage = act('unstage'),
-        discard = act('discard'),
-        expand = act('toggle'),
-        close = act('close'),
-        column_left = function()
-            self:switch('unstaged')
-        end,
-        column_right = function()
-            self:switch('staged')
-        end,
-    })
+    keymap.attach(self.buf, 'drawer', self.config.keys.drawer, self.handlers)
 end
 
 ---@return boolean
@@ -372,10 +514,12 @@ function Drawer:is_open()
     return not self.closed and util.is_valid_win(self.win)
 end
 
---- Read the status afresh, keeping open directories open.
+--- Read the status afresh, keeping open directories open. Once loaded, the
+--- drawer stays on its root whatever the cwd becomes.
 ---@return boolean loaded
 function Drawer:load()
-    local snapshot = git.status_snapshot()
+    local snapshot =
+        git.status_snapshot(self.changes and self.changes.root or nil)
 
     if snapshot.error ~= nil then
         util.error(snapshot.error, 'Cannot read the git status')
@@ -393,7 +537,9 @@ function Drawer:load()
     return true
 end
 
---- Write the items into the buffer in the layout the pane's width allows.
+--- Write the items into the buffer in the layout the pane's width allows,
+--- with the header and key hint line around them. The float grows to fit
+--- them, up to half the pane.
 function Drawer:render()
     local width = vim.api.nvim_win_get_width(self.pane)
     local lists = {
@@ -408,9 +554,15 @@ function Drawer:render()
     self.layout = width >= self.config.options.drawer.breakpoint and 'columns'
         or 'stacked'
 
-    local layout = self.layout == 'columns'
-            and columns_layout(lists, counts, width)
-        or stacked_layout(lists, counts, width)
+    local layout
+
+    if #lists.unstaged + #lists.staged == 0 then
+        layout = clean_layout()
+    elseif self.layout == 'columns' then
+        layout = columns_layout(lists, counts, width)
+    else
+        layout = stacked_layout(lists, counts, width)
+    end
 
     self.rows, self.cells = layout.rows, layout.cells
 
@@ -423,7 +575,17 @@ function Drawer:render()
         render.text_lines(layout.lines)
     )
     vim.bo[self.buf].modifiable = false
+    vim.api.nvim_buf_clear_namespace(self.buf, SELECTED_NS, 0, -1)
     render.apply(self.buf, layout.lines)
+
+    self.float:reposition({
+        fit = #layout.lines,
+        title = header_chunks(self.changes, self.layout),
+        footer = hint_chunks(
+            keymap.list('drawer', self.config.keys.drawer, self.handlers),
+            width
+        ),
+    })
 end
 
 ---@return IterChange?
@@ -616,6 +778,30 @@ function Drawer:resized()
     self:restore_selection(mark)
 end
 
+--- Reload the status, keep the selection on its path and show its diff
+--- afresh. A poll that finds nothing changed leaves everything as it is.
+---@param reason? IterWatchReason nil after an action of the drawer
+function Drawer:refresh(reason)
+    if not self:is_open() then
+        return
+    end
+
+    local before = self.changes
+    local mark = self:mark()
+
+    if not self:load() then
+        return
+    end
+
+    if reason == 'poll' and vim.deep_equal(before, self.changes) then
+        return
+    end
+
+    self:render()
+    self:restore_selection(mark)
+    self:preview(true)
+end
+
 --- Reload after a git action and show the selection's new diff.
 ---@param ok boolean
 ---@param err? string
@@ -625,13 +811,7 @@ function Drawer:refresh_after(ok, err, fallback)
         util.error(err, fallback)
     end
 
-    local mark = self:mark()
-
-    if self:load() then
-        self:render()
-        self:restore_selection(mark)
-        self:preview(true)
-    end
+    self:refresh()
 end
 
 function Drawer:schedule_preview()
@@ -646,12 +826,22 @@ function Drawer:schedule_preview()
 end
 
 --- Show the selected file's diff in the pane. Directories leave the pane as
---- it is.
+--- it is; without a selection the pane gets its own buffer back.
 ---@param force boolean also when the view already shows the item
 function Drawer:preview(force)
     local item = self:selected()
 
-    if not self:is_open() or item == nil or item.dir then
+    if not self:is_open() then
+        return
+    end
+
+    if item == nil then
+        self.previewed = nil
+        self.view:hide()
+        return
+    end
+
+    if item.dir then
         return
     end
 
@@ -663,6 +853,19 @@ function Drawer:preview(force)
 
     if source == nil then
         util.error(err, 'Cannot read the diff of ' .. item.path)
+        return
+    end
+
+    -- The same diff again keeps the view as it is, expanded gaps included.
+    local shown = self.view.files[1]
+
+    if
+        key(item) == self.previewed
+        and self.view:is_shown()
+        and shown ~= nil
+        and shown.code == item.code
+        and vim.deep_equal(shown.raw, source.raw)
+    then
         return
     end
 
@@ -871,6 +1074,15 @@ function Drawer:close()
 
     self.closed = true
     pcall(vim.api.nvim_del_augroup_by_id, self.group)
+
+    if self.watch ~= nil then
+        self.watch:stop()
+    end
+
+    if self.help ~= nil then
+        self.help:close()
+    end
+
     self.float:close()
     self.view:close()
 
@@ -889,7 +1101,23 @@ function Drawer:focus()
         vim.api.nvim_set_current_win(self.win)
     end
 
-    self:refresh_after(true, nil, '')
+    self:refresh()
+end
+
+--- Open the help float with the drawer's keys, or close it.
+function Drawer:toggle_help()
+    if self.help ~= nil and self.help:is_open() then
+        self.help:close()
+        return
+    end
+
+    self.help = help.open({
+        view = 'drawer',
+        keys = self.config.keys.drawer,
+        handlers = self.handlers,
+        close_keys = self.config.keys.help,
+        zindex = self.config.options.drawer.zindex + 10,
+    })
 end
 
 return Drawer

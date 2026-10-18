@@ -285,4 +285,29 @@ T['keymap']['actions() match the configurable keys of every view'] = function()
     )
 end
 
+T['health'] = new_set()
+
+T['health']['checks Neovim 0.12 and git, nothing else'] = function()
+    local health = vim.health
+    local reports = {}
+    vim.health = {
+        start = function(_) end,
+        ok = function(msg)
+            table.insert(reports, 'ok ' .. msg)
+        end,
+        warn = function(msg)
+            table.insert(reports, 'warn ' .. msg)
+        end,
+        error = function(msg)
+            table.insert(reports, 'error ' .. msg)
+        end,
+    }
+
+    local ok, err = pcall(require('iter.health').check)
+    vim.health = health
+
+    eq({ ok, err }, { true, nil })
+    eq(reports, { 'ok Neovim 0.12 or newer', 'ok `git` is executable' })
+end
+
 return T

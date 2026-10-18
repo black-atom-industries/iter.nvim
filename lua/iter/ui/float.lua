@@ -8,6 +8,10 @@ local M = {}
 ---@field zindex integer
 ---@field height number up to 1 a fraction of the pane's height, else lines
 ---@field enter? boolean focus the float
+---@field chrome? boolean a header row above and a hint row below the text
+---@field title? [string, string][] header chunks, with `chrome`
+---@field footer? [string, string][] hint chunks, with `chrome`
+---@field fit? integer text lines to grow to, up to half the pane
 
 ---@class IterFloat
 ---@field win integer
@@ -24,17 +28,30 @@ local function text_height(pane)
     return vim.fn.getwininfo(pane)[1].height
 end
 
+-- Top and bottom edges only: one row each for the title and the footer.
+local CHROME_BORDER = { '', ' ', '', '', '', ' ', '', '' }
+
+--- Text rows of the float. `opts.height` and the half-pane cap for `fit`
+--- count the chrome rows too.
 ---@param opts IterFloatOpts
 ---@return integer
 local function resolve_height(opts)
     local pane_height = text_height(opts.pane)
+    local chrome = opts.chrome and 2 or 0
     local height = opts.height
 
     if height <= 1 then
         height = math.floor(pane_height * height)
     end
 
-    return math.max(1, math.min(math.floor(height), pane_height))
+    if opts.fit ~= nil then
+        local fitted = math.min(opts.fit + chrome, math.floor(pane_height / 2))
+        height = math.max(height, fitted)
+    end
+
+    height = math.min(math.floor(height), pane_height) - chrome
+
+    return math.max(1, height)
 end
 
 ---@param opts IterFloatOpts
@@ -42,7 +59,7 @@ end
 local function win_config(opts)
     local height = resolve_height(opts)
 
-    return {
+    local config = {
         relative = 'win',
         win = opts.pane,
         anchor = 'SW',
@@ -54,6 +71,16 @@ local function win_config(opts)
         style = 'minimal',
         focusable = true,
     }
+
+    if opts.chrome then
+        config.border = CHROME_BORDER
+        config.title = opts.title or ''
+        config.title_pos = 'left'
+        config.footer = opts.footer or ''
+        config.footer_pos = 'left'
+    end
+
+    return config
 end
 
 --- Open a float over the bottom of `opts.pane`, as wide as the pane.
@@ -111,12 +138,16 @@ function Float:is_open()
     return util.is_valid_win(self.win)
 end
 
---- Fit the float to its pane again, optionally with a new height.
----@param overrides? { height?: number }
+---@class IterFloatOverrides
+---@field height? number
+---@field title? [string, string][]
+---@field footer? [string, string][]
+---@field fit? integer
+
+--- Fit the float to its pane again, optionally with new options.
+---@param overrides? IterFloatOverrides
 function Float:reposition(overrides)
-    if overrides ~= nil and overrides.height ~= nil then
-        self.opts.height = overrides.height
-    end
+    self.opts = vim.tbl_extend('force', self.opts, overrides or {})
 
     if not self:is_open() then
         return

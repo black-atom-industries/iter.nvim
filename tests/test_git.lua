@@ -229,4 +229,76 @@ T['status_snapshot()']['flags a detached HEAD'] = function()
     eq(git.status_snapshot().detached, true)
 end
 
+T['status_snapshot()']['reads the ahead count with one rev-list'] = function()
+    helpers.git(repo, { 'branch', 'base' })
+    helpers.git(repo, { 'branch', '--set-upstream-to=base' })
+    local run = git.run
+    local history = {}
+    ---@diagnostic disable-next-line: duplicate-set-field
+    git.run = function(args, opts)
+        if args[1] == 'rev-list' or args[1] == 'log' then
+            table.insert(history, args[1])
+        end
+        return run(args, opts)
+    end
+
+    local ok, snapshot = pcall(git.status_snapshot)
+    git.run = run
+
+    eq(ok, true)
+    eq(snapshot.ahead, 0)
+    eq(history, { 'rev-list' })
+end
+
+T['git_paths()'] = new_set()
+
+T['git_paths()']['are absolute in a normal repository'] = function()
+    eq(
+        git.git_paths(repo, { 'index', 'HEAD' }),
+        { repo .. '/.git/index', repo .. '/.git/HEAD' }
+    )
+end
+
+T['git_paths()']['point into the common dir in a linked worktree'] = function()
+    local worktree = repo .. '-wt'
+    helpers.git(repo, { 'worktree', 'add', '--quiet', '-b', 'feat', worktree })
+
+    local paths = git.git_paths(worktree, { 'index', 'HEAD' })
+    helpers.cleanup(worktree)
+
+    local dir = repo .. '/.git/worktrees/' .. vim.fs.basename(worktree)
+    eq(paths, { dir .. '/index', dir .. '/HEAD' })
+end
+
+T['git_paths()']['is nil outside a repository'] = function()
+    local not_repo = vim.fn.tempname()
+    vim.fn.mkdir(not_repo, 'p')
+
+    local paths = git.git_paths(not_repo, { 'index' })
+    helpers.cleanup(not_repo)
+
+    eq(paths, nil)
+end
+
+T['run()'] = new_set()
+
+T['run()']['logs the command, not its output'] = function()
+    local log_path = require('iter.log').path()
+    eq(vim.startswith(log_path, vim.env.ITER_TEST_HOME), true)
+    local before = vim.fn.filereadable(log_path) == 1
+            and #vim.fn.readfile(log_path)
+        or 0
+    write('secret.txt', { 'SECRET CONTENT' })
+    require('iter').setup({ debug = true })
+
+    git.run({ 'add', 'secret.txt' }, { cwd = repo })
+    git.run({ 'diff', '--cached' }, { cwd = repo })
+    require('iter').setup()
+
+    local lines = vim.list_slice(vim.fn.readfile(log_path), before + 1)
+    local text = table.concat(lines, '\n')
+    eq(text:find('git --no-optional-locks diff --cached', 1, true) ~= nil, true)
+    eq(text:find('SECRET CONTENT', 1, true), nil)
+end
+
 return T
