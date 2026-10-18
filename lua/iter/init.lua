@@ -150,6 +150,7 @@ function M.setup(opts)
     local config = require('iter.config')
     M.config = config.resolve(opts)
     M.did_setup = true
+    require('iter.comments.marks').watch_buffers()
 
     return M
 end
