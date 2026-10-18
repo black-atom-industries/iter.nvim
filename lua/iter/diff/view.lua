@@ -1,11 +1,15 @@
 local highlight = require('iter.highlight')
 local keymap = require('iter.keymap')
 local model = require('iter.diff.model')
+local syntax = require('iter.diff.syntax')
+local words = require('iter.diff.words')
 
 ---@class IterDiffViewOptions
 ---@field win integer window the view borrows
 ---@field keys? table<string, string[]> resolved `keys.diff`
 ---@field expand_step? integer
+---@field syntax_max_lines? integer
+---@field word_diff? boolean
 
 ---@class IterDiffView
 ---@field buf integer
@@ -17,11 +21,24 @@ local model = require('iter.diff.model')
 ---@field width integer digits of the widest line number
 ---@field keys table<string, string[]>
 ---@field expand_step integer
+---@field syntax_max_lines integer versions longer than this get no syntax
+---@field word_diff boolean
+---@field generation integer bumped by every render
+---@field decorated integer last generation whose syntax is applied
 ---@field prev_buf? integer buffer the window showed before the view
 local View = {}
 View.__index = View
 
 local NS = vim.api.nvim_create_namespace('iter.diff')
+local NS_SYNTAX = vim.api.nvim_create_namespace('iter.diff.syntax')
+local NS_WORDS = vim.api.nvim_create_namespace('iter.diff.words')
+
+-- Del and add rows draw below syntax, word emphasis above it, so an
+-- emphasis background also shows over a capture that sets one.
+local ROW_PRIORITY = vim.hl.priorities.treesitter - 50
+local WORD_PRIORITY = vim.hl.priorities.treesitter + 50
+
+local WORD_HL = { add = 'IterDiffAddText', del = 'IterDiffDeleteText' }
 
 -- Window-local options the view sets on the window it borrows.
 local WINOPTS = {
@@ -67,6 +84,8 @@ function View.new(opts)
     vim.validate('opts.win', opts.win, 'number')
     vim.validate('opts.keys', opts.keys, 'table', true)
     vim.validate('opts.expand_step', opts.expand_step, 'number', true)
+    vim.validate('opts.syntax_max_lines', opts.syntax_max_lines, 'number', true)
+    vim.validate('opts.word_diff', opts.word_diff, 'boolean', true)
 
     local config = require('iter').config
 
@@ -81,7 +100,16 @@ function View.new(opts)
         width = 1,
         keys = opts.keys or config.keys.diff,
         expand_step = opts.expand_step or config.options.diff.expand_step,
+        syntax_max_lines = opts.syntax_max_lines
+            or config.options.diff.syntax_max_lines,
+        word_diff = opts.word_diff,
+        generation = 0,
+        decorated = 0,
     }, View)
+
+    if self.word_diff == nil then
+        self.word_diff = config.options.diff.word_diff
+    end
 
     vim.bo[self.buf].bufhidden = 'wipe'
     vim.bo[self.buf].modifiable = false
@@ -136,7 +164,17 @@ end
 function View:decorate(row, file, lnum, expand_lhs)
     local mark = { line_hl_group = ROW_HL[row.kind] }
 
-    if row.kind == 'header' then
+    if row.kind == 'add' or row.kind == 'del' then
+        -- A line highlight would cover the word emphasis; a range under it
+        -- lets syntax and words draw on top.
+        mark = {
+            end_row = lnum,
+            end_col = 0,
+            hl_eol = true,
+            hl_group = ROW_HL[row.kind],
+            priority = ROW_PRIORITY,
+        }
+    elseif row.kind == 'header' then
         local stat = file.binary and 'binary'
             or string.format('+%d −%d', file.stat.add, file.stat.del)
         mark.virt_text = { { stat .. ' ', 'IterDiffHunk' } }
@@ -171,6 +209,126 @@ function View:decorate(row, file, lnum, expand_lhs)
     vim.api.nvim_buf_set_extmark(self.buf, NS, lnum - 1, 0, mark)
 end
 
+function View:decorate_words()
+    for lnum, row in ipairs(self.rows) do
+        for _, range in ipairs(row.words or {}) do
+            vim.api.nvim_buf_set_extmark(
+                self.buf,
+                NS_WORDS,
+                lnum - 1,
+                range[1],
+                {
+                    end_col = range[2],
+                    hl_group = WORD_HL[row.kind],
+                    priority = WORD_PRIORITY,
+                }
+            )
+        end
+    end
+end
+
+---@class IterDiffSyntaxJob
+---@field lines string[] version the rows come from
+---@field lang string
+---@field lnums integer[] version lines to highlight
+---@field targets integer[] buffer line of each entry in `lnums`
+
+--- One job per version: del rows read the old version, context and add
+--- rows the new one. A version without a parser, above the size cap or
+--- missing (hunk-only rows) gets none.
+---@param file IterFileDiff
+---@return IterDiffSyntaxJob[]
+function View:syntax_jobs(file)
+    local sides = {
+        { lines = file.old_lines, path = file.orig_path or file.path },
+        { lines = file.new_lines, path = file.path },
+    }
+    local jobs = {}
+
+    for index, side in ipairs(sides) do
+        local lines = side.lines
+        local lang = lines ~= nil
+            and #lines > 0
+            and #lines <= self.syntax_max_lines
+            and syntax.lang(side.path)
+
+        if lang then
+            local job = { lines = lines, lang = lang, lnums = {}, targets = {} }
+
+            for lnum, row in ipairs(self.rows) do
+                local line = index == 1 and row.kind == 'del' and row.old
+                    or index == 2
+                        and (row.kind == 'context' or row.kind == 'add')
+                        and row.new
+
+                if line then
+                    table.insert(job.lnums, line)
+                    table.insert(job.targets, lnum)
+                end
+            end
+
+            if #job.lnums > 0 then
+                table.insert(jobs, job)
+            end
+        end
+    end
+
+    return jobs
+end
+
+--- Request the syntax of the shown rows and apply it when it arrives,
+--- unless a later render came first.
+function View:decorate_syntax()
+    self.generation = self.generation + 1
+
+    local generation = self.generation
+    local file = self.files[1]
+    local jobs = file ~= nil and self:syntax_jobs(file) or {}
+    local pending = #jobs
+
+    if pending == 0 then
+        self.decorated = generation
+        return
+    end
+
+    for _, job in ipairs(jobs) do
+        syntax.request(job.lines, job.lang, job.lnums, function(spans)
+            if
+                generation ~= self.generation
+                or not vim.api.nvim_buf_is_valid(self.buf)
+            then
+                return
+            end
+
+            for i, lnum in ipairs(job.targets) do
+                local width = #self.rows[lnum].text
+
+                for _, span in ipairs(spans and spans[job.lnums[i]] or {}) do
+                    if span.col < width then
+                        vim.api.nvim_buf_set_extmark(
+                            self.buf,
+                            NS_SYNTAX,
+                            lnum - 1,
+                            span.col,
+                            {
+                                end_col = math.min(span.end_col, width),
+                                hl_group = span.hl,
+                                priority = span.priority,
+                            }
+                        )
+                    end
+                end
+            end
+
+            pending = pending - 1
+
+            if pending == 0 then
+                self.decorated = generation
+            end
+        end)
+    end
+end
+
 --- Write the rows into the buffer with their highlights.
 function View:render()
     local lines = vim.tbl_map(function(row)
@@ -185,11 +343,21 @@ function View:render()
     self.file_ranges = { { first = 1, last = #self.rows } }
 
     local expand_lhs = (self.keys.expand or {})[1]
-    vim.api.nvim_buf_clear_namespace(self.buf, NS, 0, -1)
+
+    for _, ns in ipairs({ NS, NS_SYNTAX, NS_WORDS }) do
+        vim.api.nvim_buf_clear_namespace(self.buf, ns, 0, -1)
+    end
 
     for lnum, row in ipairs(self.rows) do
         self:decorate(row, self.files[1], lnum, expand_lhs)
     end
+
+    if self.word_diff then
+        words.annotate(self.rows)
+        self:decorate_words()
+    end
+
+    self:decorate_syntax()
 
     if self:is_shown() then
         -- Setting the option again lets the rail shrink to a new width.
