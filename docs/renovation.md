@@ -392,7 +392,7 @@ Each slice leaves `just checks` green and the plugin usable.
   `git.commit_file`, `commit_template`, `push`, `push_async`, `push_destination`; `confirmations.force_*`; the test
   `push() reports edge cases`.
 
-#### S2 · Diff model and view core
+#### S2 · Diff model and view core — done
 
 - Goal: parser → model → `IterDiffView` renders one file's diff with the rail, row highlights, hunk rows and
   expandable gaps; usable standalone, not wired into the UI yet.

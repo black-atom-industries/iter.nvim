@@ -870,4 +870,130 @@ function git.diff(entry, section)
     return parse_diff(out.output)
 end
 
+---@class IterFileSource
+---@field raw string[] git diff text
+---@field old_lines? string[] nil for binary files
+---@field new_lines? string[] nil for binary files
+---@field binary boolean
+
+-- Flags that keep the diff text parseable whatever the user's git config.
+local DIFF_FLAGS = { '--no-color', '--no-ext-diff' }
+
+---@param output string
+---@return string[]
+local function split_output(output)
+    if output == '' then
+        return {}
+    end
+
+    local lines = vim.split(output, '\n', { plain = true })
+
+    if lines[#lines] == '' then
+        table.remove(lines)
+    end
+
+    return lines
+end
+
+---@param root string
+---@param spec string blob spec such as `:path` or `HEAD:path`
+---@return string[]?
+local function blob_lines(root, spec)
+    local out = git.run({ 'show', spec }, { cwd = root, ignore_error = true })
+
+    if out.exit_code ~= 0 then
+        return nil
+    end
+
+    return split_output(out.output)
+end
+
+---@param raw string[]
+---@return boolean
+local function is_binary_diff(raw)
+    for _, line in ipairs(raw) do
+        if
+            vim.startswith(line, 'Binary files ')
+            or line == 'GIT binary patch'
+        then
+            return true
+        end
+    end
+
+    return false
+end
+
+--- Diff text and both full versions of one file. Unstaged compares the index
+--- with the worktree, staged compares HEAD with the index. Untracked and
+--- added files have an empty old side, deleted files an empty new side.
+---@param root string
+---@param change { path: string, orig_path?: string, side: IterSide, code: string }
+---@return IterFileSource?
+---@return string? error
+function git.file_diff(root, change)
+    ensure_git()
+
+    local untracked = change.code == '?'
+    local args
+
+    if untracked then
+        args = { 'diff', '--no-index' }
+    elseif change.side == 'staged' then
+        args = { 'diff', '--cached', '-M' }
+    else
+        args = { 'diff' }
+    end
+
+    vim.list_extend(args, DIFF_FLAGS)
+    table.insert(args, '--')
+
+    if untracked then
+        vim.list_extend(args, { '/dev/null', change.path })
+    else
+        if change.orig_path ~= nil then
+            table.insert(args, change.orig_path)
+        end
+        table.insert(args, change.path)
+    end
+
+    local out = git.run(args, { cwd = root, ignore_error = true })
+
+    -- `--no-index` exits 1 when the files differ.
+    if out.exit_code > 1 or (out.exit_code == 1 and not untracked) then
+        return nil, return_result(out)
+    end
+
+    local raw = split_output(out.output)
+
+    if is_binary_diff(raw) then
+        return { raw = raw, binary = true }
+    end
+
+    local old_path = change.orig_path or change.path
+    local old_lines, new_lines
+
+    if untracked or change.code == 'A' then
+        old_lines = {}
+    elseif change.side == 'staged' then
+        old_lines = blob_lines(root, 'HEAD:' .. old_path)
+    else
+        old_lines = blob_lines(root, ':' .. old_path)
+    end
+
+    if change.code == 'D' then
+        new_lines = {}
+    elseif change.side == 'staged' then
+        new_lines = blob_lines(root, ':' .. change.path)
+    else
+        new_lines = read_worktree_lines(change.path, root)
+    end
+
+    return {
+        raw = raw,
+        old_lines = old_lines,
+        new_lines = new_lines,
+        binary = false,
+    }
+end
+
 return git
