@@ -406,7 +406,7 @@ Each slice leaves `just checks` green and the plugin usable.
   all borrowed `vim.wo` values equal the originals after the view leaves the window.
 - Removes: nothing.
 
-#### S2b · Float, changes and util modules
+#### S2b · Float, changes and util modules — done
 
 - Goal: float placement, the changes list and the shared helpers exist standalone with tests, not wired into the UI.
 - Files: new `iter/ui/float.lua`, `iter/changes.lua`, `iter/util.lua`; `iter/git.lua` (`ls-files` for untracked dirs,

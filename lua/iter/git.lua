@@ -18,6 +18,8 @@
 ---@field branch string
 ---@field entries GitStatusEntry[]
 ---@field unpushed_commits GitCommit[]
+---@field ahead integer? commits ahead of the upstream, nil without one
+---@field detached boolean? HEAD is not on a branch
 ---@field root string
 ---@field error string?
 
@@ -294,6 +296,7 @@ function git.status_snapshot()
         { cwd = root, ignore_error = true }
     )
     local branch = return_result(branch_out)
+    local detached = branch == ''
 
     if branch == '' then
         local head_out = git.run(
@@ -324,6 +327,8 @@ function git.status_snapshot()
         branch = branch,
         entries = parse_status(status_out.output),
         unpushed_commits = git.unpushed_commits(root),
+        ahead = git.ahead(root),
+        detached = detached,
         root = root,
     }
 end
@@ -401,6 +406,53 @@ function git.unpushed_commits(root)
     end
 
     return parse_commits(out.output)
+end
+
+---Number of commits HEAD is ahead of its upstream.
+---@param root string
+---@return integer? ahead nil when there is no upstream
+function git.ahead(root)
+    local out = git.run(
+        { 'rev-list', '--count', '@{upstream}..HEAD' },
+        { cwd = root, ignore_error = true }
+    )
+
+    if out.exit_code ~= 0 then
+        return nil
+    end
+
+    return tonumber(return_result(out))
+end
+
+---Untracked files under `dir`, relative to `root`. Ignored files are left
+---out. A nested repository is listed as its directory, with a trailing `/`.
+---@param root string
+---@param dir string
+---@return string[]? files
+---@return string? error
+function git.untracked_files(root, dir)
+    local out = git.run({
+        'ls-files',
+        '--others',
+        '--exclude-standard',
+        '-z',
+        '--',
+        ':(literal)' .. dir,
+    }, { cwd = root, ignore_error = true })
+
+    if out.exit_code ~= 0 then
+        return nil, return_result(out)
+    end
+
+    local files = {}
+
+    for _, path in ipairs(vim.split(out.output, '\0', { plain = true })) do
+        if path ~= '' then
+            table.insert(files, path)
+        end
+    end
+
+    return files
 end
 
 ---@return table

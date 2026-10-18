@@ -160,4 +160,50 @@ T['file_change_counts()']['rejects directories and the root'] = function()
     end
 end
 
+T['ahead()'] = new_set()
+
+T['ahead()']['is nil without an upstream'] = function()
+    eq(git.ahead(repo), nil)
+end
+
+T['ahead()']['counts commits ahead of the upstream'] = function()
+    helpers.git(repo, { 'branch', 'base' })
+    helpers.git(repo, { 'branch', '--set-upstream-to=base' })
+    eq(git.ahead(repo), 0)
+
+    write('tracked.txt', { 'one', 'two' })
+    helpers.git(repo, { 'commit', '--quiet', '-am', 'second' })
+    eq(git.ahead(repo), 1)
+    eq(git.status_snapshot().ahead, 1)
+end
+
+T['untracked_files()'] = new_set()
+
+T['untracked_files()']['lists files in a directory, not ignored ones'] = function()
+    write('.gitignore', { '*.log' })
+    helpers.git(repo, { 'add', '.gitignore' })
+    helpers.git(repo, { 'commit', '--quiet', '-m', 'ignore' })
+    write('dir/a.txt', { 'a' })
+    write('dir/sub/b.txt', { 'b' })
+    write('dir/skip.log', { 'x' })
+    write('other/c.txt', { 'c' })
+
+    eq(git.untracked_files(repo, 'dir/'), { 'dir/a.txt', 'dir/sub/b.txt' })
+end
+
+T['untracked_files()']['treats the path literally and skips tracked files'] = function()
+    write('we[ir]d/a.txt', { 'a' })
+    write('weird/b.txt', { 'b' })
+
+    eq(git.untracked_files(repo, 'we[ir]d/'), { 'we[ir]d/a.txt' })
+    eq(git.untracked_files(repo, 'tracked.txt'), {})
+end
+
+T['status_snapshot()']['flags a detached HEAD'] = function()
+    eq(git.status_snapshot().detached, false)
+
+    helpers.git(repo, { 'checkout', '--quiet', '--detach' })
+    eq(git.status_snapshot().detached, true)
+end
+
 return T
