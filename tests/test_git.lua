@@ -160,15 +160,4 @@ T['file_change_counts()']['rejects directories and the root'] = function()
     end
 end
 
-T['push() reports edge cases'] = function()
-    eq(
-        { git.push() },
-        { false, 'No upstream configured. Run git push -u origin main' }
-    )
-
-    helpers.git(repo, { 'checkout', '--quiet', '--detach' })
-
-    eq({ git.push() }, { false, 'Cannot push from detached HEAD' })
-end
-
 return T

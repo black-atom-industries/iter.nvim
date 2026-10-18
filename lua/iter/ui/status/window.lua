@@ -18,7 +18,7 @@ local M = {}
 ---@field winfixheight boolean
 ---@field winhighlight string
 
----@param opts IterStatusOptions
+---@param opts { height: number }
 ---@return integer
 function M.status_win_height(opts)
     return math.max(math.floor(vim.o.lines * opts.height), 1)
@@ -57,7 +57,7 @@ function M.configure_status_win(win)
 end
 
 ---@param buf Buffer
----@param opts IterStatusOptions
+---@param opts { height: number }
 ---@return number, GitStatusWindowOptions
 function M.create_status_win(buf, opts)
     local height = M.status_win_height(opts)

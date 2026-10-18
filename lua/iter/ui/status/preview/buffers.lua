@@ -5,17 +5,6 @@ local keymaps = require('iter.ui.status.keymaps')
 
 local M = {}
 
----@param bufnr integer
----@param actions IterPreviewBufferActions
-function M.set_goto_code_keymap(bufnr, actions)
-    keymaps.set_goto_code_keymap(bufnr, actions)
-end
-
----@param bufnr integer?
-function M.clear_goto_code_keymap(bufnr)
-    keymaps.clear_goto_code_keymap(bufnr)
-end
-
 ---@param buf Buffer
 ---@param lines string[]
 function M.set_plain_lines(buf, lines)
@@ -44,7 +33,7 @@ function M.ensure_stacked(self, actions)
 
     keymaps.attach_diff_stacked(
         self.diff_buf.id,
-        self.config.keymaps_diff_stacked,
+        self.config.keys.diff,
         actions
     )
 

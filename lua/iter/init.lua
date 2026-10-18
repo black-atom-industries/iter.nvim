@@ -77,6 +77,13 @@ end
 function M.status()
     log.info('status command called')
 
+    if require('iter.git').root() == '' then
+        require('iter.ui.status.common').notify_warn(
+            'Not inside a git repository'
+        )
+        return
+    end
+
     -- Capture the current buffer path before opening the status window so we
     -- can pre-select the matching entry if it has changes.
     local source_buf = vim.api.nvim_get_current_buf()

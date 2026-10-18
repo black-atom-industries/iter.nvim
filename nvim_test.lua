@@ -11,17 +11,7 @@ vim.pack.add({
     { src = vim.env.HOME .. '/personal/iter.nvim' },
 })
 
-local mf = require('iter').setup({
-    preview = {
-        wrap = false,
-        show_line_numbers = true,
-        show_metadata = false,
-    },
-    status = {
-        width = 0.4,
-        min_width = 20,
-    },
-})
+local mf = require('iter').setup()
 local log = require('iter.log')
 
 vim.keymap.set('n', '<leader>gs', function()

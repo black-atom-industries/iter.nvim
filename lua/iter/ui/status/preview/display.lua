@@ -138,7 +138,7 @@ function M.show_stacked(self, lines, preview_key, title, actions)
 
     window.configure_diff_win(target_win)
     rail.set(target_win, buf.id, lines)
-    vim.wo[target_win].wrap = self.diff_wrap
+    vim.wo[target_win].wrap = false
     vim.wo[target_win].winbar = title
     self.diff_win = target_win
     self.diff_preview_key = preview_key

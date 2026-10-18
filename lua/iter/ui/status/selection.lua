@@ -137,50 +137,6 @@ function M.current_entry(self)
 end
 
 ---@param self GitStatusWindow
----@param start_row integer
----@param end_row integer
----@return GitStatusEntryItem[]
-function M.entry_items_in_range(self, start_row, end_row)
-    local items = {}
-    local first = math.min(start_row, end_row)
-    local last = math.max(start_row, end_row)
-
-    for row = first, last do
-        local line = self.lines[row]
-
-        if line ~= nil then
-            local item = M.entry_item_from_data(line.data)
-
-            if item ~= nil then
-                table.insert(items, item)
-            end
-        end
-    end
-
-    return items
-end
-
----@param self GitStatusWindow
----@param start_row integer
----@param end_row integer
----@return GitStatusEntry[]
-function M.entries_in_range(self, start_row, end_row)
-    local entries = {}
-
-    for _, item in ipairs(M.entry_items_in_range(self, start_row, end_row)) do
-        table.insert(entries, item.entry)
-    end
-
-    return entries
-end
-
----@param self GitStatusWindow
----@return GitStatusEntry[]
-function M.all_entries(self)
-    return M.entries_in_range(self, 1, #self.lines)
-end
-
----@param self GitStatusWindow
 ---@return integer?
 function M.first_entry_row(self)
     for row, line in ipairs(self.lines) do
@@ -190,24 +146,6 @@ function M.first_entry_row(self)
     end
 
     return nil
-end
-
----@param self GitStatusWindow
----@return GitStatusEntryItem[]
-function M.selected_entry_items(self)
-    local mode = vim.fn.mode()
-    local start_row
-    local end_row
-
-    if mode == 'v' or mode == 'V' or mode == '\22' then
-        start_row = vim.fn.line('v')
-        end_row = vim.fn.line('.')
-    else
-        start_row = vim.fn.getpos("'<")[2]
-        end_row = vim.fn.getpos("'>")[2]
-    end
-
-    return M.entry_items_in_range(self, start_row, end_row)
 end
 
 ---@param item GitStatusEntryItem?

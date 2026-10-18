@@ -9,10 +9,6 @@
 ---@field short_hash string
 ---@field message string
 
----@class GitPushDestination
----@field remote string
----@field ref string
-
 ---@class GitFileChangeCounts
 ---@field added integer
 ---@field modified integer
@@ -388,48 +384,6 @@ function git.upstream(root)
 end
 
 ---@param root string
----@return GitPushDestination?
----@return string?
-function git.push_destination(root)
-    local branch_out = git.run(
-        { 'symbolic-ref', '--quiet', '--short', 'HEAD' },
-        { cwd = root, ignore_error = true }
-    )
-
-    if branch_out.exit_code ~= 0 then
-        return nil, 'Cannot push from detached HEAD'
-    end
-
-    local branch = return_result(branch_out)
-    local upstream_out = git.run({
-        'for-each-ref',
-        '--format=%(upstream:remotename)%00%(upstream:remoteref)',
-        'refs/heads/' .. branch,
-    }, { cwd = root, ignore_error = true })
-
-    if upstream_out.exit_code ~= 0 or upstream_out.output == '' then
-        return nil, NO_UPSTREAM_MESSAGE()
-    end
-
-    local remote, ref_start = read_nul_field(upstream_out.output, 1)
-
-    if remote == nil or remote == '' or ref_start == nil then
-        return nil, NO_UPSTREAM_MESSAGE()
-    end
-
-    local ref = upstream_out.output:sub(ref_start):gsub('[\r\n]+$', '')
-
-    if ref == '' then
-        return nil, NO_UPSTREAM_MESSAGE()
-    end
-
-    return {
-        remote = remote,
-        ref = ref,
-    }, nil
-end
-
----@param root string
 ---@return GitCommit[]
 function git.unpushed_commits(root)
     local upstream = git.upstream(root)
@@ -645,41 +599,6 @@ function git.apply_hunk(patch, kind)
     vim.fn.delete(path)
 
     return out.exit_code == 0, return_result(out)
-end
-
----@param file string
----@return boolean
----@return string
-function git.commit_file(file)
-    ensure_git()
-
-    local out =
-        git.run({ 'commit', '--cleanup=strip', '-F', file }, root_opts())
-
-    return out.exit_code == 0, return_result(out)
-end
-
----@return string[]
-function git.commit_template()
-    ensure_git()
-
-    local out = git.run({ 'commit', '--dry-run', '--status' }, root_opts())
-    local lines = {
-        '',
-        '# Please enter the commit message for your changes. Lines starting',
-        '# with `#` will be ignored, and an empty message aborts the commit.',
-        '#',
-    }
-
-    if out.output ~= '' then
-        for _, line in ipairs(vim.split(out.output, '\n', { plain = true })) do
-            if line ~= '' then
-                table.insert(lines, '# ' .. line)
-            end
-        end
-    end
-
-    return lines
 end
 
 ---@param diff string?
@@ -949,67 +868,6 @@ function git.diff(entry, section)
     end
 
     return parse_diff(out.output)
-end
-
----@return boolean
----@return string
-function git.push()
-    ensure_git()
-
-    local root = git.root()
-
-    if root == '' then
-        return false, 'Not inside a git repository'
-    end
-
-    local destination, destination_error = git.push_destination(root)
-
-    if destination == nil then
-        return false, destination_error or 'No upstream configured'
-    end
-
-    if #git.unpushed_commits(root) == 0 then
-        return false, 'No unpushed commits to push'
-    end
-
-    local out = git.run(
-        { 'push', destination.remote, 'HEAD:' .. destination.ref },
-        { cwd = root, ignore_error = true }
-    )
-
-    return out.exit_code == 0, return_result(out)
-end
-
----@param callback GitAsyncCallback
----@param extra_args? string[]
-function git.push_async(callback, extra_args)
-    ensure_git()
-
-    local root = git.root()
-
-    if root == '' then
-        callback(false, 'Not inside a git repository')
-        return
-    end
-
-    local destination, destination_error = git.push_destination(root)
-
-    if destination == nil then
-        callback(false, destination_error or 'No upstream configured')
-        return
-    end
-
-    if #git.unpushed_commits(root) == 0 then
-        callback(false, 'No unpushed commits to push')
-        return
-    end
-
-    local cmd = { 'push', destination.remote, 'HEAD:' .. destination.ref }
-    if extra_args then
-        vim.list_extend(cmd, extra_args)
-    end
-
-    git.run_async(cmd, { cwd = root, ignore_error = true }, callback)
 end
 
 return git
