@@ -74,6 +74,8 @@ local MIN_LINES = 5
 local SEPARATOR = '│'
 local SIDES = { 'unstaged', 'staged' }
 local TITLES = { unstaged = 'Unstaged', staged = 'Staged' }
+-- Diff rows that stand for a line of the file.
+local CODE_ROWS = { context = true, del = true, add = true }
 -- Glyph and group per viewed state in a review row.
 local VIEWED_MARKS = {
     viewed = { '✓', 'IterViewed' },
@@ -574,12 +576,22 @@ function Drawer.open(opts)
     end
 
     self.handlers = self:make_handlers()
+    local view_handlers = opts.view_handlers
+
+    if not review then
+        view_handlers = vim.tbl_extend('force', view_handlers or {}, {
+            expand = function()
+                self:open_row()
+            end,
+        })
+    end
+
     -- The review's diff pane belongs to the view, so a buffer that takes its
     -- place only hides it, and the review puts it back.
     self.view = View.new({
         win = view_win,
         keys = opts.config.keys.diff,
-        handlers = opts.view_handlers,
+        handlers = view_handlers,
         name = review and 'iter://review-diff' or nil,
         bufhidden = review and 'hide' or nil,
     })
@@ -1444,19 +1456,15 @@ function Drawer:discard()
     self:refresh_after(ok, err, 'Cannot discard ' .. item.path)
 end
 
---- Close the drawer and edit the selected file in the pane. A deleted file
---- keeps the drawer open.
-function Drawer:open_file()
-    local item = self:selected()
-
-    if item == nil or item.dir then
-        return
-    end
-
-    local path = vim.fs.joinpath(self.changes.root, item.path)
+--- Close the drawer and edit `rel`, a path of the repository, in the pane,
+--- at `line` when given. A deleted file keeps the drawer open.
+---@param rel string
+---@param line? integer
+function Drawer:edit(rel, line)
+    local path = vim.fs.joinpath(self.changes.root, rel)
 
     if vim.uv.fs_stat(path) == nil then
-        util.warn(item.path .. ' is deleted')
+        util.warn(rel .. ' is deleted')
         return
     end
 
@@ -1470,8 +1478,76 @@ function Drawer:open_file()
     local ok, err = pcall(vim.cmd.edit, vim.fn.fnameescape(path))
 
     if not ok then
-        util.error(tostring(err), 'Cannot open ' .. item.path)
+        util.error(tostring(err), 'Cannot open ' .. rel)
+        return
     end
+
+    if line ~= nil then
+        vim.api.nvim_win_set_cursor(
+            0,
+            { math.max(1, math.min(line, vim.api.nvim_buf_line_count(0))), 0 }
+        )
+    end
+end
+
+--- Close the drawer and edit the selected file in the pane. A deleted file
+--- keeps the drawer open.
+function Drawer:open_file()
+    local item = self:selected()
+
+    if item == nil or item.dir then
+        return
+    end
+
+    self:edit(item.path)
+end
+
+--- In the preview: on a code row, close the drawer and edit the file at the
+--- row's worktree line; on a gap, expand it.
+function Drawer:open_row()
+    local view = self.view
+    local row = view:row()
+    local file = view.files[1]
+
+    if row == nil or file == nil then
+        return
+    end
+
+    if row.kind == 'gap' then
+        view:expand()
+    elseif CODE_ROWS[row.kind] then
+        local lnum = vim.api.nvim_win_get_cursor(view.win)[1]
+
+        self:edit(file.path, self:worktree_line(file, lnum))
+    end
+end
+
+--- The worktree line for row `lnum` of `file`, a diff of this drawer's
+--- changes. A staged line goes through the unstaged diff of the same path,
+--- when there is one.
+---@param file IterFileDiff
+---@param lnum integer
+---@return integer
+function Drawer:worktree_line(file, lnum)
+    local line = model.new_line(file, lnum)
+
+    if file.side ~= 'staged' then
+        return line
+    end
+
+    for _, item in ipairs(self.changes.unstaged) do
+        if item.path == file.path and not item.dir and item.code ~= '?' then
+            local source = git.file_diff(self.changes.root, item)
+
+            if source == nil then
+                return line
+            end
+
+            return model.old_line_to_new_line(model.build(item, source), line)
+        end
+    end
+
+    return line
 end
 
 --- Show the selected file's diff and move into the diff view.

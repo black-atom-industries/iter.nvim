@@ -520,6 +520,24 @@ T['diff']['<CR> on a gap expands it'] = function()
     eq(child.lua_get('#' .. R .. '.drawer.view.rows') > before, true)
 end
 
+T['diff']['<CR> on a code row keeps the review as it is'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    local tab = child.lua_get(R .. '.tab')
+    local before = child.lua_get('#' .. R .. '.drawer.view.rows')
+    cursor_on('a25 changed')
+
+    child.type_keys('<CR>')
+
+    eq(child.api.nvim_get_current_tabpage(), tab)
+    eq(child.lua_get(R .. '.drawer:is_open()'), true)
+    eq(child.lua_get('#' .. R .. '.drawer.view.rows'), before)
+    eq(
+        child.lua_get('vim.api.nvim_get_current_win() == ' .. R .. '.diff_win'),
+        true
+    )
+end
+
 T['diff']['q closes the tab'] = function()
     open_review()
     wait_diff('unstaged a.txt')
