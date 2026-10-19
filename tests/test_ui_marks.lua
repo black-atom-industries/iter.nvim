@@ -287,7 +287,7 @@ T['diff view']['rewraps the text when the window width changes'] = function()
                 .. R
                 .. [[.drawer.buf, 1, 2, false)[1] ]]
         ),
-        'stacked| M m.txt' .. string.rep(' ', 38) .. '[1] '
+        'stacked| M ○ m.txt' .. string.rep(' ', 36) .. '[1] '
     )
 end
 
@@ -488,11 +488,11 @@ T['counts']['the review drawer shows counts on rows and in the header'] = functi
     -- The count sits at the right end of the cell, which keeps its width.
     eq(
         vim.split(lines[2], '│')[1],
-        ' M m.txt' .. string.rep(' ', 27) .. '[6] '
+        ' M ○ m.txt' .. string.rep(' ', 25) .. '[6] '
     )
     eq(
         vim.split(lines[3], '│')[1],
-        ' M n.txt' .. string.rep(' ', 27) .. '[1] '
+        ' M ○ n.txt' .. string.rep(' ', 25) .. '[1] '
     )
 
     local title = child.lua_get([[(function()
@@ -503,7 +503,7 @@ T['counts']['the review drawer shows counts on rows and in the header'] = functi
         return text
     end)()]])
 
-    eq(title, 'HEAD main · 2 changes · 8 comments')
+    eq(title, 'HEAD main · viewed 0 of 2 · 8 comments')
 end
 
 T['counts']['the status drawer shows no counts and no marks'] = function()

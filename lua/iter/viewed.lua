@@ -1,0 +1,223 @@
+local git = require('iter.git')
+local store = require('iter.store')
+
+---@alias IterViewedState 'viewed'|'changed'|'unviewed'
+
+---@class IterViewedSummary
+---@field viewed integer
+---@field changed integer
+---@field total integer
+
+---@class IterViewedCacheEntry
+---@field stat string worktree stat the hash was taken at
+---@field hash? string
+
+local M = {}
+
+local DELETED = 'deleted'
+
+-- Hashes by root and path. A file is hashed again only when its stat
+-- (mtime, size) differs from the one its cached hash was taken at.
+---@type table<string, table<string, IterViewedCacheEntry>>
+local cache = {}
+
+---@param path string
+---@return string? stat nil when the file is missing
+local function stat_key(path)
+    local stat = vim.uv.fs_stat(path)
+
+    if stat == nil then
+        return nil
+    end
+
+    return string.format(
+        '%d.%d:%d.%d:%d:%d',
+        stat.mtime.sec,
+        stat.mtime.nsec,
+        stat.ctime.sec,
+        stat.ctime.nsec,
+        stat.ino,
+        stat.size
+    )
+end
+
+--- `git hash-object` of one file, for the paths a batch can't carry or the
+--- batch failed on.
+---@param root string
+---@param path string
+---@return string?
+local function hash_one(root, path)
+    local out = git.run(
+        { 'hash-object', '--', path },
+        { cwd = root, ignore_error = true }
+    )
+
+    if out.exit_code ~= 0 then
+        return nil
+    end
+
+    return vim.trim(out.output)
+end
+
+--- `git hash-object --stdin-paths` of every path in one process. A path
+--- with a newline can't go through stdin, and a batch where one file fails
+--- gives no hashes; those are hashed one by one.
+---@param root string
+---@param paths string[]
+---@return table<string, string>
+local function hash_batch(root, paths)
+    local hashes = {}
+    local batch = {}
+
+    for _, path in ipairs(paths) do
+        if not path:find('\n', 1, true) then
+            table.insert(batch, path)
+        end
+    end
+
+    if #batch > 0 then
+        local out = git.run({ 'hash-object', '--stdin-paths' }, {
+            cwd = root,
+            ignore_error = true,
+            stdin = table.concat(batch, '\n') .. '\n',
+        })
+        local lines = vim.split(out.output, '\n', { trimempty = true })
+
+        if out.exit_code == 0 and #lines == #batch then
+            for i, path in ipairs(batch) do
+                hashes[path] = lines[i]
+            end
+        end
+    end
+
+    for _, path in ipairs(paths) do
+        if hashes[path] == nil then
+            hashes[path] = hash_one(root, path)
+        end
+    end
+
+    return hashes
+end
+
+--- The content hash of every path in the worktree of `root`: git's
+--- `hash-object`, or `deleted` for a missing file. A path whose hash can't
+--- be taken is left out.
+---@param root string
+---@param paths string[]
+---@param fresh? boolean hash again whatever the cache holds
+---@return table<string, string>
+function M.hashes(root, paths, fresh)
+    cache[root] = cache[root] or {}
+    local entries = cache[root]
+    local hashes, stale, stats = {}, {}, {}
+
+    for _, path in ipairs(paths) do
+        local stat = stat_key(vim.fs.joinpath(root, path))
+        local entry = entries[path]
+
+        if stat == nil then
+            hashes[path] = DELETED
+            entries[path] = { stat = '', hash = DELETED }
+        elseif not fresh and entry ~= nil and entry.stat == stat then
+            hashes[path] = entry.hash
+        else
+            table.insert(stale, path)
+            stats[path] = stat
+        end
+    end
+
+    if #stale > 0 then
+        for path, hash in pairs(hash_batch(root, stale)) do
+            hashes[path] = hash
+            entries[path] = { stat = stats[path], hash = hash }
+        end
+    end
+
+    return hashes
+end
+
+---@param record? IterViewed
+---@param hash? string
+---@return IterViewedState
+local function state_of(record, hash)
+    if record == nil then
+        return 'unviewed'
+    end
+
+    return record.hash == hash and 'viewed' or 'changed'
+end
+
+--- The state of every path: viewed when its record's hash is the worktree
+--- hash, changed when it differs, unviewed without a record. The cache
+--- keeps only `paths` afterwards.
+---@param root string
+---@param paths string[]
+---@param records table<string, IterViewed>
+---@return table<string, IterViewedState>
+function M.states(root, paths, records)
+    local hashes = M.hashes(root, paths)
+    local states, kept = {}, {}
+
+    for _, path in ipairs(paths) do
+        states[path] = state_of(records[path], hashes[path])
+        kept[path] = cache[root][path]
+    end
+
+    cache[root] = kept
+
+    return states
+end
+
+--- Mark `path` viewed at its current content, or unviewed when it is
+--- viewed already. The state is the one the file has now.
+---@param root string
+---@param path string
+---@return IterViewedState? state
+---@return string? error
+function M.toggle(root, path)
+    local hash = M.hashes(root, { path }, true)[path]
+
+    if hash == nil then
+        return nil, 'Cannot hash ' .. path
+    end
+
+    local state
+
+    local _, err = store.update(root, function(data)
+        local record = data.viewed[path]
+
+        if record ~= nil and record.hash == hash then
+            data.viewed[path] = nil
+            state = 'unviewed'
+        else
+            data.viewed[path] = { hash = hash, at = os.time() }
+            state = 'viewed'
+        end
+    end)
+
+    if err ~= nil then
+        return nil, err
+    end
+
+    return state
+end
+
+---@param states table<string, IterViewedState>
+---@return IterViewedSummary
+function M.summary(states)
+    local summary = { viewed = 0, changed = 0, total = 0 }
+
+    for _, state in pairs(states) do
+        summary.total = summary.total + 1
+
+        if state == 'viewed' then
+            summary.viewed = summary.viewed + 1
+        elseif state == 'changed' then
+            summary.changed = summary.changed + 1
+        end
+    end
+
+    return summary
+end
+
+return M

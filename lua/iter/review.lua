@@ -194,6 +194,9 @@ function Review:view_handlers()
         delete = function()
             self:delete_comment()
         end,
+        viewed = function()
+            self:toggle_viewed()
+        end,
         picker = function()
             require('iter').comments()
         end,
@@ -284,6 +287,16 @@ function Review:apply_hunk(kind)
         and shown.side == file.side
     then
         cursor_to_hunk(view, row.hunk)
+    end
+end
+
+--- Toggle the viewed mark of the file the diff pane shows.
+function Review:toggle_viewed()
+    local view = self.drawer.view
+    local file = view:is_shown() and view.files[1] or nil
+
+    if file ~= nil then
+        self.drawer:toggle_viewed(file.path)
     end
 end
 

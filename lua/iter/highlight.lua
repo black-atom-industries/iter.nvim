@@ -55,6 +55,11 @@ local FOREGROUNDS = {
     },
     IterHead = { sources = { 'Identifier', 'Keyword' }, fallback = 0x61AFEF },
     IterUnpushed = { sources = { 'Constant', 'Number' }, fallback = 0xD19A66 },
+    IterViewed = { sources = { 'Added', 'String' }, fallback = 0x98C379 },
+    IterViewedChanged = {
+        sources = { 'DiagnosticWarn', 'WarningMsg', 'Constant' },
+        fallback = 0xE5C07B,
+    },
 }
 
 function M.apply()

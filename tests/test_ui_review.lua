@@ -1090,6 +1090,7 @@ T['hunks']['? in the diff pane lists its keys'] = function()
                 ' x     Delete the comment',
                 ' <CR>  Expand hidden context',
                 ' gf    Go to the line in the file',
+                ' v     Toggle viewed',
                 ' L     List comments',
                 ' q     Close',
                 ' ?     Show the keys',
@@ -1111,6 +1112,413 @@ T['hunks']['? in the diff pane lists its keys'] = function()
             true
         )
     end
+end
+
+T['viewed'] = new_set({
+    hooks = {
+        pre_case = function()
+            setup([[{ refresh = { poll_ms = 100 } }]])
+        end,
+    },
+})
+
+--- The drawer's rows as `<unstaged cell> | <staged cell>`, trimmed.
+---@return string[]
+local function drawer_rows()
+    local lines = child.lua_get(
+        [[vim.api.nvim_buf_get_lines(]] .. R .. [[.drawer.buf, 0, -1, false)]]
+    )
+
+    return vim.tbl_map(function(line)
+        local cells = vim.split(line, '│')
+
+        return vim.trim(cells[1]) .. ' | ' .. vim.trim(cells[2])
+    end, lines)
+end
+
+---@return string
+local function drawer_header()
+    return child.lua_get([[(function()
+        local text = ''
+        for _, chunk in ipairs(vim.api.nvim_win_get_config(]] .. R .. [[.drawer.win).title) do
+            text = text .. chunk[1]
+        end
+        return text
+    end)()]])
+end
+
+--- The text of the diff header's right-aligned virtual text.
+---@return string
+local function diff_header()
+    return child.lua_get([[(function()
+        local view = require('iter').current_review.drawer.view
+        local ns = vim.api.nvim_get_namespaces()['iter.diff']
+        local marks = vim.api.nvim_buf_get_extmarks(view.buf, ns, { 0, 0 }, { 0, -1 }, { details = true })
+        for _, mark in ipairs(marks) do
+            if mark[4].virt_text_pos == 'right_align' then
+                local text = ''
+                for _, chunk in ipairs(mark[4].virt_text) do
+                    text = text .. chunk[1]
+                end
+                return text
+            end
+        end
+        return ''
+    end)()]])
+end
+
+--- Wait until the diff header shows `text`.
+---@param text string
+local function wait_diff_header(text)
+    helpers.wait_until(
+        child,
+        string.format(
+            [[(function()
+                local view = %s.drawer.view
+                local ns = vim.api.nvim_get_namespaces()['iter.diff']
+                for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(view.buf, ns, { 0, 0 }, { 0, -1 }, { details = true })) do
+                    if mark[4].virt_text_pos == 'right_align' and mark[4].virt_text[1][1]:find(%q, 1, true) then
+                        return true
+                    end
+                end
+            end)()]],
+            R,
+            text
+        )
+    )
+end
+
+--- Select the unstaged row of `path` and press v in the drawer.
+---@param path string
+local function view_file(path)
+    select_item('unstaged', path)
+    wait_diff('unstaged ' .. path)
+    child.type_keys('v')
+end
+
+--- Wait until the drawer has `state` for `path`.
+---@param path string
+---@param state IterViewedState
+local function wait_state(path, state)
+    helpers.wait_until(
+        child,
+        string.format([[%s.drawer.viewed[%q] == %q]], R, path, state)
+    )
+end
+
+--- Write the outside edit of `b.txt` that keeps its staged line.
+local function edit_b_from_outside()
+    local b = numbered('b', 1, 10)
+    table.insert(b, 3, 'staged')
+    table.insert(b, 1, 'top2')
+    table.insert(b, 1, 'top1')
+    table.insert(b, 'agent edit')
+    helpers.write_file(vim.fs.joinpath(repo, 'b.txt'), b)
+end
+
+T['viewed']['rows start unviewed and the header counts files'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+
+    eq(drawer_rows(), {
+        'Unstaged (4) | Staged (1)',
+        'M ○ a.txt | M ○ b.txt',
+        'M ○ b.txt | ',
+        '? ○ c.txt | ',
+        '?   d/ | ',
+    })
+    eq(drawer_header(), 'HEAD main · viewed 0 of 3')
+    eq(diff_header(), '○ not viewed  +2 −2 ')
+end
+
+T['viewed']['v in the drawer toggles the selected file'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+
+    child.type_keys('v')
+    wait_state('a.txt', 'viewed')
+
+    eq(drawer_rows()[2], 'M ✓ a.txt | M ○ b.txt')
+    eq(drawer_header(), 'HEAD main · viewed 1 of 3')
+    eq(diff_header(), '✓ viewed  +2 −2 ')
+    eq(child.lua_get('_G.notes'), {})
+
+    child.type_keys('v')
+    wait_state('a.txt', 'unviewed')
+
+    eq(drawer_header(), 'HEAD main · viewed 0 of 3')
+    eq(diff_header(), '○ not viewed  +2 −2 ')
+end
+
+T['viewed']['v in the diff pane toggles the shown file'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.type_keys('<CR>')
+    child.type_keys('v')
+    wait_state('a.txt', 'viewed')
+
+    eq(
+        child.lua_get('vim.api.nvim_get_current_win() == ' .. R .. '.diff_win'),
+        true
+    )
+    eq(diff_header(), '✓ viewed  +2 −2 ')
+    eq(drawer_rows()[2], 'M ✓ a.txt | M ○ b.txt')
+
+    child.type_keys('v')
+    wait_state('a.txt', 'unviewed')
+    eq(diff_header(), '○ not viewed  +2 −2 ')
+end
+
+T['viewed']['a file on both sides shows the mark on both rows'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    view_file('b.txt')
+    wait_state('b.txt', 'viewed')
+
+    eq(drawer_rows()[2], 'M ○ a.txt | M ✓ b.txt')
+    eq(drawer_rows()[3], 'M ✓ b.txt | ')
+    eq(drawer_header(), 'HEAD main · viewed 1 of 3')
+end
+
+T['viewed']['staging keeps a file viewed'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.type_keys('v')
+    wait_state('a.txt', 'viewed')
+
+    child.type_keys('s')
+    helpers.wait_until(child, '#' .. R .. '.drawer.changes.staged == 2')
+    wait_state('a.txt', 'viewed')
+
+    eq(drawer_rows()[2], 'M ○ b.txt | M ✓ a.txt')
+    eq(drawer_header(), 'HEAD main · viewed 1 of 3')
+end
+
+T['viewed']['an edit from outside turns viewed into changed'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    view_file('b.txt')
+    wait_state('b.txt', 'viewed')
+    select_item('unstaged', 'a.txt')
+    wait_diff('unstaged a.txt')
+
+    edit_b_from_outside()
+    wait_state('b.txt', 'changed')
+
+    eq(drawer_rows()[3], 'M ↻ b.txt | ')
+    eq(drawer_header(), 'HEAD main · viewed 0 of 3 · ↻ 1 changed')
+
+    select_item('unstaged', 'b.txt')
+    wait_diff('unstaged b.txt')
+    wait_diff_header('↻ changed since viewed')
+
+    child.type_keys('v')
+    wait_state('b.txt', 'viewed')
+    wait_diff_header('✓ viewed')
+    eq(drawer_header(), 'HEAD main · viewed 1 of 3')
+end
+
+T['viewed']['an edit of the shown file updates the diff header'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.type_keys('v')
+    wait_state('a.txt', 'viewed')
+    wait_diff_header('✓ viewed')
+
+    local a = numbered('a', 1, 30)
+    a[3] = 'a3 changed'
+    a[25] = 'a25 changed'
+    a[30] = 'edited from outside'
+    helpers.write_file(vim.fs.joinpath(repo, 'a.txt'), a)
+
+    wait_state('a.txt', 'changed')
+    wait_diff_header('↻ changed since viewed')
+end
+
+T['viewed']['a deleted file can be viewed and comes back changed'] = function()
+    vim.fn.delete(vim.fs.joinpath(repo, 'a.txt'))
+    open_review()
+    wait_diff('unstaged a.txt')
+    eq(drawer_rows()[2], 'D ○ a.txt | M ○ b.txt')
+
+    child.type_keys('v')
+    wait_state('a.txt', 'viewed')
+    eq(
+        child.lua_get(
+            [[require('iter.store').load(vim.fn.getcwd()).viewed['a.txt'].hash]]
+        ),
+        'deleted'
+    )
+
+    helpers.write_file(vim.fs.joinpath(repo, 'a.txt'), { 'back' })
+    wait_state('a.txt', 'changed')
+end
+
+T['viewed']['files of an expanded directory take marks'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    select_item('unstaged', 'd/')
+    child.type_keys('<Tab>')
+    helpers.wait_until(child, '#' .. R .. '.drawer.rows == 6')
+
+    eq(drawer_rows()[5], '?   d/ | ')
+    eq(drawer_rows()[6], '? ○ x.txt | ')
+    eq(drawer_header(), 'HEAD main · viewed 0 of 4')
+
+    select_item('unstaged', 'd/x.txt')
+    wait_diff('unstaged d/x.txt')
+    child.type_keys('v')
+    wait_state('d/x.txt', 'viewed')
+
+    eq(drawer_rows()[6], '? ✓ x.txt | ')
+end
+
+T['viewed']['v on a directory warns'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    select_item('unstaged', 'd/')
+    child.type_keys('v')
+
+    eq(child.lua_get('_G.notes'), { { '[iter] No file selected', 3 } })
+end
+
+T['viewed']['viewed marks survive a restart'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.type_keys('v')
+    wait_state('a.txt', 'viewed')
+
+    child.stop()
+    helpers.start_child(child, repo)
+    stub_ui()
+    open_review()
+    wait_diff('unstaged a.txt')
+
+    eq(drawer_rows()[2], 'M ✓ a.txt | M ○ b.txt')
+    eq(drawer_header(), 'HEAD main · viewed 1 of 3')
+end
+
+T['viewed']['the header counts comments and outdated comments'] = function()
+    child.lua([[
+        local store = require('iter.store')
+        local root = vim.fn.getcwd()
+        for _, spec in ipairs({ { 'one', false }, { 'two', true }, { 'three', true } }) do
+            assert(store.put_comment(root, {
+                scope = 'line',
+                body = spec[1],
+                outdated = spec[2],
+                anchor = { path = 'c.txt', side = 'new', start_line = 1, end_line = 1, lines = { 'new' } },
+            }))
+        end
+        assert(store.put_comment(root, {
+            scope = 'review',
+            body = 'whole',
+            outdated = false,
+            anchor = { side = 'new' },
+        }))
+    ]])
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.type_keys('v')
+    wait_state('a.txt', 'viewed')
+    edit_b_from_outside()
+    wait_state('b.txt', 'unviewed')
+
+    eq(
+        drawer_header(),
+        'HEAD main · viewed 1 of 3 · 4 comments · 2 outdated'
+    )
+end
+
+T['viewed']['the status drawer shows no viewed marks and has no v map'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.type_keys('v')
+    wait_state('a.txt', 'viewed')
+    child.type_keys('q')
+    child.cmd('Iter')
+    helpers.wait_until(
+        child,
+        [[require('iter').drawer ~= nil and require('iter').drawer.view:is_shown()]]
+    )
+
+    local state = child.lua_get([[(function()
+        local d = require('iter').drawer
+        local title = ''
+        for _, chunk in ipairs(vim.api.nvim_win_get_config(d.win).title) do
+            title = title .. chunk[1]
+        end
+        local v_map = ''
+        for _, map in ipairs(vim.api.nvim_buf_get_keymap(d.buf, 'n')) do
+            if map.lhs == 'v' then
+                v_map = map.lhs
+            end
+        end
+        local text = table.concat(vim.api.nvim_buf_get_lines(d.buf, 0, -1, false), '\n')
+        local ns = vim.api.nvim_get_namespaces()['iter.diff']
+        local header = ''
+        for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(d.view.buf, ns, 0, -1, { details = true })) do
+            if mark[4].virt_text_pos == 'right_align' then
+                header = mark[4].virt_text[1][1]
+            end
+        end
+        return {
+            title = title,
+            v_map = v_map,
+            marked = text:find('✓', 1, true) ~= nil or text:find('○', 1, true) ~= nil or text:find('↻', 1, true) ~= nil,
+            header = header,
+        }
+    end)()]])
+
+    eq(state.title, 'HEAD main · 4 changes')
+    eq(state.v_map, '')
+    eq(state.marked, false)
+    eq(state.header, '+2 −2 ')
+end
+
+T['viewed']['polls without a change hash nothing'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.type_keys('v')
+    wait_state('a.txt', 'viewed')
+    child.lua([[
+        _G.hashes, _G.polls = 0, 0
+        local git = require('iter.git')
+        local run = git.run
+        git.run = function(args, opts)
+            if args[1] == 'hash-object' then
+                _G.hashes = _G.hashes + 1
+            end
+            return run(args, opts)
+        end
+        local Drawer = require('iter.ui.drawer')
+        local refresh = Drawer.refresh
+        Drawer.refresh = function(self, reason)
+            if reason == 'poll' then
+                _G.polls = _G.polls + 1
+            end
+            return refresh(self, reason)
+        end
+    ]])
+    helpers.wait_until(child, '_G.polls >= 3')
+
+    eq(child.lua_get('_G.hashes'), 0)
+end
+
+T['viewed']['screenshot of viewed, changed and unviewed rows'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    view_file('a.txt')
+    wait_state('a.txt', 'viewed')
+    view_file('b.txt')
+    wait_state('b.txt', 'viewed')
+    edit_b_from_outside()
+    wait_state('b.txt', 'changed')
+    select_item('unstaged', 'a.txt')
+    wait_diff('unstaged a.txt')
+    wait_diff_header('✓ viewed')
+
+    helpers.expect_screenshot(child, 'review-viewed')
 end
 
 return T

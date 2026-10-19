@@ -33,6 +33,7 @@ local words = require('iter.diff.words')
 ---@field marks IterCommentMark[] comments placed on the shown rows
 ---@field marks_width? integer text width the marks were wrapped to
 ---@field new_follows boolean a staged file's index equals its worktree
+---@field viewed? IterViewedState state the header row shows
 local View = {}
 View.__index = View
 
@@ -68,6 +69,17 @@ local ROW_HL = {
     add = 'IterDiffAdd',
     del = 'IterDiffDelete',
 }
+
+-- Header text and group per viewed state.
+local VIEWED_HEADER = {
+    viewed = { '✓ viewed', 'IterViewed' },
+    changed = { '↻ changed since viewed', 'IterViewedChanged' },
+    unviewed = { '○ not viewed', 'IterDrawerHint' },
+}
+
+-- Extmark ids of the header row, so the viewed state can redraw them alone.
+local HEADER_MARK = 1
+local HEADER_CODE_MARK = 2
 
 ---@type table<integer, IterDiffView>
 local views = {}
@@ -192,10 +204,18 @@ function View:decorate(row, file, lnum, expand_lhs)
     elseif row.kind == 'header' then
         local stat = file.binary and 'binary'
             or string.format('+%d −%d', file.stat.add, file.stat.del)
+        mark.id = HEADER_MARK
         mark.virt_text = { { stat .. ' ', 'IterDiffHunk' } }
         mark.virt_text_pos = 'right_align'
 
+        local state = VIEWED_HEADER[self.viewed]
+
+        if state ~= nil then
+            table.insert(mark.virt_text, 1, { state[1] .. '  ', state[2] })
+        end
+
         vim.api.nvim_buf_set_extmark(self.buf, NS, lnum - 1, 0, {
+            id = HEADER_CODE_MARK,
             virt_text = { { file.code .. ' ', 'IterDiffHeader' } },
             virt_text_pos = 'inline',
         })
@@ -417,6 +437,22 @@ function View:set_comments(comments)
 
     if vim.api.nvim_buf_is_valid(self.buf) then
         self:render_marks()
+    end
+end
+
+--- Show the viewed state of the file in its header row; nil shows none.
+---@param state? IterViewedState
+function View:set_viewed(state)
+    if state == self.viewed then
+        return
+    end
+
+    self.viewed = state
+
+    local file = self.files[1]
+
+    if file ~= nil and vim.api.nvim_buf_is_valid(self.buf) then
+        self:decorate(self.rows[1], file, 1, (self.keys.expand or {})[1])
     end
 end
 
