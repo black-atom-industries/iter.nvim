@@ -979,7 +979,7 @@ T['keys'][':edit in the left window opens the file in the origin tab'] = functio
             local names = {}
             for _, win in ipairs(vim.api.nvim_tabpage_list_wins(r.tab)) do
                 local name = vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(win))
-                if name:match('f%.lua$') then
+                if name:match('f%.lua$') and not name:match('^iter://') then
                     table.insert(names, name)
                 end
             end

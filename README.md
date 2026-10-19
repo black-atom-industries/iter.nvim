@@ -129,6 +129,9 @@ iter.annotate({ scope = 'review' })  -- annotate the whole review
 iter.annotations()                   -- open the review on its Annotations column
 iter.yank()                          -- copy the review as a prompt
 iter.statusline()                    -- text for your statusline
+iter.uri()                           -- address of the review's diff cursor
+iter.open_uri(uri)                   -- open an iter:// address, unescaped
+iter.tabline()                       -- a 'tabline' that labels the review tab
 ```
 
 `annotate()` works in any buffer of a file inside a git repository. Map it in
@@ -165,6 +168,66 @@ the current directory.
 ```lua
 vim.o.statusline = '%f %m%=%{v:lua.require("iter").statusline()} '
 ```
+
+### Addresses
+
+iter's buffers are named with `iter://` addresses, and `:edit` of one opens
+what it names, in the repository of the current directory:
+
+| Address | Opens |
+| ------- | ----- |
+| `iter://status` | The status drawer, or focuses it |
+| `iter://status/<path>` | The status drawer with `<path>` selected |
+| `iter://review` | The review tab, or switches to it |
+| `iter://review/<path>` | The review tab with `<path>` selected, Unstaged before Staged |
+| `iter://review/<path>#L<n>` | The same, with the cursor in the diff on the row of worktree line `n`, showing hidden context and a collapsed file |
+| `iter://review#all` | The review tab in all-files mode |
+| `iter://review#annotations` | The review tab on its Annotations column |
+| `iter://annotation` | The hidden annotation draft |
+
+A path outside the changes opens the drawer or the review with a warning.
+While the open drawer or review belongs to another repository than the
+current directory's, an address warns once and changes nothing.
+On the command line `#` stands for the alternate file, so it takes a
+backslash: `:e iter://review/a.txt\#L3`. `open_uri()` takes the address as
+it is, for mappings and saved addresses:
+
+```lua
+require('iter').open_uri('iter://review/a.txt#L3')
+```
+
+The same names label iter's windows: the drawers are `iter://status` and
+`iter://review`, the review's diff pane `iter://review/<path>` for the file it
+shows (`iter://review#all` in all-files mode, `#old` added to the left pane of
+the side by side layout), the Annotations window `iter://review#annotations`
+and the annotation float `iter://annotation`. The status drawer's diff is
+`iter://status/<path>`. `:edit` in one of these windows draws it again.
+When one of these buffers lands in another window (`:edit` of its name, `:b`),
+that window gets its previous buffer back and iter opens what the name
+addresses. iter's buffers stay unlisted, so `:bnext` passes them by. A
+session restores none of them: on `SessionLoadPost` iter wipes the
+`iter://` buffers it doesn't own and closes their windows.
+
+`uri()` returns `iter://review/<path>#L<n>` for the cursor in the review's
+diff pane, with the worktree line of the cursor row (a staged row's line in
+the worktree file), and `nil` elsewhere. Save it, for example as a bookmark,
+and open it later with `open_uri(saved)`.
+
+### Tab label
+
+The review tab sets the tab variable `iter_label` to `iter review`. Neovim's
+default tabline doesn't read it: it shows the current window's buffer name
+with its directories shortened (`i//review` for the drawer, `i//r/a.txt` for
+the diff pane, `i//r/a.txt#old` for its left pane), and counts focusable floats such as the drawer among the
+windows. `tabline()` is a 'tabline' like the default one that shows a tab's
+`iter_label` when it has one and counts only normal windows:
+
+```lua
+vim.o.tabline = "%!v:lua.require'iter'.tabline()"
+```
+
+A custom tabline can read the label with `vim.t[tab].iter_label` (or
+`gettabvar(n, 'iter_label')`).
 
 ### Events
 

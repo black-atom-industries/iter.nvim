@@ -15,7 +15,7 @@ local words = require('iter.diff.words')
 ---@field expand_step? integer
 ---@field syntax_max_lines? integer
 ---@field word_diff? boolean
----@field name? string buffer name, `iter://diff/<buf>` by default
+---@field name? string buffer name, see `set_name`
 ---@field bufhidden? string 'bufhidden' of the buffer, `wipe` by default
 ---@field on_cursor? fun() after the cursor moved in a window of the view while it is the current one
 ---@field on_layout? fun() after the layout changed
@@ -38,7 +38,7 @@ local words = require('iter.diff.words')
 ---@field document IterDocument the files shown and the line of each row
 ---@field layout IterDocLayout layout of the documents the view shows
 ---@field old? IterDiffPane the old side, in the split layout
----@field name string buffer name
+---@field name? string buffer name, see `set_name`
 ---@field files IterFileDiff[] the files of the document, in order
 ---@field saved_winopts? table<string, any> restored when the view leaves a user window
 ---@field keys table<string, string[]>
@@ -192,9 +192,12 @@ function View.new(opts)
 
     vim.bo[self.buf].bufhidden = opts.bufhidden or 'wipe'
     vim.bo[self.buf].modifiable = false
-    self.name = opts.name or ('iter://diff/' .. self.buf)
-    util.name_buf(self.buf, self.name)
     views[self.buf] = self
+    self:own(self.buf)
+
+    if opts.name ~= nil then
+        self:set_name(opts.name)
+    end
 
     self.group = vim.api.nvim_create_augroup(
         'iter.diff.view.' .. self.buf,
@@ -237,6 +240,36 @@ function View.new(opts)
     keymap.attach(self.buf, 'diff', self.keys, self.handlers)
 
     return self
+end
+
+--- Name the view's buffer `name`, and the old side's `name#old`.
+---@param name string
+function View:set_name(name)
+    self.name = name
+    util.name_buf(self.buf, name)
+
+    if self.old ~= nil then
+        util.name_buf(self.old.buf, name .. '#old')
+    end
+end
+
+--- Mark `buf`, a pane's buffer, as the view's: shown only in the view's
+--- windows, drawn again after `:edit` emptied it.
+---@param buf integer
+function View:own(buf)
+    require('iter.uri').own(buf, {
+        owns = function(win)
+            return win == self.win or (self.old ~= nil and self.old.win == win)
+        end,
+        reload = function()
+            if self:is_shown() then
+                self:show_document(self.document)
+            end
+        end,
+        prev = function()
+            return self.prev_buf
+        end,
+    })
 end
 
 --- Run `on_cursor` when the cursor moves in a window of the view that shows
@@ -297,7 +330,11 @@ function View:open_old()
     -- pane can tell that from a close.
     vim.bo[buf].bufhidden = 'hide'
     vim.bo[buf].modifiable = false
-    util.name_buf(buf, self.name .. '/old')
+    self:own(buf)
+
+    if self.name ~= nil then
+        util.name_buf(buf, self.name .. '#old')
+    end
 
     local win = vim.api.nvim_open_win(buf, false, {
         split = 'left',
@@ -364,7 +401,11 @@ function View:open_old()
                 self:show_document(self.document)
             end
 
-            if self.on_pane_replaced ~= nil then
+            -- A buffer `:edit` made for an iter address is gone already.
+            if
+                self.on_pane_replaced ~= nil
+                and vim.api.nvim_buf_is_valid(other)
+            then
                 self.on_pane_replaced(other, line)
             end
         end)

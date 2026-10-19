@@ -276,6 +276,30 @@ function M.statusline()
     )
 end
 
+--- `iter://review/<path>#L<line>` for the cursor in the review's diff
+--- pane, nil elsewhere. `:edit` of it, through `fnameescape()`, opens the
+--- review there again.
+---@return string?
+function M.uri()
+    local review = open_review()
+
+    return review and review:uri()
+end
+
+--- Open or focus what the iter URI `name` addresses, as `:edit` of it
+--- does, without escaping `#` first.
+---@param name string
+function M.open_uri(name)
+    require('iter.uri').open(name)
+end
+
+--- A 'tabline' like the default one that labels a tab with its
+--- `iter_label` tab variable, and counts only its normal windows.
+---@return string
+function M.tabline()
+    return require('iter.tabline').render()
+end
+
 ---@param opts IterOptions?
 function M.setup(opts)
     local config = require('iter.config')

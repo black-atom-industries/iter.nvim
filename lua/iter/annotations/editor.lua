@@ -38,8 +38,6 @@ local FOOTER_LABELS = { save = 'save & close' }
 ---@type IterEditorDraft?
 local draft = nil
 
-local buf_count = 0
-
 --- ` path:3 `, ` path:3-5 `, ` path:8 (old side) `, ` path (file) `,
 --- ` Review `.
 ---@param annotation table
@@ -411,17 +409,30 @@ end
 ---@param keys table<string, string[]>
 ---@return integer
 local function new_buf(lines, modified, keys)
-    buf_count = buf_count + 1
-
     local buf = vim.api.nvim_create_buf(false, true)
     vim.bo[buf].buftype = 'acwrite'
     vim.bo[buf].bufhidden = 'hide'
     vim.bo[buf].swapfile = false
-    vim.api.nvim_buf_set_name(buf, 'iter://annotation/' .. buf_count)
+    util.name_buf(buf, require('iter.uri').of('annotation'))
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
     vim.bo[buf].modified = modified
     vim.bo[buf].filetype = 'markdown'
     attach(buf, keys)
+    require('iter.uri').own(buf, {
+        owns = function(win)
+            return draft ~= nil and draft.buf == buf and draft.win == win
+        end,
+        -- `:edit` unloads the buffer first, which keeps its text.
+        reload = function()
+            if draft == nil or draft.buf ~= buf or draft.unloaded == nil then
+                return
+            end
+
+            vim.api.nvim_buf_set_lines(buf, 0, -1, false, draft.unloaded.lines)
+            vim.bo[buf].modified = draft.unloaded.modified
+            draft.unloaded = nil
+        end,
+    })
 
     return buf
 end
@@ -434,14 +445,16 @@ restore_buf = function()
     end
 
     local old = draft.buf
-    draft.buf =
-        new_buf(draft.unloaded.lines, draft.unloaded.modified, draft.keys)
-    draft.unloaded = nil
 
+    -- Gone first, so the new buffer can take its name.
     if vim.api.nvim_buf_is_valid(old) then
         vim.api.nvim_clear_autocmds({ group = GROUP, buffer = old })
         vim.api.nvim_buf_delete(old, { force = true })
     end
+
+    draft.buf =
+        new_buf(draft.unloaded.lines, draft.unloaded.modified, draft.keys)
+    draft.unloaded = nil
 end
 
 --- Open the float on an annotation: a new one, or with an `id` an edit of a

@@ -8,6 +8,7 @@ local layout = require('iter.ui.layout')
 local list = require('iter.annotations.list')
 local patch = require('iter.diff.patch')
 local store = require('iter.store')
+local uri = require('iter.uri')
 local util = require('iter.util')
 local viewed = require('iter.viewed')
 
@@ -133,6 +134,7 @@ function Review.open(opts)
 
     vim.cmd('tab sbuffer ' .. buf)
     vim.t.radar_disabled = true
+    vim.t.iter_label = 'iter review'
 
     local diff_win = vim.api.nvim_get_current_win()
     local spacer_win = vim.api.nvim_open_win(buf, false, {
@@ -883,6 +885,137 @@ function Review:focus_annotations()
     if util.is_valid_win(drawer.win) then
         vim.api.nvim_set_current_win(drawer:selection_win())
     end
+end
+
+--- The row of `file` nearest to new-side line `line`: the row of that
+--- line, else the gap that hides it, else the closest line.
+---@param file IterFileDiff
+---@param line integer
+---@return integer?
+local function row_of_line(file, line)
+    local best, distance
+
+    for index, row in ipairs(file.rows) do
+        local d
+
+        if row.gap ~= nil then
+            local first = row.gap.new
+            local last = first + row.gap.count - 1
+
+            d = line < first and first - line or math.max(0, line - last)
+        elseif row.new ~= nil then
+            d = math.abs(line - row.new)
+        end
+
+        if d ~= nil and (distance == nil or d < distance) then
+            best, distance = index, d
+        end
+    end
+
+    return best
+end
+
+--- Select the file at `path`, relative to the root, Unstaged before
+--- Staged, and show its diff; with `line` move into the diff pane at that
+--- new-side line, showing a collapsed file whole and the context around
+--- the line. A path outside the changes warns.
+---@param path string
+---@param line? integer
+function Review:reveal(path, line)
+    local drawer = self.drawer
+    local at =
+        drawer:find_path(vim.fs.joinpath(drawer.changes.root, path), 'unstaged')
+    local item = at and drawer.rows[at.lnum][at.side]
+
+    if item == nil or item.dir then
+        util.warn(path .. ' is not in the changes')
+        return
+    end
+
+    ---@cast at -nil
+    drawer:select(at.lnum, at.side)
+    drawer:preview(false)
+
+    if line == nil then
+        return
+    end
+
+    local view = drawer.view
+    local index = document.find(view.document, document.key(item))
+
+    if index == nil then
+        return
+    end
+
+    if view.document.sections[index].collapsed then
+        self.expanded[item.path] = true
+        view:expand_path(item.path)
+    end
+
+    local section = view.document.sections[index]
+
+    local file = section.file
+    local row = row_of_line(file, line)
+
+    -- Context a gap hides shows in batches until the line does.
+    while row ~= nil and file.rows[row].gap ~= nil do
+        local gap = file.rows[row].gap
+        local at_gap = document.line_of(view.document, index, row)
+
+        if at_gap == nil or line < gap.new or line >= gap.new + gap.count then
+            break
+        end
+
+        local rows, hidden = #file.rows, gap.count
+
+        view:expand(at_gap)
+
+        if
+            #file.rows == rows
+            and file.rows[row].gap == gap
+            and gap.count == hidden
+        then
+            break
+        end
+
+        row = row_of_line(file, line)
+    end
+
+    local lnum = row and document.line_of(view.document, index, row)
+
+    if lnum ~= nil then
+        vim.api.nvim_set_current_win(self.diff_win)
+        view:reveal(lnum, 'center')
+    end
+end
+
+--- `iter://review/<path>#L<line>` for the cursor of the diff pane, with the
+--- worktree line of the cursor row; nil outside the diff pane or between
+--- two files.
+---@return string?
+function Review:uri()
+    local view = self.drawer.view
+    local win = vim.api.nvim_get_current_win()
+
+    if
+        not self:is_open()
+        or not view:is_shown()
+        or (win ~= view.win and not (view.old ~= nil and view.old.win == win))
+    then
+        return nil
+    end
+
+    local section, row = view:at()
+
+    if section == nil or row == nil then
+        return nil
+    end
+
+    return uri.of(
+        'review',
+        section.file.path,
+        self.drawer:worktree_line(section.file, row)
+    )
 end
 
 --- Size the spacer split to `drawer.height` of the spacer and the diff
