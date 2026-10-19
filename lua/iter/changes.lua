@@ -9,14 +9,6 @@ local M = {}
 ---@field ahead? integer
 ---@field unstaged IterChange[] sorted by path, untracked included
 ---@field staged IterChange[]
----@field base? IterChangesBase the branch diff, nil without one
-
----@class IterChangesBase
----@field name string base as shown, e.g. `main`
----@field ref string
----@field merge_base string
----@field head string
----@field files IterChange[] side `branch`, sorted by path
 
 local conflicts = {
     AA = true,
@@ -54,14 +46,12 @@ local function change(path, side, code, orig_path)
     return item
 end
 
---- Unstaged and Staged lists from a status snapshot, and the Branch list
---- from `branch` when given. A partly staged file is on both sides, a
---- conflict once under Unstaged with code `U`, and untracked files sit among
---- the other unstaged paths.
+--- Unstaged and Staged lists from a status snapshot. A partly staged file is
+--- on both sides, a conflict once under Unstaged with code `U`, and untracked
+--- files sit among the other unstaged paths.
 ---@param snapshot GitStatusSnapshot
----@param branch? GitBranchDiff
 ---@return IterChanges
-function M.build(snapshot, branch)
+function M.build(snapshot)
     local unstaged, staged = {}, {}
 
     for _, entry in ipairs(snapshot.entries) do
@@ -95,33 +85,12 @@ function M.build(snapshot, branch)
         return a.path < b.path
     end)
 
-    local base
-
-    if branch ~= nil then
-        base = {
-            name = branch.name,
-            ref = branch.ref,
-            merge_base = branch.merge_base,
-            head = branch.head,
-            files = {},
-        }
-
-        for _, entry in ipairs(branch.entries) do
-            local item =
-                change(entry.path, 'branch', entry.code, entry.orig_path)
-            item.base = branch.merge_base
-            item.head = branch.head
-            table.insert(base.files, item)
-        end
-    end
-
     return {
         root = snapshot.root,
         branch = snapshot.detached and 'HEAD' or snapshot.branch,
         ahead = snapshot.ahead,
         unstaged = unstaged,
         staged = staged,
-        base = base,
     }
 end
 

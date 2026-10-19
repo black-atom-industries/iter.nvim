@@ -148,41 +148,6 @@ T['build()']['names a detached HEAD "HEAD" and carries ahead'] = function()
     eq(ahead.ahead, 2)
 end
 
-T['build()']['lists the branch files with their commits'] = function()
-    local result = changes.build(snapshot({}), {
-        name = 'main',
-        ref = 'refs/heads/main',
-        merge_base = 'aaa',
-        head = 'bbb',
-        entries = {
-            { code = 'A', path = 'added.txt' },
-            { code = 'R', path = 'new.txt', orig_path = 'old.txt' },
-        },
-    })
-
-    eq(result.base.name, 'main')
-    eq(result.base.merge_base, 'aaa')
-    eq(result.base.head, 'bbb')
-    eq(result.base.files, {
-        {
-            path = 'added.txt',
-            side = 'branch',
-            code = 'A',
-            base = 'aaa',
-            head = 'bbb',
-        },
-        {
-            path = 'new.txt',
-            orig_path = 'old.txt',
-            side = 'branch',
-            code = 'R',
-            base = 'aaa',
-            head = 'bbb',
-        },
-    })
-    eq(changes.build(snapshot({})).base, nil)
-end
-
 T['odd paths'] = new_set()
 
 T['odd paths']['keep spaces and non-ASCII characters'] = function()

@@ -15,21 +15,19 @@
 ---@field created_at integer
 ---@field updated_at integer
 
---- `merge-base` is the merge-base of the review's base branch and HEAD,
---- resolved when the anchor is placed, so it follows the current base.
----@alias IterAnchorBase 'HEAD'|'index'|'merge-base'
+---@alias IterAnchorBase 'HEAD'|'index'
 
 ---@alias IterAnchorVersion 'worktree'|IterAnchorBase
 
 -- Valid values of an old-side anchor's `base`.
-local BASES = { HEAD = true, index = true, ['merge-base'] = true }
+local BASES = { HEAD = true, index = true }
 
 local M = {}
 
 --- The version the deleted rows of each diff side come from, as an
 --- old-side anchor's `base`.
 ---@type table<IterSide, IterAnchorBase>
-M.OLD_BASE = { unstaged = 'index', staged = 'HEAD', branch = 'merge-base' }
+M.OLD_BASE = { unstaged = 'index', staged = 'HEAD' }
 
 ---@param line string
 ---@return string
@@ -68,7 +66,7 @@ function M.create(opts, lines)
     if opts.side == 'old' then
         vim.validate('opts.base', opts.base, function(base)
             return BASES[base] == true
-        end, "'HEAD', 'index' or 'merge-base'")
+        end, "'HEAD' or 'index'")
     end
 
     ---@type IterAnchor

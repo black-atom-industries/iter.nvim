@@ -10,7 +10,6 @@ local render = require('iter.ui.render')
 ---@class IterLayoutColumn one list of the drawer
 ---@field id string key of the column's items in a row
 ---@field title string
----@field note? string hint after the title and count, e.g. ` vs main`
 ---@field items any[]
 ---@field weight? number share of the width among the columns, 1 by default
 ---@field cell fun(line: IterRenderLine, item: any, first: integer, width: integer): string text of one item's cell, `width` cells wide, highlights added at byte column `first`
@@ -48,10 +47,6 @@ local function code_group(item)
         return 'IterConflict'
     end
 
-    if item.side == 'branch' then
-        return 'IterHead'
-    end
-
     return item.side == 'staged' and 'IterStage' or 'IterUnstage'
 end
 
@@ -75,13 +70,6 @@ end
 local function title_text(line, column, first, width)
     local text = string.format(' %s (%d)', column.title, #column.items)
     render.add_highlight(line, 'IterDrawerTitle', first, first + #text)
-
-    if column.note ~= nil then
-        local start = first + #text
-
-        text = text .. column.note
-        render.add_highlight(line, 'IterDrawerHint', start, first + #text)
-    end
 
     return pad(text, width)
 end
