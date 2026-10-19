@@ -12,7 +12,7 @@ local repo
 ---@param path string
 ---@return GitStatusEntry?
 local function entry(path)
-    for _, e in ipairs(git.status()) do
+    for _, e in ipairs(git.status_snapshot(repo).entries) do
         if e.path == path then
             return e
         end
@@ -137,50 +137,6 @@ T['path actions treat paths literally'] = function()
     eq(git.delete_untracked(repo, { '*.log' }), true)
     eq(entry('*.log'), nil)
     eq(entry('x.log').staged, '?')
-end
-
-T['file_change_counts()'] = new_set()
-
-T['file_change_counts()']['counts added and modified lines'] = function()
-    write('tracked.txt', { 'one changed', 'two', 'four' })
-
-    local counts, err = git.file_change_counts('tracked.txt')
-
-    eq(err, nil)
-    eq(counts, { added = 2, modified = 1, deleted = 0 })
-end
-
-T['file_change_counts()']['counts untracked lines as added'] = function()
-    write('untracked.txt', { 'one', 'two' })
-
-    local counts, err = git.file_change_counts('untracked.txt')
-
-    eq(err, nil)
-    eq(counts, { added = 2, modified = 0, deleted = 0 })
-end
-
-T['file_change_counts()']['counts deleted lines'] = function()
-    write('tracked.txt', { 'one', 'two', 'three' })
-    helpers.git(repo, { 'commit', '--quiet', '-am', 'three lines' })
-    write('tracked.txt', { 'one' })
-
-    local counts, err = git.file_change_counts('tracked.txt')
-
-    eq(err, nil)
-    eq(counts, { added = 0, modified = 0, deleted = 2 })
-end
-
-T['file_change_counts()']['rejects directories and the root'] = function()
-    write('tracked-dir/file.txt', { 'one' })
-    helpers.git(repo, { 'add', 'tracked-dir/file.txt' })
-    helpers.git(repo, { 'commit', '--quiet', '-m', 'track directory' })
-
-    for _, path in ipairs({ 'tracked-dir', repo }) do
-        local counts, err = git.file_change_counts(path)
-
-        eq(err, 'File change counts are not available for directories')
-        eq(counts, { added = 0, modified = 0, deleted = 0 })
-    end
 end
 
 T['ahead()'] = new_set()

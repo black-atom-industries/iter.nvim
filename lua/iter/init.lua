@@ -45,19 +45,6 @@ local function target_pane()
     return current
 end
 
----@param path string?
----@return GitFileChangeCounts
----@return string?
-function M.file_change_counts(path)
-    return require('iter.git').file_change_counts(path)
-end
-
----@return GitFileChangeCounts
----@return string?
-function M.current_file_change_counts()
-    return require('iter.git').current_file_change_counts()
-end
-
 function M.status()
     log.info('status command called')
 

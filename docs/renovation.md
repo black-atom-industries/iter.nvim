@@ -583,7 +583,7 @@ Each slice leaves `just checks` green and the plugin usable.
 - Tests: functional exact text for a fixture store; child UI for both prompt answers.
 - Removes: nothing.
 
-#### S14 · Cleanup
+#### S14 · Cleanup — done
 
 - Goal: docs and leftovers match the code.
 - Files: `README.md`, `docs/CONVENTIONS.md`, `ROADMAP.md`, `nvim_test.lua`, `iter/git.lua`, `iter/init.lua`,
@@ -610,17 +610,14 @@ Items to fold into the scope and plan.
 
 - radar.nvim's bottom panel is a float at zindex 20 and needs a configurable zindex option too. That change belongs
   to the radar.nvim repo, outside this run.
-- Agent verification: a test setup the agent can run on its own, including driving the real drawer and review flow
-  in a headless or scripted Neovim, so changes are checked without Nik.
-- Repo setup: run `nbr-repo-setup` (all topics plus release media recorded with `nbr-record-clip`) once the
-  dependencies are settled.
-- Repo setup survey:
-  - `agent-tooling`: `AGENTS.md` exists but is not lean; no `.agents/skills/`, no `.claude/skills` link;
-    `.pi/extensions/checks.ts` still names flux.nvim.
+- Repo setup: run `nbr-repo-setup` (all topics plus release media recorded with `nbr-record-clip`). Open items
+  from the survey:
+  - `agent-tooling`: `AGENTS.md` is not lean; no `.agents/skills/`, no `.claude/skills` link;
+    `.pi/extensions/checks.ts` names flux.nvim.
   - `git`: `.githooks/pre-commit` runs `just checks` but `core.hooksPath` is unset, so it never runs.
-  - `docs-structure`: `ROADMAP.md` and `handoffs/` at the root; `docs/CONVENTIONS.md` calls diffs.nvim required.
-  - `workflow`: tag-push `release.yml` and `nightly.yml`, no release-please, no `CHANGELOG.md`; `test.yml`
-    duplicates `tests.yml` and cannot pass.
-  - `dependencies`: plenary and diffs.nvim pinned in `justfile`, no upgrade skill.
-  - Release media: clips recorded with `nbr-record-clip`.
-- `nvim_test.lua` at the root loads iter from `~/personal/iter.nvim` and sets options that no longer exist.
+  - `docs-structure`: `ROADMAP.md` and `handoffs/` sit at the root.
+  - `workflow`: tag-push `release.yml` and `nightly.yml`, no release-please, no `CHANGELOG.md`.
+  - `dependencies`: mini.nvim is pinned in `justfile`; no upgrade skill.
+- `just lint` runs LuaLS without Neovim's runtime as a library, so its type checks are looser than an editor
+  setup with lazydev.
+- The dots spec loads iter from the main checkout; trying this branch means pointing its rtp at the worktree.
