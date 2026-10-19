@@ -96,6 +96,7 @@ local HINTS = {
     { 'stage', 'stage' },
     { 'unstage', 'unstage' },
     { 'discard', 'discard' },
+    { 'ignore', 'ignore' },
     { 'open', 'open' },
     { 'review', 'review' },
     { 'mode', 'all files' },
@@ -316,16 +317,7 @@ end
 local function header_chunks(drawer)
     local result = drawer.changes
     local columns = drawer:columns()
-    local paths = {}
-    local count = 0
-
-    for _, item in ipairs(drawer:ordered()) do
-        if not paths[item.path] then
-            paths[item.path] = true
-            count = count + 1
-        end
-    end
-
+    local count = #changes.paths(result)
     local total =
         string.format('%d %s', count, count == 1 and 'change' or 'changes')
     local parts = { total }
@@ -545,6 +537,7 @@ function Drawer:make_handlers()
         stage = act('stage'),
         unstage = act('unstage'),
         discard = act('discard'),
+        ignore = act('ignore'),
         close = act('close'),
         help = act('toggle_help'),
         scroll_down = function()
@@ -647,6 +640,7 @@ function Drawer:load()
     end
 
     self.changes = changes.build(snapshot)
+    require('iter.statusline').update(self.changes)
 
     if status then
         self.recent = git.recent(
@@ -828,10 +822,11 @@ function Drawer:footer()
             return hint
         end, HINTS)
 
+    -- The footer starts one cell in from the float's left edge.
     return layout.hints(
         keymap.list(self.keys_view, self.keys, self.handlers),
         hints,
-        vim.api.nvim_win_get_width(self.pane)
+        vim.api.nvim_win_get_width(self.pane) - 1
     )
 end
 
@@ -1225,7 +1220,9 @@ function Drawer:refresh(reason, target)
         return
     end
 
-    if reason == 'poll' and vim.deep_equal(before, self.changes) then
+    local same = vim.deep_equal(before, self.changes)
+
+    if reason == 'poll' and same then
         local item = self:selected()
 
         if
@@ -1256,6 +1253,13 @@ function Drawer:refresh(reason, target)
         target and self:find_path(target.path, target.side) or mark
     )
     self:preview(true)
+
+    if reason == nil or not same then
+        util.emit('IterRefresh', {
+            root = self.changes.root,
+            paths = changes.paths(self.changes),
+        })
+    end
 end
 
 --- Reload after a git action and show the selection's new diff.
@@ -1618,6 +1622,7 @@ function Drawer:stage()
 
     local ok, err = git.stage(self.changes.root, paths)
     self:refresh_after(ok, err, 'Cannot stage ' .. item.path)
+    self:staged(ok, 'stage', paths)
 end
 
 function Drawer:unstage()
@@ -1650,6 +1655,7 @@ function Drawer:unstage()
 
     local ok, err = git.unstage(self.changes.root, paths)
     self:refresh_after(ok, err, 'Cannot unstage ' .. item.path)
+    self:staged(ok, 'unstage', paths)
 end
 
 --- Discard the unstaged changes of the selection after a confirm that names
@@ -1696,6 +1702,51 @@ function Drawer:discard()
     end
 
     self:refresh_after(ok, err, 'Cannot discard ' .. item.path)
+    self:staged(ok, 'discard', paths)
+end
+
+--- Fire `User IterStage` for `paths` when the `action` on them succeeded.
+---@param ok boolean
+---@param action 'stage'|'unstage'|'discard'
+---@param paths string[]
+function Drawer:staged(ok, action, paths)
+    if ok then
+        util.emit('IterStage', {
+            root = self.changes.root,
+            paths = paths,
+            action = action,
+        })
+    end
+end
+
+--- Append the selected untracked path to the `.gitignore` at the root,
+--- anchored to the root, after a confirm.
+function Drawer:ignore()
+    local item = self:selected()
+
+    if item == nil then
+        return
+    end
+
+    if item.code ~= '?' then
+        util.warn('Only untracked files can be ignored')
+        return
+    end
+
+    if
+        self.config.options.confirm.ignore
+        and vim.fn.confirm(
+                'Append ' .. item.path .. ' to .gitignore?',
+                '&Yes\n&No',
+                2
+            )
+            ~= 1
+    then
+        return
+    end
+
+    local ok, err = git.ignore(self.changes.root, item.path)
+    self:refresh_after(ok, err, 'Cannot write .gitignore')
 end
 
 --- Close the drawer and edit `rel`, a path of the repository, in the pane,

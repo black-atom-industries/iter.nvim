@@ -3,7 +3,7 @@
 ---@field diff { expand_step: integer, syntax_max_lines: integer, word_diff: boolean }
 ---@field export { intro: string }
 ---@field refresh { poll_ms: integer }
----@field confirm { discard: boolean }
+---@field confirm { discard: boolean, ignore: boolean }
 ---@field icons { annotation: string }
 ---@field debug boolean
 
@@ -38,7 +38,7 @@ local SCHEMA = {
     },
     export = { intro = 'string' },
     refresh = { poll_ms = 'integer' },
-    confirm = { discard = 'boolean' },
+    confirm = { discard = 'boolean', ignore = 'boolean' },
     icons = { annotation = 'string' },
 }
 

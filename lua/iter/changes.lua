@@ -94,6 +94,24 @@ function M.build(snapshot)
     }
 end
 
+--- The changed paths, Unstaged then Staged, a path on both sides once.
+---@param result IterChanges
+---@return string[]
+function M.paths(result)
+    local paths, seen = {}, {}
+
+    for _, list in ipairs({ result.unstaged, result.staged }) do
+        for _, item in ipairs(list) do
+            if not seen[item.path] then
+                seen[item.path] = true
+                table.insert(paths, item.path)
+            end
+        end
+    end
+
+    return paths
+end
+
 --- Cut `path` from the left to at most `width` display cells, marking the cut
 --- with `…`.
 ---@param path string

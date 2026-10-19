@@ -489,6 +489,8 @@ function Review:apply_change(kind)
         return
     end
 
+    self.drawer:staged(true, kind, { file.path })
+
     if not visual and view:is_shown() then
         cursor_to_hunk(view, section.key, row.hunk)
     end

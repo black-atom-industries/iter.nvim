@@ -20,6 +20,7 @@
 
 ---@class IterConfirmOptions
 ---@field discard? boolean Ask before discarding changes
+---@field ignore? boolean Ask before adding a path to .gitignore
 
 ---@class IterIconsOptions
 ---@field annotation? string Shown before each annotation, '' for none
@@ -66,6 +67,7 @@ M.options = {
     },
     confirm = {
         discard = true,
+        ignore = true,
     },
     icons = {
         annotation = '󰆉',
@@ -85,6 +87,7 @@ M.keys = {
         stage = 's',
         unstage = 'u',
         discard = 'd',
+        ignore = 'I',
         review = 'r',
         close = 'q',
         help = '?',
@@ -98,6 +101,7 @@ M.keys = {
         stage = 's',
         unstage = 'u',
         discard = 'd',
+        ignore = 'I',
         viewed = 'v',
         mode = 'm',
         split = '|',

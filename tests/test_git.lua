@@ -431,6 +431,55 @@ end
 
 T['run()'] = new_set()
 
+T['ignore()'] = new_set()
+
+---@return string
+local function gitignore()
+    local file = assert(io.open(vim.fs.joinpath(repo, '.gitignore'), 'rb'))
+    local content = file:read('*a')
+
+    file:close()
+
+    return content
+end
+
+T['ignore()']['creates .gitignore with the path anchored to the root'] = function()
+    write('dir/new.txt', { 'x' })
+
+    eq(git.ignore(repo, 'dir/new.txt'), true)
+    eq(gitignore(), '/dir/new.txt\n')
+    eq(entry('dir/new.txt'), nil)
+end
+
+T['ignore()']['ends a last line without a newline first'] = function()
+    local file = assert(io.open(vim.fs.joinpath(repo, '.gitignore'), 'wb'))
+    file:write('*.log')
+    file:close()
+    write('b.txt', { 'b' })
+
+    eq(git.ignore(repo, 'b.txt'), true)
+    eq(gitignore(), '*.log\n/b.txt\n')
+    eq(entry('b.txt'), nil)
+end
+
+T['ignore()']['a directory stays a directory pattern'] = function()
+    write('nested/a.txt', { 'a' })
+
+    eq(git.ignore(repo, 'nested/'), true)
+    eq(gitignore(), '/nested/\n')
+    eq(entry('nested/a.txt'), nil)
+end
+
+T['ignore()']['escapes glob characters so only the path matches'] = function()
+    write('a[1].txt', { 'x' })
+    write('a1.txt', { 'y' })
+
+    eq(git.ignore(repo, 'a[1].txt'), true)
+    eq(gitignore(), '/a\\[1].txt\n')
+    eq(entry('a[1].txt'), nil)
+    eq(entry('a1.txt') ~= nil, true)
+end
+
 T['run()']['logs the command, not its output'] = function()
     local log_path = require('iter.log').path()
     eq(vim.startswith(log_path, vim.env.ITER_TEST_HOME), true)

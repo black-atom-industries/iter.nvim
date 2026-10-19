@@ -18,6 +18,9 @@ A Git staging and code review tool for Neovim.
 - **Stage, unstage, discard** whole files. New files are listed one by one
   among the others. Discard asks first, names the paths, and never touches the
   index or ignored files.
+- **Renames** read `old → new` on one row.
+- **Ignore** an untracked file or directory: `I` appends it to the
+  `.gitignore` at the root, after a confirm.
 - **Review tab:** a tab page for the whole review. One file's diff at a time,
   or every file in one scroll, with hunk jumps, file jumps and `gf` to the
   source line.
@@ -104,6 +107,15 @@ In the drawer, `j` and `k` move through the files and the window above shows
 the diff. `<CR>` opens the file there and closes the drawer. `r` opens the
 review tab. `?` lists the keys of the current view.
 
+A rename or copy reads `old → new` on one row. In a narrow column the old
+path is cut first, so the end of the new path stays in view.
+
+`I` on an untracked row appends its path to the `.gitignore` at the
+repository root, after a confirm (`confirm.ignore`), and creates the file when
+it is missing. The line is anchored to the root: `untracked.txt` becomes
+`/untracked.txt`, a nested repository `nested/` becomes `/nested/`. Glob
+characters in the path are escaped, so the line ignores that path alone.
+
 ## Lua API
 
 ```lua
@@ -136,8 +148,41 @@ and the annotation. It then asks once whether to clear the annotations.
 (`review` when no file is shown), `review · all files · <file> · <i>/<n>`
 for the file under the cursor when the pane shows all files, with `split`
 after the mode while the diff shows side by side
-(`review · split · <file> · <i>/<n>`), and `''` elsewhere. While an
-annotation draft is hidden it adds `draft annotation`.
+(`review · split · <file> · <i>/<n>`). Elsewhere inside a repository it
+returns `<branch> · <n>`, such as `feat/renovation · 7`, with n the changed
+files (unstaged, staged and untracked, a file on both sides once), and `''`
+outside one. While an annotation draft is hidden it adds `draft annotation`.
+
+`statusline()` never runs git. The branch and count come from a cache per
+repository. Every drawer and review refresh updates it, and so does a
+background read of the status on `BufWritePost`, `FocusGained`,
+`DirChanged`, `ShellCmdPost` and `TermClose` (after `setup()`), one read per
+burst of events. The first call for a repository reads its status the same
+way; until it is done the part is `''`. The statusline redraws when the part
+changes. The repository is the one of the statusline window's file, else of
+the current directory.
+
+```lua
+vim.o.statusline = '%f %m%=%{v:lua.require("iter").statusline()} '
+```
+
+### Events
+
+iter fires `User` autocmds with the repository root and the paths in `data`:
+
+| Pattern | When | `data` |
+| ------- | ---- | ------ |
+| `IterRefresh` | A drawer or review refresh read the status, after an action or when the files changed | `root`, `paths`: every changed path, a file on both sides once |
+| `IterStage` | A stage, unstage or discard succeeded, of files, hunks or lines | `root`, `paths`: the paths acted on, `action`: `'stage'`, `'unstage'` or `'discard'` |
+
+```lua
+vim.api.nvim_create_autocmd('User', {
+    pattern = 'IterStage',
+    callback = function(args)
+        print(args.data.action, table.concat(args.data.paths, ' '))
+    end,
+})
+```
 
 ## Configuration
 
@@ -165,6 +210,7 @@ require('iter').setup({
     },
     confirm = {
         discard = true,   -- ask before discarding changes
+        ignore = true,    -- ask before adding a path to .gitignore
     },
     icons = {
         annotation = '󰆉',  -- before each annotation, '' for none
@@ -200,6 +246,7 @@ The status drawer (`drawer`):
 | `s` | `stage` | Stage or unstage the file |
 | `u` | `unstage` | Unstage the file |
 | `d` | `discard` | Discard changes in the file |
+| `I` | `ignore` | Add the untracked file to .gitignore |
 | `r` | `review` | Open the review tab |
 | `q` | `close` | Close |
 | `?` | `help` | Show the keys |
@@ -220,6 +267,7 @@ The drawer of the review tab (`review_drawer`):
 | `s` | `stage` | Stage or unstage the file |
 | `u` | `unstage` | Unstage the file |
 | `d` | `discard` | Discard changes in the file |
+| `I` | `ignore` | Add the untracked file to .gitignore |
 | `v` | `viewed` | Toggle viewed |
 | `m` | `mode` | Toggle one file or all files |
 | `\|` | `split` | Show the diff side by side |

@@ -392,6 +392,36 @@ T['file_cell()']['colors untracked and conflicted codes'] = function()
     eq(spans(line, 'IterConflict'), { { 1, 2 } })
 end
 
+---@param width integer
+---@param line? IterRenderLine
+---@return string
+local function rename_cell(width, line)
+    local item = change('diff/parser.lua', 'staged', 'R')
+    item.orig_path = 'ui/diff/parser.lua'
+
+    return layout.file_cell(
+        line or { text = '', highlights = {} },
+        item,
+        0,
+        width
+    )
+end
+
+T['file_cell()']['a rename reads old → new with a dimmed arrow'] = function()
+    local line = { text = '', highlights = {} }
+
+    eq(rename_cell(40, line), ' R ui/diff/parser.lua → diff/parser.lua ')
+    eq(spans(line, 'IterDrawerHint'), { { 21, 21 + #' → ' } })
+end
+
+T['file_cell()']['a rename cuts the old path first, then drops it'] = function()
+    eq(rename_cell(30), ' R …rser.lua → diff/parser.lua')
+    eq(rename_cell(23), ' R …a → diff/parser.lua')
+    eq(rename_cell(22), ' R diff/parser.lua    ')
+    eq(rename_cell(20), ' R diff/parser.lua  ')
+    eq(rename_cell(12), ' R …rser.lua')
+end
+
 T['file_cell()']['a decor adds the mark slot and the count'] = function()
     local line = { text = '', highlights = {} }
     local text = layout.file_cell(

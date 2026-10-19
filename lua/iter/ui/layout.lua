@@ -394,9 +394,38 @@ function M.message(text)
     return { lines = { line }, rows = { {} }, cells = { {} } }
 end
 
+local ARROW = ' → '
+
+--- The path of a file row in `width` cells: a rename or copy reads
+--- `old → new`. Too wide, the old path is cut from the left first; when not
+--- even `…` and one cell of it fit, it goes with the arrow, and the new path
+--- is cut from the left.
+---@param item IterChange
+---@param width integer
+---@return string text
+---@return integer? arrow byte column of the arrow in `text`
+local function path_text(item, width)
+    local old = item.orig_path
+
+    if old == nil then
+        return changes.truncate(item.path, width)
+    end
+
+    local room = width - vim.fn.strdisplaywidth(ARROW .. item.path)
+
+    if room < 2 then
+        return changes.truncate(item.path, width)
+    end
+
+    local head = changes.truncate(old, room)
+
+    return head .. ARROW .. item.path, #head
+end
+
 --- The cell of a file row: code letter and path, the path cut from the
---- left to fit. With `decor`, a mark slot follows the code letter, blank
---- without a mark, and a count above 0 ends the cell.
+--- left to fit, a rename or copy as `old → new`. With `decor`, a mark slot
+--- follows the code letter, blank without a mark, and a count above 0 ends
+--- the cell.
 ---@param line IterRenderLine
 ---@param item IterChange
 ---@param first integer byte column the cell starts at
@@ -414,15 +443,19 @@ function M.file_cell(line, item, first, width, decor)
 
     local count = decor and decor.count or 0
     local suffix = count > 0 and string.format(' [%d] ', count) or ''
-    local text = prefix
-        .. changes.truncate(
-            item.path,
-            width
-                - vim.fn.strdisplaywidth(prefix)
-                - vim.fn.strdisplaywidth(suffix)
-        )
+    local path, arrow = path_text(
+        item,
+        width - vim.fn.strdisplaywidth(prefix) - vim.fn.strdisplaywidth(suffix)
+    )
+    local text = prefix .. path
 
     render.add_highlight(line, code_group(item), first + #indent)
+
+    if arrow ~= nil then
+        local start = first + #prefix + arrow
+
+        render.add_highlight(line, 'IterDrawerHint', start, start + #ARROW)
+    end
 
     if mark then
         local start = first + #indent + #item.code + 1
