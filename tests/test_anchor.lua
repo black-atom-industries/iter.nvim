@@ -71,6 +71,23 @@ T['create()']['needs a base on the old side'] = function()
     end)
 end
 
+T['create()']['takes the merge-base as an old-side base'] = function()
+    local a = anchor.create({
+        path = 'f.lua',
+        side = 'old',
+        base = 'merge-base',
+        start_line = 2,
+        end_line = 2,
+    }, { 'kept', 'removed on the branch' })
+
+    eq(a.base, 'merge-base')
+    eq(a.lines, { 'removed on the branch' })
+    MiniTest.expect.error(function()
+        ---@diagnostic disable-next-line: assign-type-mismatch
+        anchor.create({ path = 'f.lua', side = 'old', base = 'main' })
+    end, "'HEAD', 'index' or 'merge%-base'")
+end
+
 T['create()']['takes a file anchor without lines'] = function()
     eq(
         anchor.create({ path = 'f.lua', side = 'new' }),
@@ -212,6 +229,7 @@ T['version()']['names the version an anchor follows'] = function()
     eq(anchor.version({ side = 'new' }), 'worktree')
     eq(anchor.version({ side = 'old', base = 'HEAD' }), 'HEAD')
     eq(anchor.version({ side = 'old', base = 'index' }), 'index')
+    eq(anchor.version({ side = 'old', base = 'merge-base' }), 'merge-base')
 end
 
 return T

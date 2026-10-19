@@ -253,6 +253,209 @@ function git.ahead(root)
     return tonumber(return_result(out))
 end
 
+---@class GitBranchEntry
+---@field code string name-status letter: M A D R C T
+---@field path string
+---@field orig_path? string renames and copies
+
+---@class GitBranchDiff
+---@field name string base as shown, e.g. `main` for `refs/remotes/origin/main`
+---@field ref string full ref of the base, or the configured string when it names no ref
+---@field merge_base string sha of `merge-base(base, HEAD)`
+---@field head string sha of HEAD
+---@field entries GitBranchEntry[] files of `merge_base..HEAD`, sorted by path
+
+---@param root string
+---@param rev string
+---@return string? sha nil when `rev` names no commit
+local function commit_sha(root, rev)
+    local out = git.run({
+        'rev-parse',
+        '--verify',
+        '--quiet',
+        '--end-of-options',
+        rev .. '^{commit}',
+    }, { cwd = root, ignore_error = true })
+
+    return out.exit_code == 0 and return_result(out) or nil
+end
+
+--- The ref the branch diff compares with: `configured` when given, else the
+--- target of `refs/remotes/origin/HEAD`, else a local `main`, else `master`.
+---@param root string
+---@param configured? string
+---@return string? ref full ref, or `configured` as given when it names no ref
+function git.base_ref(root, configured)
+    if configured ~= nil then
+        if commit_sha(root, configured) == nil then
+            return nil
+        end
+
+        local out = git.run(
+            { 'rev-parse', '--symbolic-full-name', configured },
+            { cwd = root, ignore_error = true }
+        )
+        local full = out.exit_code == 0 and return_result(out) or ''
+
+        return full ~= '' and full or configured
+    end
+
+    local origin = git.run(
+        { 'symbolic-ref', '--quiet', 'refs/remotes/origin/HEAD' },
+        { cwd = root, ignore_error = true }
+    )
+
+    if origin.exit_code == 0 then
+        local ref = return_result(origin)
+
+        if commit_sha(root, ref) ~= nil then
+            return ref
+        end
+    end
+
+    for _, ref in ipairs({ 'refs/heads/main', 'refs/heads/master' }) do
+        if commit_sha(root, ref) ~= nil then
+            return ref
+        end
+    end
+
+    return nil
+end
+
+--- `ref` without its `refs/heads/`, `refs/remotes/<remote>/` or
+--- `refs/tags/` prefix; a full sha cut to 7 characters.
+---@param ref string
+---@return string
+local function short_name(ref)
+    if ref:match('^%x+$') and #ref == 40 then
+        return ref:sub(1, 7)
+    end
+
+    return (
+        ref:gsub('^refs/heads/', '')
+            :gsub('^refs/remotes/[^/]+/', '')
+            :gsub('^refs/tags/', '')
+    )
+end
+
+---@param output string `git diff --name-status -z` output
+---@return GitBranchEntry[]
+local function parse_name_status(output)
+    local entries = {}
+    local index = 1
+
+    while index <= #output do
+        ---@type string?, integer?
+        local status, after = read_nul_field(output, index)
+        local code = status and status:sub(1, 1)
+        ---@type string?, string?
+        local orig_path, path
+
+        if after ~= nil and (code == 'R' or code == 'C') then
+            orig_path, after = read_nul_field(output, after)
+        end
+
+        if after ~= nil then
+            path, after = read_nul_field(output, after)
+        end
+
+        if path == nil or after == nil then
+            break
+        end
+
+        table.insert(
+            entries,
+            { code = code, path = path, orig_path = orig_path }
+        )
+        index = after --[[@as integer]]
+    end
+
+    table.sort(entries, function(a, b)
+        return a.path < b.path
+    end)
+
+    return entries
+end
+
+--- Shas of `revs` on one line each, from one `git rev-parse`; nil when one
+--- of them names nothing. Cheap enough to tell per poll whether HEAD or the
+--- base moved. `revs` are HEAD and refs from `git.base_ref`, never raw input.
+---@param root string
+---@param revs string[]
+---@return string?
+function git.rev_parse(root, revs)
+    local out = git.run(
+        vim.list_extend({ 'rev-parse' }, revs),
+        { cwd = root, ignore_error = true }
+    )
+
+    return out.exit_code == 0 and return_result(out) or nil
+end
+
+--- The files HEAD changed since it left `ref`, see `git.branch_diff`.
+---@param root string
+---@param ref string a base from `git.base_ref`
+---@return GitBranchDiff?
+function git.branch_diff_from(root, ref)
+    local head = commit_sha(root, 'HEAD')
+
+    if head == nil then
+        return nil
+    end
+
+    local out = git.run(
+        { 'merge-base', ref, head },
+        { cwd = root, ignore_error = true }
+    )
+
+    if out.exit_code ~= 0 then
+        return nil
+    end
+
+    local merge_base = return_result(out)
+
+    if merge_base == head then
+        return nil
+    end
+
+    local diff = git.run({
+        'diff',
+        '--name-status',
+        '-z',
+        '-M',
+        '--no-color',
+        '--no-ext-diff',
+        merge_base,
+        head,
+    }, { cwd = root, ignore_error = true })
+
+    if diff.exit_code ~= 0 then
+        return nil
+    end
+
+    return {
+        name = short_name(ref),
+        ref = ref,
+        merge_base = merge_base,
+        head = head,
+        entries = parse_name_status(diff.output),
+    }
+end
+
+--- The files HEAD changed since it left the base branch:
+--- `merge-base(base, HEAD)..HEAD`. The base is `configured` when given, else
+--- the target of `refs/remotes/origin/HEAD`, else a local `main`, else
+--- `master`. Nil when no base resolves, HEAD has no commit, or HEAD is on the
+--- base (the merge-base is HEAD).
+---@param root string
+---@param configured? string `diff.base`
+---@return GitBranchDiff?
+function git.branch_diff(root, configured)
+    local ref = git.base_ref(root, configured)
+
+    return ref and git.branch_diff_from(root, ref) or nil
+end
+
 ---Absolute paths of files in the git dir, e.g. `index` and `HEAD`. In a
 ---linked worktree they live under the common dir's `worktrees/<name>/`.
 ---@param root string
@@ -387,20 +590,20 @@ function git.delete_untracked(root, paths)
     return run_on_paths(root, { 'clean', '--force' }, paths)
 end
 
---- Apply `patch` (lines, carriage returns kept) to the index for `stage`,
---- reversed for `unstage`. With `opts.check` git only checks that it
+--- Apply the patch `lines` (carriage returns kept) to the index for
+--- `stage`, reversed for `unstage`. With `opts.check` git only checks that it
 --- applies. The whitespace flags pin what lands to the patch text, whatever
 --- the config.
 ---@param root string
----@param patch string[]
+---@param lines string[]
 ---@param kind 'stage'|'unstage'
 ---@param opts? { check?: boolean }
 ---@return boolean
 ---@return string
-function git.apply_patch(root, patch, kind, opts)
+function git.apply_patch(root, lines, kind, opts)
     ensure_git()
 
-    if #patch == 0 then
+    if #lines == 0 then
         return false, 'No patch to apply'
     end
 
@@ -428,7 +631,7 @@ function git.apply_patch(root, patch, kind, opts)
     local out = git.run(args, {
         cwd = root,
         ignore_error = true,
-        stdin = table.concat(patch, '\n') .. '\n',
+        stdin = table.concat(lines, '\n') .. '\n',
     })
 
     return out.exit_code == 0, return_result(out)
@@ -524,7 +727,7 @@ end
 --- The diff text of one file, see `git.file_diff`. With `bytes` the lines
 --- keep their carriage returns.
 ---@param root string
----@param change { path: string, orig_path?: string, side: IterSide, code: string }
+---@param change { path: string, orig_path?: string, side: IterSide, code: string, base?: string, head?: string }
 ---@param bytes boolean
 ---@return string[]?
 ---@return string? error
@@ -534,6 +737,12 @@ local function diff_text(root, change, bytes)
 
     if untracked then
         args = { 'diff', '--no-index' }
+    elseif change.side == 'branch' then
+        args = { 'diff', '-M', assert(change.base) }
+
+        if change.head ~= nil then
+            table.insert(args, change.head)
+        end
     elseif change.side == 'staged' then
         args = { 'diff', '--cached', '-M' }
     else
@@ -566,7 +775,7 @@ end
 --- The diff text of `git.file_diff` byte for byte: lines of a CRLF file
 --- keep their carriage returns, as a patch for `git apply` needs them.
 ---@param root string
----@param change { path: string, orig_path?: string, side: IterSide, code: string }
+---@param change { path: string, orig_path?: string, side: IterSide, code: string, base?: string, head?: string }
 ---@return string[]?
 ---@return string? error
 function git.file_diff_bytes(root, change)
@@ -576,10 +785,12 @@ function git.file_diff_bytes(root, change)
 end
 
 --- Diff text and both full versions of one file. Unstaged compares the index
---- with the worktree, staged compares HEAD with the index. Untracked and
---- added files have an empty old side, deleted files an empty new side.
+--- with the worktree, staged compares HEAD with the index, branch compares
+--- `change.base` with `change.head`, or with the worktree without a head.
+--- Untracked and added files have an empty old side, deleted files an empty
+--- new side.
 ---@param root string
----@param change { path: string, orig_path?: string, side: IterSide, code: string }
+---@param change IterDiffChange
 ---@return IterFileSource?
 ---@return string? error
 function git.file_diff(root, change)
@@ -606,6 +817,8 @@ function git.file_diff(root, change)
 
     if untracked or change.code == 'A' then
         old_lines = {}
+    elseif change.side == 'branch' then
+        old_lines = blob_lines(root, change.base .. ':' .. old_path)
     elseif change.side == 'staged' then
         old_lines = blob_lines(root, 'HEAD:' .. old_path)
     else
@@ -614,6 +827,8 @@ function git.file_diff(root, change)
 
     if change.code == 'D' then
         new_lines = {}
+    elseif change.side == 'branch' and change.head ~= nil then
+        new_lines = blob_lines(root, change.head .. ':' .. change.path)
     elseif change.side == 'staged' then
         new_lines = blob_lines(root, ':' .. change.path)
     else

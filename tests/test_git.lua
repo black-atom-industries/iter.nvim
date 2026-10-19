@@ -239,6 +239,163 @@ T['git_paths()']['is nil outside a repository'] = function()
     eq(paths, nil)
 end
 
+T['branch_diff()'] = new_set()
+
+--- Commit `lines` to `path` in `dir`.
+---@param dir string
+---@param path string
+---@param lines string[]
+---@param message string
+local function commit(dir, path, lines, message)
+    helpers.write_file(vim.fs.joinpath(dir, path), lines)
+    helpers.git(dir, { 'add', '--all' })
+    helpers.git(dir, { 'commit', '--quiet', '-m', message })
+end
+
+---@param diff? GitBranchDiff
+---@return string[]
+local function entry_lines(diff)
+    return vim.tbl_map(function(e)
+        return e.code
+            .. ' '
+            .. (e.orig_path and (e.orig_path .. ' -> ') or '')
+            .. e.path
+    end, diff and diff.entries or {})
+end
+
+T['branch_diff()']['is nil on the base branch itself'] = function()
+    eq(git.branch_diff(repo), nil)
+end
+
+T['branch_diff()']['compares a branch with a local main'] = function()
+    commit(repo, 'gone.txt', { 'g' }, 'gone')
+    commit(repo, 'old.txt', { 'one', 'two', 'three', 'four' }, 'old')
+    local fork = vim.trim(helpers.git(repo, { 'rev-parse', 'HEAD' }))
+
+    helpers.git(repo, { 'checkout', '--quiet', '-b', 'feat' })
+    commit(repo, 'tracked.txt', { 'one', 'two' }, 'modify')
+    commit(repo, 'added.txt', { 'a' }, 'add')
+    helpers.git(repo, { 'rm', '--quiet', 'gone.txt' })
+    helpers.git(repo, { 'mv', 'old.txt', 'moved.txt' })
+    helpers.git(repo, { 'commit', '--quiet', '-m', 'move' })
+    -- Commits on main after the fork stay out of the diff.
+    helpers.git(repo, { 'checkout', '--quiet', 'main' })
+    commit(repo, 'main-only.txt', { 'm' }, 'main only')
+    helpers.git(repo, { 'checkout', '--quiet', 'feat' })
+    -- Uncommitted changes stay out too.
+    write('tracked.txt', { 'dirty' })
+
+    local diff = assert(git.branch_diff(repo))
+
+    eq(diff.name, 'main')
+    eq(diff.ref, 'refs/heads/main')
+    eq(diff.merge_base, fork)
+    eq(diff.head, vim.trim(helpers.git(repo, { 'rev-parse', 'HEAD' })))
+    eq(entry_lines(diff), {
+        'A added.txt',
+        'D gone.txt',
+        'R old.txt -> moved.txt',
+        'M tracked.txt',
+    })
+end
+
+T['branch_diff()']['falls back to master'] = function()
+    helpers.git(repo, { 'branch', '-m', 'main', 'master' })
+    helpers.git(repo, { 'checkout', '--quiet', '-b', 'feat' })
+    commit(repo, 'tracked.txt', { 'two' }, 'change')
+
+    local diff = assert(git.branch_diff(repo))
+
+    eq(diff.name, 'master')
+    eq(entry_lines(diff), { 'M tracked.txt' })
+end
+
+T['branch_diff()']['is nil without a base branch'] = function()
+    helpers.git(repo, { 'branch', '-m', 'main', 'trunk' })
+    helpers.git(repo, { 'checkout', '--quiet', '-b', 'feat' })
+    commit(repo, 'tracked.txt', { 'two' }, 'change')
+
+    eq(git.branch_diff(repo), nil)
+end
+
+T['branch_diff()']['is nil before the first commit'] = function()
+    local empty = vim.fn.resolve(vim.fn.tempname())
+    vim.fn.mkdir(empty, 'p')
+    helpers.git(empty, { 'init', '--quiet', '-b', 'feat' })
+
+    local diff = git.branch_diff(empty)
+    helpers.cleanup(empty)
+
+    eq(diff, nil)
+end
+
+T['branch_diff()']['prefers the default branch of origin'] = function()
+    local upstream = helpers.create_repo({ ['up.txt'] = { 'up' } })
+    helpers.git(upstream, { 'branch', '-m', 'main', 'trunk' })
+
+    local clone = vim.fn.resolve(vim.fn.tempname())
+    helpers.git(upstream, { 'clone', '--quiet', upstream, clone })
+    helpers.git(clone, { 'checkout', '--quiet', '-b', 'feat' })
+    commit(clone, 'feat.txt', { 'f' }, 'feat')
+    -- A local main at HEAD would hide the column if it were the base.
+    helpers.git(clone, { 'branch', 'main' })
+
+    local diff = git.branch_diff(clone)
+    helpers.cleanup(upstream)
+    helpers.cleanup(clone)
+
+    eq(diff and diff.name, 'trunk')
+    eq(diff and diff.ref, 'refs/remotes/origin/trunk')
+    eq(entry_lines(diff), { 'A feat.txt' })
+end
+
+T['branch_diff()']['takes the configured base over the others'] = function()
+    helpers.git(repo, { 'checkout', '--quiet', '-b', 'release' })
+    commit(repo, 'release.txt', { 'r' }, 'release')
+    helpers.git(repo, { 'checkout', '--quiet', '-b', 'feat' })
+    commit(repo, 'feat.txt', { 'f' }, 'feat')
+
+    local diff = assert(git.branch_diff(repo, 'release'))
+
+    eq(diff.name, 'release')
+    eq(diff.ref, 'refs/heads/release')
+    eq(entry_lines(diff), { 'A feat.txt' })
+    eq(entry_lines(git.branch_diff(repo)), { 'A feat.txt', 'A release.txt' })
+    eq(git.branch_diff(repo, 'no-such-branch'), nil)
+
+    local sha = vim.trim(helpers.git(repo, { 'rev-parse', 'release' }))
+    eq(assert(git.branch_diff(repo, sha)).name, sha:sub(1, 7))
+end
+
+T['branch_diff()']['is nil when the configured base is HEAD'] = function()
+    helpers.git(repo, { 'checkout', '--quiet', '-b', 'feat' })
+    commit(repo, 'feat.txt', { 'f' }, 'feat')
+
+    eq(git.branch_diff(repo, 'feat'), nil)
+end
+
+T['file_diff()'] = new_set()
+
+T['file_diff()']['reads a branch file from the merge-base and HEAD'] = function()
+    helpers.git(repo, { 'checkout', '--quiet', '-b', 'feat' })
+    commit(repo, 'tracked.txt', { 'one', 'two' }, 'two')
+    write('tracked.txt', { 'one', 'two', 'dirty' })
+
+    local diff = assert(git.branch_diff(repo))
+    local source = assert(git.file_diff(repo, {
+        path = 'tracked.txt',
+        side = 'branch',
+        code = 'M',
+        base = diff.merge_base,
+        head = diff.head,
+    }))
+
+    eq(source.old_lines, { 'one' })
+    eq(source.new_lines, { 'one', 'two' })
+    eq(vim.tbl_contains(source.raw, '+two'), true)
+    eq(vim.tbl_contains(source.raw, '+dirty'), false)
+end
+
 T['run()'] = new_set()
 
 T['run()']['logs the command, not its output'] = function()

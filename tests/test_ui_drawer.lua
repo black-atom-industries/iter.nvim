@@ -1019,8 +1019,8 @@ T['help']['? lists the current keys and closes on q, ? and <Esc>'] = function()
             ' ?      Show the keys',
             ' <C-d>  Scroll the diff down',
             ' <C-u>  Scroll the diff up',
-            ' h      Select the Unstaged column',
-            ' l      Select the Staged column',
+            ' h      Select the column to the left',
+            ' l      Select the column to the right',
         })
         eq(
             child.lua_get(

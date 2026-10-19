@@ -1,12 +1,14 @@
 local parser = require('iter.ui.diff.parser')
 
----@alias IterSide 'unstaged'|'staged'
+---@alias IterSide 'unstaged'|'staged'|'branch'
 
 ---@class IterDiffChange
 ---@field path string
 ---@field orig_path? string
 ---@field side IterSide
 ---@field code string porcelain letter for this side: M A D R C U ?
+---@field base? string branch: commit of the old side, the merge-base
+---@field head? string branch: commit of the new side; the worktree when nil
 
 ---@class IterDiffGap
 ---@field old integer first hidden old line
@@ -31,11 +33,12 @@ local parser = require('iter.ui.diff.parser')
 ---@field raw string[] git diff text, source for patches
 ---@field hunks IterDiffHunk[]
 ---@field rows IterDiffRow[]
----@field old_lines? string[] unstaged: index; staged: HEAD
----@field new_lines? string[] unstaged: worktree; staged: index
+---@field old_lines? string[] unstaged: index; staged: HEAD; branch: merge-base
+---@field new_lines? string[] unstaged: worktree; staged: index; branch: HEAD
 ---@field binary boolean
 ---@field stat { add: integer, del: integer }
 ---@field mode? { old: string, new: string } file mode change
+---@field range? string compared commits the header names, e.g. `main…HEAD`
 
 local M = {}
 

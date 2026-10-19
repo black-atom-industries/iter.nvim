@@ -16,6 +16,8 @@ A Git staging and code review tool for Neovim.
   index or ignored files.
 - **Review tab:** a tab page for the whole review. One file's diff at a time
   with hunk jumps, file jumps and `gf` to the source line.
+- **Branch diff** in the review: a Branch column with the files the branch
+  changed since it left its base branch, `merge-base(base, HEAD)..HEAD`.
 - **Hunk staging** in the review diff, applied exactly like `git add -p`.
 - **Diff rendering** in Lua: treesitter syntax, word emphasis on changed lines,
   old and new line numbers, hidden context that expands on demand.
@@ -85,6 +87,17 @@ In the drawer, `j` and `k` move through the files and the window above shows
 the diff. `<CR>` opens the file there and closes the drawer. `r` opens the
 review tab. `?` lists the keys of the current view.
 
+The review drawer adds a third column, `Branch (<n>) vs <base>`, with the files
+of `merge-base(base, HEAD)..HEAD`, and its header names the base as
+`base <name>`. The base is `diff.base` when set, else the branch
+`refs/remotes/origin/HEAD` points to, else a local `main`, else `master`; a ref
+of a remote shows without its remote, so `origin/main` reads `main`. Without a
+base, or on the base branch itself, the column is hidden. A Branch file's diff
+compares the merge-base with HEAD and its header reads `main…HEAD · +3 −2`,
+with the count of its annotations. Annotations, viewed marks and the export
+work there as anywhere; `s`, `u` and `d` only say that branch files are
+committed, and the key hint line leaves them out.
+
 ## Lua API
 
 ```lua
@@ -113,8 +126,9 @@ end, { desc = 'Annotate' })
 `export.intro` text, then a numbered list with `file:line`, the annotated code
 and the annotation. It then asks once whether to clear the annotations.
 
-`statusline()` returns `review · <file> · <i>/<n>` inside the review tab
-(`review` when no file is shown) and `''` elsewhere. While an annotation draft is hidden it adds `draft annotation`.
+`statusline()` returns `review · <file> · <i>/<n>` inside the review tab,
+`review · branch · <file> · <i>/<n>` for a Branch file (`review` when no file is
+shown), and `''` elsewhere. While an annotation draft is hidden it adds `draft annotation`.
 
 ## Configuration
 
@@ -131,6 +145,7 @@ require('iter').setup({
         expand_step = 20,          -- hidden context lines shown per expand
         syntax_max_lines = 20000,  -- longer files get no syntax highlighting
         word_diff = true,          -- highlight the changed words in changed lines
+        base = nil,                -- ref the Branch column compares HEAD with, e.g. 'origin/develop'
     },
     export = {
         intro = 'I reviewed your changes and have these annotations.\n'
@@ -178,8 +193,8 @@ The status drawer (`drawer`):
 | `?` | `help` | Show the keys |
 | `<C-d>` | `scroll_down` | Scroll the diff down |
 | `<C-u>` | `scroll_up` | Scroll the diff up |
-| `h` | `column_left` | Select the Unstaged column |
-| `l` | `column_right` | Select the Staged column |
+| `h` | `column_left` | Select the column to the left |
+| `l` | `column_right` | Select the column to the right |
 
 In the diff above the status drawer, the `expand` key (`<CR>`) on a code line
 opens the file at that line and closes the drawer; on hidden context it
@@ -201,8 +216,8 @@ The drawer of the review tab (`review_drawer`):
 | `?` | `help` | Show the keys |
 | `<C-d>` | `scroll_down` | Scroll the diff down |
 | `<C-u>` | `scroll_up` | Scroll the diff up |
-| `h` | `column_left` | Select the Unstaged column |
-| `l` | `column_right` | Select the Staged column |
+| `h` | `column_left` | Select the column to the left |
+| `l` | `column_right` | Select the column to the right |
 
 The diff pane of the review tab (`diff`):
 
@@ -227,6 +242,10 @@ The diff pane of the review tab (`diff`):
 | `y` | `yank` | Copy the review |
 | `q` | `close` | Close |
 | `?` | `help` | Show the keys |
+
+`h` and `l` skip a column without files. In a Branch file's diff, `s` and `u`
+do nothing but say so, and `gf` lands on the worktree line, past uncommitted
+lines above it.
 
 In visual mode, `s` and `u` take only the added and deleted lines of the
 selection, which may span several hunks, as `git add -p` does when you edit a

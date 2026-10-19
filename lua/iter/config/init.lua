@@ -1,6 +1,6 @@
 ---@class IterResolvedOptions
 ---@field drawer { height: number, zindex: integer, breakpoint: integer }
----@field diff { expand_step: integer, syntax_max_lines: integer, word_diff: boolean }
+---@field diff { expand_step: integer, syntax_max_lines: integer, word_diff: boolean, base?: string }
 ---@field export { intro: string }
 ---@field refresh { poll_ms: integer }
 ---@field confirm { discard: boolean }
@@ -29,6 +29,7 @@ local SCHEMA = {
         expand_step = 'integer',
         syntax_max_lines = 'integer',
         word_diff = 'boolean',
+        base = 'string',
     },
     export = { intro = 'string' },
     refresh = { poll_ms = 'integer' },
@@ -148,6 +149,10 @@ local function validate(opts)
 
     if height ~= nil and (height <= 0 or height > 1) then
         error('opts.drawer.height must be a number between 0 and 1', 0)
+    end
+
+    if opts.diff ~= nil and opts.diff.base == '' then
+        error('opts.diff.base must be a ref, not empty', 0)
     end
 
     if keys ~= nil then

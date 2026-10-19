@@ -10,6 +10,7 @@
 ---@field expand_step? integer Hidden context lines revealed per expand
 ---@field syntax_max_lines? integer Files longer than this get no syntax
 ---@field word_diff? boolean
+---@field base? string Ref the review's Branch column compares HEAD with; nil picks origin's default branch, else main, else master
 
 ---@class IterExportOptions
 ---@field intro? string Text placed before the exported annotations

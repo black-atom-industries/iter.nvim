@@ -14,9 +14,6 @@ local M = {}
 local BAR = '▎ '
 local OUTDATED = 'outdated · '
 
--- The old version of each view side, as an old-side anchor's `base`.
-local OLD_BASE = { unstaged = 'index', staged = 'HEAD' }
-
 --- The row showing line `line` of the old (`field` 'old') or new version:
 --- a row with that number, else the gap hiding it.
 ---@param rows IterDiffRow[]
@@ -81,7 +78,7 @@ local function locate(file, annotation, new_follows)
         return header_of(file.rows), false
     end
 
-    if old and (a.base or 'HEAD') ~= OLD_BASE[file.side] then
+    if old and (a.base or 'HEAD') ~= anchor.OLD_BASE[file.side] then
         return nil, false
     end
 
@@ -118,8 +115,10 @@ end
 --- view's own version and sit below their last line, deleted-line annotations
 --- go to the view whose old version is their base, file annotations sit below
 --- the header, and a line hidden in a gap puts its annotation below the gap.
---- A staged view outdates new-side annotations only with `opts.new_follows`,
---- set when the file has no unstaged changes, so the index is the worktree.
+--- A staged or branch view outdates new-side annotations only with
+--- `opts.new_follows`, set when its new version is the worktree file: a
+--- staged file without unstaged changes, a branch file without uncommitted
+--- ones.
 ---@param file IterFileDiff
 ---@param annotations IterAnnotation[]
 ---@param opts? { new_follows?: boolean }
