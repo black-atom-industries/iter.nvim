@@ -419,7 +419,10 @@ T['column']['l reaches the column, the progress row is skipped'] = function()
 
     child.type_keys('h')
     eq(child.lua_get(R .. '.drawer.column'), 'unstaged')
-    eq(footer(), 's stage  u unstage  d discard  <CR> open  ? help')
+    eq(
+        footer(),
+        's stage  u unstage  d discard  <CR> open  m all files  ? help'
+    )
 end
 
 T['column']['h and l select again the file and the annotation they left'] = function()

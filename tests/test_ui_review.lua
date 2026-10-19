@@ -1429,6 +1429,7 @@ T['hunks']['? in the diff pane lists its keys'] = function()
                 ' <CR>  Expand hidden context',
                 ' gf    Go to the line in the file',
                 ' v     Toggle viewed',
+                ' m     Toggle one file or all files',
                 ' y     Copy the review',
                 ' q     Close',
                 ' ?     Show the keys',
@@ -1583,7 +1584,7 @@ T['viewed']['rows start unviewed, the header counts files, the column shows prog
     })
     eq(drawer_header(), 'HEAD main 4 files')
     eq(progress(), 'viewed □□□□□□□□ 0 of 4')
-    eq(diff_header(), '○ not viewed  +2 −2 ')
+    eq(diff_header(), '○ not viewed  +2 −2 · 0 annotations ')
 end
 
 T['viewed']['v in the drawer toggles the selected file'] = function()
@@ -1596,14 +1597,14 @@ T['viewed']['v in the drawer toggles the selected file'] = function()
     eq(drawer_rows()[2], 'M ✓ a.txt')
     eq(drawer_rows()[8], 'M ○ b.txt')
     eq(progress(), 'viewed ■■□□□□□□ 1 of 4')
-    eq(diff_header(), '✓ viewed  +2 −2 ')
+    eq(diff_header(), '✓ viewed  +2 −2 · 0 annotations ')
     eq(child.lua_get('_G.notes'), {})
 
     child.type_keys('v')
     wait_state('a.txt', 'unviewed')
 
     eq(progress(), 'viewed □□□□□□□□ 0 of 4')
-    eq(diff_header(), '○ not viewed  +2 −2 ')
+    eq(diff_header(), '○ not viewed  +2 −2 · 0 annotations ')
 end
 
 T['viewed']['v in the diff pane toggles the shown file'] = function()
@@ -1617,13 +1618,13 @@ T['viewed']['v in the diff pane toggles the shown file'] = function()
         child.lua_get('vim.api.nvim_get_current_win() == ' .. R .. '.diff_win'),
         true
     )
-    eq(diff_header(), '✓ viewed  +2 −2 ')
+    eq(diff_header(), '✓ viewed  +2 −2 · 0 annotations ')
     eq(drawer_rows()[2], 'M ✓ a.txt')
     eq(drawer_rows()[8], 'M ○ b.txt')
 
     child.type_keys('v')
     wait_state('a.txt', 'unviewed')
-    eq(diff_header(), '○ not viewed  +2 −2 ')
+    eq(diff_header(), '○ not viewed  +2 −2 · 0 annotations ')
 end
 
 T['viewed']['a file on both sides shows the mark on both rows'] = function()

@@ -387,6 +387,48 @@ T['git_paths()']['is nil outside a repository'] = function()
     eq(paths, nil)
 end
 
+T['diff_ids()'] = new_set()
+
+T['diff_ids()']['keys each side of a changed file by side and path'] = function()
+    write('tracked.txt', { 'one', 'two' })
+    git.stage(repo, { 'tracked.txt' })
+    write('tracked.txt', { 'one', 'two', 'three' })
+    write('new.txt', { 'new' })
+
+    local ids = assert(git.diff_ids(repo))
+    local keys = vim.tbl_keys(ids)
+    table.sort(keys)
+
+    eq(keys, { 'staged\0tracked.txt', 'unstaged\0tracked.txt' })
+
+    local index = vim.trim(helpers.git(repo, { 'rev-parse', ':tracked.txt' }))
+
+    eq(ids['staged\0tracked.txt']:find(index, 1, true) ~= nil, true)
+    eq(ids['unstaged\0tracked.txt']:find(index, 1, true) ~= nil, true)
+end
+
+T['diff_ids()']['an index change changes the entry, a worktree edit does not'] = function()
+    write('tracked.txt', { 'one', 'two' })
+
+    local before = assert(git.diff_ids(repo))['unstaged\0tracked.txt']
+
+    write('tracked.txt', { 'one', 'two', 'three' })
+    eq(assert(git.diff_ids(repo))['unstaged\0tracked.txt'], before)
+
+    helpers.git(repo, { 'add', 'tracked.txt' })
+    write('tracked.txt', { 'one' })
+    eq(assert(git.diff_ids(repo))['unstaged\0tracked.txt'] ~= before, true)
+end
+
+T['diff_ids()']['keys a staged rename by its new path'] = function()
+    helpers.git(repo, { 'mv', 'tracked.txt', 'moved.txt' })
+
+    local ids = assert(git.diff_ids(repo))
+
+    eq(vim.tbl_keys(ids), { 'staged\0moved.txt' })
+    eq(ids['staged\0moved.txt']:find('tracked.txt', 1, true) ~= nil, true)
+end
+
 T['run()'] = new_set()
 
 T['run()']['logs the command, not its output'] = function()

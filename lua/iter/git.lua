@@ -629,6 +629,55 @@ function git.file_diff(root, change)
     }
 end
 
+--- The modes and blob ids each changed file's diff compares, by
+--- `side \0 path`: the index against the worktree for unstaged files (the
+--- worktree's id stays zero), HEAD against the index for staged ones. Two
+--- reads with the same entry, and for an unstaged file the same worktree
+--- stat, give the same diff text. Untracked files are left out.
+---@param root string
+---@return table<string, string>?
+function git.diff_ids(root)
+    ensure_git()
+
+    local ids = {}
+    local reads = {
+        unstaged = { 'diff', '--no-renames' },
+        staged = { 'diff', '--cached', '-M' },
+    }
+
+    for side, args in pairs(reads) do
+        vim.list_extend(args, { '--raw', '-z', '--no-abbrev', '--no-color' })
+
+        local out = git.run(args, { cwd = root, ignore_error = true })
+
+        if out.exit_code ~= 0 then
+            return nil
+        end
+
+        local fields = vim.split(out.output, '\0', { plain = true })
+        local index = 1
+
+        while fields[index] ~= nil and fields[index] ~= '' do
+            local info, path = fields[index], fields[index + 1]
+            local status = info:match('(%a)%d*$')
+
+            index = index + 2
+
+            if status == 'R' or status == 'C' then
+                info = info .. '\0' .. path
+                path = fields[index]
+                index = index + 1
+            end
+
+            if path ~= nil then
+                ids[side .. '\0' .. path] = info
+            end
+        end
+    end
+
+    return ids
+end
+
 ---@class GitCommit
 ---@field sha string abbreviated
 ---@field subject string
