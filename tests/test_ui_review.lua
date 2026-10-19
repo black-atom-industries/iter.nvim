@@ -455,6 +455,32 @@ T['drawer']['q closes the tab and returns to the tab it came from'] = function()
     eq(child.lua_get(R), vim.NIL)
 end
 
+T['drawer']['<C-d> and <C-u> scroll the diff, the drawer keeps focus'] = function()
+    local lines = {}
+    for i = 1, 100 do
+        lines[i] = 'line ' .. i
+    end
+    helpers.write_file(vim.fs.joinpath(repo, 'a.txt'), lines)
+
+    open_review()
+    select_item('unstaged', 'a.txt')
+    wait_diff('unstaged a.txt')
+
+    local topline = [[vim.fn.getwininfo(]] .. R .. [[.diff_win)[1].topline]]
+    local drawer_focused = [[vim.api.nvim_get_current_win() == ]]
+        .. R
+        .. [[.drawer.win]]
+    local before = child.lua_get(topline)
+
+    child.type_keys('<C-d>')
+    eq(child.lua_get(topline) > before, true)
+    eq(child.lua_get(drawer_focused), true)
+
+    child.type_keys('<C-u>')
+    eq(child.lua_get(topline), before)
+    eq(child.lua_get(drawer_focused), true)
+end
+
 T['diff'] = new_set()
 
 T['diff'][']c and [c jump between hunks'] = function()

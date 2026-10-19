@@ -626,6 +626,24 @@ function Drawer.open(opts)
     return self
 end
 
+--- Scroll the diff above the drawer by half a page, or by the count, and
+--- leave the cursor and focus in the drawer.
+---@param keys string `<C-d>` or `<C-u>`
+function Drawer:scroll(keys)
+    local win = self.view.win
+
+    if not util.is_valid_win(win) then
+        return
+    end
+
+    local count = vim.v.count > 0 and vim.v.count or ''
+    local cmd = 'normal! ' .. count .. vim.keycode(keys)
+
+    vim.api.nvim_win_call(win, function()
+        vim.cmd(cmd)
+    end)
+end
+
 ---@return table<string, fun()>
 function Drawer:make_handlers()
     local function act(method)
@@ -642,6 +660,12 @@ function Drawer:make_handlers()
         discard = act('discard'),
         close = act('close'),
         help = act('toggle_help'),
+        scroll_down = function()
+            self:scroll('<C-d>')
+        end,
+        scroll_up = function()
+            self:scroll('<C-u>')
+        end,
         column_left = function()
             self:switch('unstaged')
         end,
