@@ -142,6 +142,17 @@ local function refresh_review()
     end
 end
 
+--- Draw the stored comments again in the review and in the buffers shown.
+local function refresh_comments()
+    refresh_review()
+
+    for _, win in ipairs(vim.api.nvim_list_wins()) do
+        require('iter.comments.marks').render_buffer(
+            vim.api.nvim_win_get_buf(win)
+        )
+    end
+end
+
 --- Open the comment float: on the cursor line or the visual range of a
 --- repo file's buffer, or with `scope = 'review'` on the whole review.
 ---@param opts? { scope?: 'review' }
@@ -196,6 +207,136 @@ function M.comment(opts)
             marks.render_buffer(buf)
             refresh_review()
         end,
+    })
+end
+
+---@return IterReview?
+local function open_review()
+    local review = M.current_review
+
+    return review ~= nil and review:is_open() and review or nil
+end
+
+--- Edit `path`, an absolute file path, at `line` in the current window.
+---@param path string
+---@param line integer
+local function edit_at(path, line)
+    local ok, err = pcall(vim.cmd.edit, vim.fn.fnameescape(path))
+
+    if not ok then
+        util.error(tostring(err), 'Cannot open ' .. vim.fs.basename(path))
+        return
+    end
+
+    vim.api.nvim_win_set_cursor(
+        0,
+        { math.min(line, vim.api.nvim_buf_line_count(0)), 0 }
+    )
+end
+
+--- Go to `comment`: in the review when it is open and has the comment's
+--- file among its changes, else in the file's buffer. A deleted line only
+--- exists in the review, which opens for it.
+---@param root string
+---@param comment IterComment
+local function jump_to_comment(root, comment)
+    local a = comment.anchor
+    local review = open_review()
+
+    if comment.scope == 'review' then
+        if review ~= nil then
+            review:focus()
+        else
+            M.review()
+        end
+
+        return
+    end
+
+    local path = vim.fs.joinpath(root, a.path)
+
+    if a.side == 'old' then
+        if review == nil then
+            M.review({
+                path = path,
+                side = a.base == 'HEAD' and 'staged' or 'unstaged',
+            })
+            review = open_review()
+        end
+
+        if review == nil or not review:show_comment(comment) then
+            util.warn(a.path .. ' has no changes to show the old side of')
+        end
+
+        return
+    end
+
+    if review ~= nil and review:show_comment(comment) then
+        return
+    end
+
+    if vim.uv.fs_stat(path) == nil then
+        util.warn(a.path .. ' is deleted')
+        return
+    end
+
+    local picker = require('iter.comments.picker')
+    local line = picker.line_of(comment, picker.file_lines(root, a.path))
+
+    if review ~= nil then
+        review:open_file(path, line)
+    else
+        edit_at(path, line)
+    end
+end
+
+--- Open the comment picker over the comments of the repository: the open
+--- review's, else the current directory's.
+function M.comments()
+    local review = open_review()
+    local root = review and review.drawer.changes.root
+        or require('iter.git').root()
+
+    if root == '' then
+        util.warn('Not inside a git repository')
+        return
+    end
+
+    local order = {}
+
+    if review ~= nil then
+        for _, item in ipairs(review.drawer:files()) do
+            table.insert(order, item.path)
+
+            if item.orig_path ~= nil then
+                table.insert(order, item.orig_path)
+            end
+        end
+    end
+
+    local pane = vim.api.nvim_get_current_win()
+
+    if review ~= nil and vim.api.nvim_get_current_tabpage() == review.tab then
+        pane = review.diff_win
+    end
+
+    require('iter.comments.picker').open({
+        root = root,
+        config = M.config,
+        order = order,
+        jump = function(comment)
+            jump_to_comment(root, comment)
+        end,
+        edit = function(comment)
+            require('iter.comments.editor').open({
+                root = root,
+                comment = comment,
+                config = M.config,
+                pane = pane,
+                on_save = refresh_comments,
+            })
+        end,
+        on_change = refresh_comments,
     })
 end
 
