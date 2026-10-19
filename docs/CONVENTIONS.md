@@ -29,9 +29,10 @@ the review straight to an agent pane.
 - Annotations are `virt_lines` extmarks: line and range annotations under their last row, deleted-line annotations on
   the del row, file annotations on the header row.
 - Anchors resolve with one function: an exact block match at the stored lines first, then the match nearest to them.
-  The new side follows the worktree file, the old side its `base` (HEAD or index). `outdated` is set when the anchor
-  isn't found and cleared when it is found again. A diff view places annotations against its own version without
-  persisting.
+  The new side follows the worktree file, the old side its `base`: `HEAD`, `index`, or `merge-base`, the merge-base
+  of the review's base branch and HEAD, resolved when the annotation is placed, so it follows the current base.
+  `outdated` is set when the anchor isn't found and cleared when it is found again. A diff view places annotations
+  against its own version without persisting.
 - Store: `stdpath('data')/iter/<main worktree basename>-<first 8 hex of sha256 of git-common-dir>/<branch>.json`, so
   linked worktrees share it. The branch name has `%` and `/` percent-encoded; a detached HEAD uses `HEAD.json`.
   Writes go through a temp file renamed into place, after re-reading and merging by annotation id.
@@ -51,6 +52,12 @@ the review straight to an agent pane.
   drawers share; the review tab plugs in its viewed marks, annotation counts, header summary and spacer sizing as the
   drawer's extras (`IterDrawerExtras`).
 - Viewed marks and annotation counts show only in the review drawer.
+- The Branch column lists `git diff --name-status -M <merge-base> HEAD`, where the merge-base is that of the base
+  branch (`diff.base`, else the target of `refs/remotes/origin/HEAD`, else `main`, else `master`) and HEAD. It shows
+  only in the review drawer and only when a base resolves and HEAD is not on it. Its diff compares the merge-base with
+  HEAD, a new-side line maps to the worktree through the diff of HEAD with the worktree, and nothing in it stages,
+  unstages or discards. The changes snapshot carries the merge-base and HEAD shas, so the poll re-renders after a
+  commit.
 
 ## Project shape
 

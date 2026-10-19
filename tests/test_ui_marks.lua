@@ -961,7 +961,7 @@ end
 
 T['place()'] = new_set()
 
----@param side 'unstaged'|'staged'
+---@param side IterSide
 ---@return IterFileDiff
 local function file_diff(side)
     return {
@@ -1033,6 +1033,68 @@ T['place()']['puts old-side annotations only in the view of their base'] = funct
 
     eq(summary(marks.place(file_diff('unstaged'), annotations)), { '4 index' })
     eq(summary(marks.place(file_diff('staged'), annotations)), { '4 head' })
+end
+
+T['place()']['puts merge-base annotations only in the branch view'] = function()
+    local annotations = {
+        annotation('merge-base', {
+            side = 'old',
+            base = 'merge-base',
+            start_line = 2,
+            end_line = 2,
+            lines = { 'b' },
+        }),
+        annotation('lost', {
+            side = 'old',
+            base = 'merge-base',
+            start_line = 2,
+            end_line = 2,
+            lines = { 'not in the merge-base' },
+        }),
+        annotation('head', {
+            side = 'old',
+            base = 'HEAD',
+            start_line = 2,
+            end_line = 2,
+            lines = { 'b' },
+        }),
+    }
+
+    eq(
+        summary(marks.place(file_diff('branch'), annotations)),
+        { '4 merge-base', '4 lost (outdated)' }
+    )
+    eq(summary(marks.place(file_diff('unstaged'), annotations)), {})
+    eq(summary(marks.place(file_diff('staged'), annotations)), { '4 head' })
+end
+
+T['place()']['outdates new-side annotations in the branch view only when HEAD is the worktree'] = function()
+    local annotations = {
+        annotation('found', {
+            side = 'new',
+            start_line = 2,
+            end_line = 2,
+            lines = { 'B' },
+        }),
+        annotation('gone', {
+            side = 'new',
+            start_line = 3,
+            end_line = 3,
+            lines = { 'gone' },
+        }),
+    }
+
+    eq(summary(marks.place(file_diff('branch'), annotations)), { '5 found' })
+    eq(
+        summary(
+            marks.place(
+                file_diff('branch'),
+                annotations,
+                { new_follows = true }
+            )
+        ),
+        { '5 found', '6 gone (outdated)' }
+    )
 end
 
 T['place()']['outdates new-side annotations only against the worktree'] = function()

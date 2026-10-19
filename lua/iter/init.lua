@@ -223,7 +223,8 @@ local function jump_to_annotation(root, annotation)
         if review == nil then
             M.review({
                 path = path,
-                side = a.base == 'HEAD' and 'staged' or 'unstaged',
+                side = ({ HEAD = 'staged', ['merge-base'] = 'branch' })[a.base]
+                    or 'unstaged',
             })
             review = open_review()
         end

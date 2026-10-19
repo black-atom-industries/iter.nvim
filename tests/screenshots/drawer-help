@@ -14,8 +14,8 @@
 13|~                │ ?      Show the keys                      │                  
 14|~                │ <C-d>  Scroll the diff down               │                  
 15|~                │ <C-u>  Scroll the diff up                 │                  
-16|~                │ h      Select the Unstaged column         │                  
-17| HEAD main · 6 ch│ l      Select the Staged column           │                  
+16|~                │ h      Select the column to the left      │                  
+17| HEAD main · 6 ch│ l      Select the column to the right     │                  
 18| Unstaged (5)    ╰───────────────────────────────────────────╯                  
 19| D deleted.txt                         │ M staged.txt                           
 20| M modified.txt                        │                                        

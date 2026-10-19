@@ -1,7 +1,7 @@
 ---@class IterAnchor
 ---@field path? string           nil for scope 'review'
 ---@field side 'old'|'new'
----@field base? 'HEAD'|'index'   old side: version the deleted line came from
+---@field base? IterAnchorBase   old side: version the deleted line came from
 ---@field start_line? integer
 ---@field end_line? integer
 ---@field lines? string[]        anchored text, for re-anchoring and export
@@ -15,9 +15,21 @@
 ---@field created_at integer
 ---@field updated_at integer
 
----@alias IterAnchorVersion 'worktree'|'HEAD'|'index'
+--- `merge-base` is the merge-base of the review's base branch and HEAD,
+--- resolved when the anchor is placed, so it follows the current base.
+---@alias IterAnchorBase 'HEAD'|'index'|'merge-base'
+
+---@alias IterAnchorVersion 'worktree'|IterAnchorBase
+
+-- Valid values of an old-side anchor's `base`.
+local BASES = { HEAD = true, index = true, ['merge-base'] = true }
 
 local M = {}
+
+--- The version the deleted rows of each diff side come from, as an
+--- old-side anchor's `base`.
+---@type table<IterSide, IterAnchorBase>
+M.OLD_BASE = { unstaged = 'index', staged = 'HEAD', branch = 'merge-base' }
 
 ---@param line string
 ---@return string
@@ -44,7 +56,7 @@ end
 --- An anchor on `lines`, the version the anchor follows: the worktree file
 --- for the new side, `base` for the old side. Without `start_line` it is a
 --- file or review anchor and carries no text.
----@param opts { path?: string, side: 'old'|'new', base?: 'HEAD'|'index', start_line?: integer, end_line?: integer }
+---@param opts { path?: string, side: 'old'|'new', base?: IterAnchorBase, start_line?: integer, end_line?: integer }
 ---@param lines? string[]
 ---@return IterAnchor
 function M.create(opts, lines)
@@ -55,8 +67,8 @@ function M.create(opts, lines)
 
     if opts.side == 'old' then
         vim.validate('opts.base', opts.base, function(base)
-            return base == 'HEAD' or base == 'index'
-        end, "'HEAD' or 'index'")
+            return BASES[base] == true
+        end, "'HEAD', 'index' or 'merge-base'")
     end
 
     ---@type IterAnchor

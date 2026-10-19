@@ -220,6 +220,31 @@ T['text']['indents to the width of the item number'] = function()
     eq(lines[#lines], '    second')
 end
 
+T['text']['names a merge-base line as the old side of the merge-base'] = function()
+    local result = text({
+        {
+            id = 'm',
+            scope = 'line',
+            body = 'Keep this',
+            anchor = {
+                path = 'a.lua',
+                side = 'old',
+                base = 'merge-base',
+                start_line = 7,
+                end_line = 7,
+                lines = { 'removed' },
+            },
+            outdated = false,
+        },
+    })
+
+    eq(
+        result,
+        INTRO
+            .. '\n\n1. a.lua:7 (old side, merge-base)\n   ```lua\n   removed\n   ```\n   Keep this'
+    )
+end
+
 T['text']['an empty store is only the intro'] = function()
     eq(text({}), INTRO .. '\n')
 end

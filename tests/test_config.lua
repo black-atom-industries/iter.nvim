@@ -114,6 +114,24 @@ T['resolve() errors']['on a wrong option type'] = function()
     end, 'opts%.drawer: expected table')
 end
 
+T['resolve()']['takes a diff base ref'] = function()
+    eq(config.resolve().options.diff.base, nil)
+    eq(
+        config.resolve({ diff = { base = 'origin/develop' } }).options.diff.base,
+        'origin/develop'
+    )
+end
+
+T['resolve() errors']['on a diff base that is not a ref'] = function()
+    expect_error(function()
+        config.resolve({ diff = { base = 1 } })
+    end, 'opts%.diff%.base: expected string')
+
+    expect_error(function()
+        config.resolve({ diff = { base = '' } })
+    end, 'opts%.diff%.base must be a ref, not empty')
+end
+
 T['resolve() errors']['on a drawer height outside (0, 1]'] = function()
     expect_error(function()
         config.resolve({ drawer = { height = 0 } })

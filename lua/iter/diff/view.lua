@@ -208,6 +208,20 @@ function View:decorate(row, file, lnum, expand_lhs)
     elseif row.kind == 'header' then
         local stat = file.binary and 'binary'
             or string.format('+%d −%d', file.stat.add, file.stat.del)
+
+        if file.range ~= nil then
+            stat = file.range .. ' · ' .. stat
+
+            if #self.marks > 0 then
+                stat = string.format(
+                    '%s · %d %s',
+                    stat,
+                    #self.marks,
+                    #self.marks == 1 and 'annotation' or 'annotations'
+                )
+            end
+        end
+
         mark.id = HEADER_MARK
         mark.virt_text = { { stat .. ' ', 'IterDiffHunk' } }
         mark.virt_text_pos = 'right_align'
@@ -439,6 +453,11 @@ function View:render_marks()
         or {}
     self.marks_width = self:text_width()
     marks.apply(self.buf, NS_ANNOTATIONS, self.marks, self.marks_width)
+
+    -- The header of a compared range counts the annotations placed here.
+    if file ~= nil and file.range ~= nil then
+        self:decorate(self.rows[1], file, 1, (self.keys.expand or {})[1])
+    end
 end
 
 --- Show `annotations`, the stored ones of the repository, on the file.

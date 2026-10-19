@@ -75,7 +75,9 @@ local function heading(item, lines_of)
     local loc = first == last and tostring(first) or (first .. '-' .. last)
     local marks = {}
 
-    if a.side == 'old' then
+    if a.side == 'old' and a.base == 'merge-base' then
+        table.insert(marks, 'old side, merge-base')
+    elseif a.side == 'old' then
         table.insert(marks, 'old side')
     end
 

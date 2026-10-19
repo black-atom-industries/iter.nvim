@@ -20,8 +20,8 @@ local ACTIONS = {
         { 'help', 'Show the keys' },
         { 'scroll_down', 'Scroll the diff down' },
         { 'scroll_up', 'Scroll the diff up' },
-        { 'column_left', 'Select the Unstaged column' },
-        { 'column_right', 'Select the Staged column' },
+        { 'column_left', 'Select the column to the left' },
+        { 'column_right', 'Select the column to the right' },
     },
     review_drawer = {
         { 'open', 'Open the file' },
@@ -37,8 +37,8 @@ local ACTIONS = {
         { 'help', 'Show the keys' },
         { 'scroll_down', 'Scroll the diff down' },
         { 'scroll_up', 'Scroll the diff up' },
-        { 'column_left', 'Select the Unstaged column' },
-        { 'column_right', 'Select the Staged column' },
+        { 'column_left', 'Select the column to the left' },
+        { 'column_right', 'Select the column to the right' },
     },
     diff = {
         { 'next_hunk', 'Next hunk' },
