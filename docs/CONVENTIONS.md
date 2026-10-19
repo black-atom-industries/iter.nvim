@@ -19,6 +19,14 @@ the review straight to an agent pane.
   add, gap, each with old and new line numbers) → `iter.diff.view` (buffer lines and extmarks). Hunks always come from
   git's diff, so staging applies exactly what git produced. The full old and new file contents are fetched for syntax
   and context; when they don't match the diff text (filters, CRLF), only the hunk text is used.
+- A view renders a document (`iter.diff.document`): sections in order, one per file diff, and for each buffer line
+  its section and model row (none on the blank line between two files). One file is a document of one section; the
+  review's all-files mode is one section per drawer file, Unstaged then Staged. Callers map lines with `at()` and
+  `line_of()`, never with offsets, so a layout other than unified builds its own lines over the same sections.
+- A document of several files decorates per viewport: syntax, word emphasis and annotation `virt_lines` for the lines
+  in view and two screens around them, again on `WinScrolled`; row highlights, headers and annotation positions cover
+  the whole document. A read of all files keeps a file's rows, and so its parse, while its blob ids and worktree stat
+  (`git.diff_ids`) stay the same.
 - The diff buffer holds plain code. Row kinds show through line highlights and line numbers through a `statuscolumn`
   that reads the model, so a yank gives clean code.
 - Syntax comes from a treesitter string parser per file version, cached per blob, with captures only for the rows

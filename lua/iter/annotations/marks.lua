@@ -8,6 +8,7 @@ local util = require('iter.util')
 ---@field lnum integer row the annotation sits below
 ---@field annotation IterAnnotation
 ---@field outdated boolean
+---@field section? integer section of the view's document, set by the view
 
 local M = {}
 
@@ -237,40 +238,6 @@ function M.lines(annotation, outdated, width, focused, icon)
     end
 
     return result
-end
-
---- Draw `marks` into `ns` of `buf`, below their rows, the annotation with
---- id `focus` as focused.
----@param buf integer
----@param ns integer
----@param marks IterAnnotationMark[]
----@param width integer text area width of the window
----@param focus? string
----@param icon? string
-function M.apply(buf, ns, marks, width, focus, icon)
-    vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
-
-    local by_row = {}
-
-    for _, mark in ipairs(marks) do
-        by_row[mark.lnum] = by_row[mark.lnum] or {}
-        vim.list_extend(
-            by_row[mark.lnum],
-            M.lines(
-                mark.annotation,
-                mark.outdated,
-                width,
-                focus ~= nil and mark.annotation.id == focus,
-                icon
-            )
-        )
-    end
-
-    for lnum, lines in pairs(by_row) do
-        vim.api.nvim_buf_set_extmark(buf, ns, lnum - 1, 0, {
-            virt_lines = lines,
-        })
-    end
 end
 
 -- Normal file buffers of repo files. Per buffer, `b:iter_annotation_target`

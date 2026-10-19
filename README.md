@@ -18,8 +18,9 @@ A Git staging and code review tool for Neovim.
 - **Stage, unstage, discard** whole files. New files are listed one by one
   among the others. Discard asks first, names the paths, and never touches the
   index or ignored files.
-- **Review tab:** a tab page for the whole review. One file's diff at a time
-  with hunk jumps, file jumps and `gf` to the source line.
+- **Review tab:** a tab page for the whole review. One file's diff at a time,
+  or every file in one scroll, with hunk jumps, file jumps and `gf` to the
+  source line.
 - **Hunk staging** in the review diff, applied exactly like `git add -p`.
 - **Diff rendering** in Lua: treesitter syntax, word emphasis on changed lines,
   old and new line numbers, hidden context that expands on demand.
@@ -132,7 +133,9 @@ end, { desc = 'Annotate' })
 and the annotation. It then asks once whether to clear the annotations.
 
 `statusline()` returns `review · <file> · <i>/<n>` inside the review tab
-(`review` when no file is shown) and `''` elsewhere. While an annotation draft is hidden it adds `draft annotation`.
+(`review` when no file is shown), `review · all files · <file> · <i>/<n>`
+for the file under the cursor when the pane shows all files, and `''`
+elsewhere. While an annotation draft is hidden it adds `draft annotation`.
 
 ## Configuration
 
@@ -216,6 +219,7 @@ The drawer of the review tab (`review_drawer`):
 | `u` | `unstage` | Unstage the file |
 | `d` | `discard` | Discard changes in the file |
 | `v` | `viewed` | Toggle viewed |
+| `m` | `mode` | Toggle one file or all files |
 | `A` | `annotate_file` | Annotate the file |
 | `e` | `edit` | Edit the annotation |
 | `x` | `delete` | Delete the annotation |
@@ -246,6 +250,7 @@ The diff pane of the review tab (`diff`):
 | `<CR>` | `expand` | Expand hidden context |
 | `gf` | `goto_file` | Go to the line in the file |
 | `v` | `viewed` | Toggle viewed |
+| `m` | `mode` | Toggle one file or all files |
 | `y` | `yank` | Copy the review |
 | `q` | `close` | Close |
 | `?` | `help` | Show the keys |
@@ -272,7 +277,21 @@ hunk. After `s` or `u` on the last change of a file, the pane shows the same
 file on its other side. A file opened in the diff pane, with `:edit` for
 example, opens in the tab the review came from, and the pane keeps its diff. A
 mode change shows in the diff header as `mode 100644 → 100755`; `s` on the file
-in the drawer stages it.
+in the drawer stages it. An untracked file's diff header reads `untracked · +n`.
+In the review tab the header also shows the file's viewed state and its
+number of annotations, for an untracked file only when it has any.
+
+`m`, in the diff pane or the review drawer, shows every file of the review
+in one buffer, in drawer order: Unstaged, then Staged, each file under its
+header with a blank line between files. A file on both sides shows twice.
+The drawer selection follows the cursor from file to file, and selecting a
+file in the drawer puts its header at the top of the pane. `]f` and `[f`
+jump between the headers, `]c`, `[c`, `]a` and `[a` run across files, and
+staging, annotations, viewed, `gf` and hidden context work on the file
+under the cursor. A visual selection over two files stages and annotates
+nothing. `m` again shows the selected file alone; the key hint line names
+the mode it switches to. The mode lasts until the
+review tab closes.
 
 The annotation float (`annotation`). `:w` saves and keeps the float open; `:wq` and `<C-s>` save and close it.
 

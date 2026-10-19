@@ -1,4 +1,5 @@
 local anchor = require('iter.annotations.anchor')
+local document = require('iter.diff.document')
 local Drawer = require('iter.ui.drawer')
 local editor = require('iter.annotations.editor')
 local git = require('iter.git')
@@ -30,6 +31,7 @@ local viewed = require('iter.viewed')
 ---@field viewed table<string, IterViewedState> state per file path in the drawer
 ---@field fresh? boolean read the store on the next load whatever its stat says
 ---@field help? IterHelp help float of the diff pane
+---@field preview_target? { id: string, file: IterChange } the annotation the Annotations column showed last and the file it showed it in
 ---@field group integer
 ---@field closed boolean
 ---@field on_annotations? fun()
@@ -231,8 +233,7 @@ function Review:view_handlers()
             self:annotate()
         end,
         annotate_file = function()
-            local view = self.drawer.view
-            local file = view:is_shown() and view.files[1] or nil
+            local file = self:shown_file()
 
             if file ~= nil then
                 self:annotate_file(file.path)
@@ -245,12 +246,14 @@ function Review:view_handlers()
             self:delete_annotation()
         end,
         viewed = function()
-            local view = self.drawer.view
-            local file = view:is_shown() and view.files[1] or nil
+            local file = self:shown_file()
 
             if file ~= nil then
                 self:toggle_viewed(file.path)
             end
+        end,
+        mode = function()
+            self:toggle_mode()
         end,
         yank = function()
             require('iter').yank()
@@ -264,16 +267,60 @@ function Review:view_handlers()
     }
 end
 
---- Put the cursor on the `@@` row of hunk `index`, else of the last hunk.
----@param view IterDiffView
----@param index integer
-local function cursor_to_hunk(view, index)
-    local file = view.files[1]
-    local target = math.min(index, #file.hunks)
+--- The file under the cursor of the diff pane.
+---@return IterFileDiff?
+function Review:shown_file()
+    local view = self.drawer.view
 
-    for lnum, row in ipairs(view.rows) do
-        if row.kind == 'hunk' and row.hunk == target then
-            vim.api.nvim_win_set_cursor(view.win, { lnum, 0 })
+    return view:is_shown() and view:file() or nil
+end
+
+--- The section of the diff pane between buffer lines `first` and `last`,
+--- with the model rows they span; nil and a warning when they span two
+--- files.
+---@param first integer
+---@param last integer
+---@return IterDocSection?
+---@return integer first_row
+---@return integer last_row
+function Review:selected_section(first, last)
+    local view = self.drawer.view
+    local section, first_row, index = view:at(first)
+    local last_section, last_row, last_index = view:at(last)
+
+    if section == nil or last_section == nil then
+        return nil, 0, 0
+    end
+
+    if index ~= last_index then
+        util.warn('The selection spans two files')
+        return nil, 0, 0
+    end
+
+    -- A separator closes its section, after its last row.
+    return section,
+        first_row or #section.file.rows + 1,
+        last_row or #section.file.rows
+end
+
+--- Put the cursor on the `@@` row of hunk `index` of the file with `key`,
+--- else of its last hunk.
+---@param view IterDiffView
+---@param key string
+---@param index integer
+local function cursor_to_hunk(view, key, index)
+    local section_index = document.find(view.document, key)
+    local section = view.document.sections[section_index]
+
+    if section == nil then
+        return
+    end
+
+    local target = math.min(index, #section.file.hunks)
+
+    for row, model_row in ipairs(section.file.rows) do
+        if model_row.kind == 'hunk' and model_row.hunk == target then
+            view:reveal(section.first + row - 1)
             return
         end
     end
@@ -337,11 +384,18 @@ function Review:apply_change(kind)
     local view = self.drawer.view
     local visual = vim.fn.mode():find('^[vV\22]') ~= nil
     local first, last = editor.selection()
-    local file = view:is_shown() and view.files[1] or nil
 
-    if file == nil then
+    if not view:is_shown() then
         return
     end
+
+    local section, first_row, last_row = self:selected_section(first, last)
+
+    if section == nil then
+        return
+    end
+
+    local file = section.file
 
     local what = visual and 'selected lines' or 'hunk'
 
@@ -358,14 +412,14 @@ function Review:apply_change(kind)
         return
     end
 
-    local row = view:row()
+    local row = file.rows[first_row]
     local selection
 
     if visual and is_link(file.raw) then
         util.warn('Lines of a symlink or submodule cannot be staged one by one')
         return
     elseif visual then
-        selection = line_selection(file, first, last)
+        selection = line_selection(file, first_row, last_row)
 
         if selection == nil then
             util.warn('No added or deleted lines selected')
@@ -407,16 +461,8 @@ function Review:apply_change(kind)
         return
     end
 
-    local shown = view.files[1]
-
-    if
-        not visual
-        and view:is_shown()
-        and shown ~= nil
-        and shown.path == file.path
-        and shown.side == file.side
-    then
-        cursor_to_hunk(view, row.hunk)
+    if not visual and view:is_shown() then
+        cursor_to_hunk(view, section.key, row.hunk)
     end
 end
 
@@ -642,20 +688,29 @@ local function annotation_files(drawer, annotation)
     return found
 end
 
---- The diff row `annotation` sits below in the file `drawer` shows, nil
---- when it isn't placed there.
+--- The line of the diff pane `annotation` sits below, in `file` when
+--- given, nil when it isn't placed there.
 ---@param drawer IterDrawer
 ---@param annotation IterAnnotation
+---@param file? IterChange
 ---@return integer?
-local function annotation_row(drawer, annotation)
+local function annotation_row(drawer, annotation, file)
     local view = drawer.view
 
     if not view:is_shown() then
         return nil
     end
 
+    local sections = view.document.sections
+
     for _, mark in ipairs(view.marks) do
-        if mark.annotation.id == annotation.id then
+        if
+            mark.annotation.id == annotation.id
+            and (
+                file == nil
+                or sections[mark.section].key == document.key(file)
+            )
+        then
             return mark.lnum
         end
     end
@@ -686,12 +741,12 @@ function Review:drawer_preview(drawer, item, force)
 
     -- A diff where the annotation sits below a gap hides its code; the
     -- next side may show it.
-    local lnum, placed
+    local lnum, placed, shown
 
     for _, file in ipairs(files) do
         drawer:show(file, force)
 
-        local row = annotation_row(drawer, annotation)
+        local row = annotation_row(drawer, annotation, file)
 
         if row ~= nil then
             placed = placed or { file = file, lnum = row }
@@ -703,7 +758,7 @@ function Review:drawer_preview(drawer, item, force)
                     or view.rows[row].kind ~= 'header'
                 )
             then
-                lnum = row
+                lnum, shown = row, file
                 break
             end
         end
@@ -716,17 +771,16 @@ function Review:drawer_preview(drawer, item, force)
             return
         end
 
-        lnum = placed.lnum
+        lnum, shown = placed.lnum, placed.file
     end
+
+    self.preview_target = { id = annotation.id, file = shown }
 
     if again then
         return
     end
 
-    vim.api.nvim_win_set_cursor(view.win, { lnum, 0 })
-    vim.api.nvim_win_call(view.win, function()
-        vim.cmd('normal! zz')
-    end)
+    view:reveal(lnum, 'center')
 end
 
 --- Move into the diff pane at the selected annotation. One on a file
@@ -762,11 +816,16 @@ function Review:jump_to(item)
 
     drawer:preview(false)
 
-    local lnum = annotation_row(drawer, annotation)
+    local target = self.preview_target
+    local lnum = annotation_row(
+        drawer,
+        annotation,
+        target ~= nil and target.id == annotation.id and target.file or nil
+    )
 
     if lnum ~= nil then
+        drawer.view:reveal(lnum)
         vim.api.nvim_set_current_win(self.diff_win)
-        vim.api.nvim_win_set_cursor(self.diff_win, { lnum, 0 })
     end
 end
 
@@ -811,12 +870,10 @@ function Review:drawer_rendered(drawer, count)
     end
 end
 
---- Show the viewed state of the shown file in the diff header.
+--- Show the viewed state of the shown files in their diff headers.
 ---@param drawer IterDrawer
 function Review:drawer_shown(drawer)
-    local file = drawer.view.files[1]
-
-    drawer.view:set_viewed(file and self.viewed[file.path])
+    drawer.view:set_viewed(self.viewed)
 end
 
 --- The review's drawer actions: `open` moves into the diff, and the
@@ -882,6 +939,9 @@ function Review:drawer_handlers(drawer, handlers)
     end)
     handlers.yank = function()
         require('iter').yank()
+    end
+    handlers.mode = function()
+        self:toggle_mode()
     end
 end
 
@@ -1000,13 +1060,12 @@ end
 ---@param cursor integer[] the diff pane's cursor before it changed
 function Review:take_back(cursor)
     local view = self.drawer.view
-    local file = view.files[1]
 
     if
         self.closed
         or not util.is_valid_win(self.diff_win)
         or self.drawer.previewed == nil
-        or file == nil
+        or #view.document.sections == 0
         or view:is_shown()
     then
         return
@@ -1016,7 +1075,7 @@ function Review:take_back(cursor)
 
     -- The scratch buffer first, so the view borrows the pane from it again.
     vim.api.nvim_win_set_buf(self.diff_win, self.buf)
-    view:show(file)
+    view:show_document(view.document)
     vim.api.nvim_win_set_cursor(
         self.diff_win,
         { math.min(cursor[1], vim.api.nvim_buf_line_count(view.buf)), 0 }
@@ -1110,8 +1169,9 @@ function Review:close()
     end
 end
 
---- `review · <file> · <i>/<n>` for windows of the tab, `''` elsewhere. The
---- position counts files in drawer order.
+--- `review · <file> · <i>/<n>` for windows of the tab, `''` elsewhere,
+--- with `all files` after `review` in all-files mode, where the file is the
+--- one under the cursor. The position counts files in drawer order.
 ---@return string
 function Review:statusline()
     local win = vim.g.statusline_winid or vim.api.nvim_get_current_win()
@@ -1124,11 +1184,11 @@ function Review:statusline()
         return ''
     end
 
-    local view = self.drawer.view
-    local file = view:is_shown() and view.files[1] or nil
+    local file = self:shown_file()
+    local mode = self.drawer.all_files and 'review · all files' or 'review'
 
     if file == nil then
-        return 'review'
+        return mode
     end
 
     local files = self.drawer:files()
@@ -1136,7 +1196,8 @@ function Review:statusline()
     for index, item in ipairs(files) do
         if item.side == file.side and item.path == file.path then
             return string.format(
-                'review · %s · %d/%d',
+                '%s · %s · %d/%d',
+                mode,
                 file.path,
                 index,
                 #files
@@ -1144,18 +1205,25 @@ function Review:statusline()
         end
     end
 
-    return 'review · ' .. file.path
+    return mode .. ' · ' .. file.path
+end
+
+--- Show every file in the diff pane, or the selected one alone.
+function Review:toggle_mode()
+    self.drawer:set_all_files(not self.drawer.all_files)
 end
 
 --- Edit the file of the diff in the tab the review came from, at the
 --- worktree line of the cursor row. The review stays open.
 function Review:goto_file()
     local view = self.drawer.view
-    local file = view.files[1]
+    local section, row = view:at()
 
-    if file == nil or not view:is_shown() then
+    if section == nil or not view:is_shown() then
         return
     end
+
+    local file = section.file
 
     local changes = self.drawer.changes
     local path = vim.fs.joinpath(changes.root, file.path)
@@ -1165,13 +1233,7 @@ function Review:goto_file()
         return
     end
 
-    self:open_file(
-        path,
-        self.drawer:worktree_line(
-            file,
-            vim.api.nvim_win_get_cursor(view.win)[1]
-        )
-    )
+    self:open_file(path, self.drawer:worktree_line(file, row or #file.rows))
 end
 
 --- Edit `path`, an absolute file path, at `line` in the tab the review
@@ -1223,13 +1285,13 @@ function Review:annotations_changed()
     end
 end
 
---- The anchor of rows `first` to `last` of the shown diff. Rows with a new
+--- The anchor of rows `first` to `last` of `file`. Rows with a new
 --- line number anchor on the new side, which follows the worktree, so a
 --- staged line goes through the unstaged diff; only deleted rows anchor on
 --- the old side, against the version they were deleted from.
 ---@param file IterFileDiff
----@param first integer
----@param last integer
+---@param first integer model row
+---@param last integer model row
 ---@return IterAnchor?
 ---@return string? error
 function Review:anchor_rows(file, first, last)
@@ -1295,14 +1357,17 @@ end
 --- Annotate the line under the cursor of the diff pane, or on the
 --- visual range.
 function Review:annotate()
-    local view = self.drawer.view
-    local file = view:is_shown() and view.files[1] or nil
-
-    if file == nil then
+    if not self.drawer.view:is_shown() then
         return
     end
 
-    local first, last = editor.selection()
+    local section, first, last = self:selected_section(editor.selection())
+
+    if section == nil then
+        return
+    end
+
+    local file = section.file
 
     if file.binary then
         util.warn('A binary file takes file annotations only')
