@@ -37,8 +37,8 @@ local function write(path, text)
 end
 
 ---@param body string
----@return IterComment
-local function comment(body)
+---@return IterAnnotation
+local function annotation(body)
     return {
         scope = 'line',
         anchor = {
@@ -58,7 +58,7 @@ end
 local function bodies(data)
     local list = vim.tbl_map(function(c)
         return c.body
-    end, data.comments)
+    end, data.annotations)
     table.sort(list)
     return list
 end
@@ -188,12 +188,12 @@ end
 T['load()'] = new_set()
 
 T['load()']['reads a missing file as empty'] = function()
-    eq(store.load(repo), { version = 1, comments = {}, viewed = {} })
+    eq(store.load(repo), { version = 1, annotations = {}, viewed = {} })
     eq(warnings, {})
 end
 
-T['load()']['round-trips comments and viewed records'] = function()
-    local saved = assert(store.put_comment(repo, comment('first')))
+T['load()']['round-trips annotations and viewed records'] = function()
+    local saved = assert(store.put_annotation(repo, annotation('first')))
     assert(
         store.set_viewed(repo, 'a.txt', { hash = 'abc123', at = 1700000000 })
     )
@@ -201,7 +201,7 @@ T['load()']['round-trips comments and viewed records'] = function()
     local data = assert(store.load(repo))
 
     eq(data.version, 1)
-    eq(data.comments, { saved })
+    eq(data.annotations, { saved })
     eq(data.viewed, { ['a.txt'] = { hash = 'abc123', at = 1700000000 } })
     eq(type(saved.id), 'string')
     eq(type(saved.created_at), 'number')
@@ -209,12 +209,12 @@ T['load()']['round-trips comments and viewed records'] = function()
 end
 
 T['load()']['round-trips anchored text that is not UTF-8'] = function()
-    local latin1 = comment('latin-1')
+    local latin1 = annotation('latin-1')
     latin1.anchor.lines = { 'caf\233' }
 
-    assert(store.put_comment(repo, latin1))
+    assert(store.put_annotation(repo, latin1))
 
-    eq(assert(store.load(repo)).comments[1].anchor.lines, { 'caf\233' })
+    eq(assert(store.load(repo)).annotations[1].anchor.lines, { 'caf\233' })
     eq(warnings, {})
 end
 
@@ -222,8 +222,8 @@ T['load()']['keeps a corrupt file aside and warns once'] = function()
     local path = assert(store.path(repo))
     write(path, '{ not json')
 
-    eq(store.load(repo), { version = 1, comments = {}, viewed = {} })
-    eq(store.load(repo), { version = 1, comments = {}, viewed = {} })
+    eq(store.load(repo), { version = 1, annotations = {}, viewed = {} })
+    eq(store.load(repo), { version = 1, annotations = {}, viewed = {} })
 
     eq(#warnings, 1)
     eq(warnings[1]:find('corrupt', 1, true) ~= nil, true)
@@ -240,13 +240,13 @@ T['load()']['treats a file of the wrong shape as corrupt'] = function()
     for _, text in ipairs({
         '[]',
         '"text"',
-        '{"version":1,"comments":3,"viewed":{}}',
-        '{"version":1,"comments":[],"viewed":7}',
-        '{"comments":[],"viewed":{}}',
-        '{"version":1,"comments":["x"],"viewed":{}}',
+        '{"version":1,"annotations":3,"viewed":{}}',
+        '{"version":1,"annotations":[],"viewed":7}',
+        '{"annotations":[],"viewed":{}}',
+        '{"version":1,"annotations":["x"],"viewed":{}}',
     }) do
         write(path, text)
-        eq(store.load(repo), { version = 1, comments = {}, viewed = {} })
+        eq(store.load(repo), { version = 1, annotations = {}, viewed = {} })
     end
 
     eq(#warnings, 6)
@@ -255,14 +255,14 @@ end
 
 T['load()']['leaves a file of a newer version alone'] = function()
     local path = assert(store.path(repo))
-    local text = '{"version":2,"comments":[],"viewed":{}}'
+    local text = '{"version":2,"annotations":[],"viewed":{}}'
     write(path, text)
 
     local data, err = store.load(repo)
     eq(data, nil)
     eq(err, 'store written by a newer iter')
 
-    local saved, put_err = store.put_comment(repo, comment('refused'))
+    local saved, put_err = store.put_annotation(repo, annotation('refused'))
     eq(saved, nil)
     eq(put_err, 'store written by a newer iter')
 
@@ -292,7 +292,7 @@ T['load()']['writes after a corrupt file start from empty'] = function()
     local path = assert(store.path(repo))
     write(path, 'garbage')
 
-    assert(store.put_comment(repo, comment('fresh')))
+    assert(store.put_annotation(repo, annotation('fresh')))
 
     eq(bodies(assert(store.load(repo))), { 'fresh' })
     eq(#warnings, 1)
@@ -300,40 +300,40 @@ end
 
 T['writes'] = new_set()
 
-T['writes']['update and remove comments by id'] = function()
-    local first = assert(store.put_comment(repo, comment('first')))
-    local second = assert(store.put_comment(repo, comment('second')))
+T['writes']['update and remove annotations by id'] = function()
+    local first = assert(store.put_annotation(repo, annotation('first')))
+    local second = assert(store.put_annotation(repo, annotation('second')))
 
     first.body = 'edited'
     first.outdated = true
-    local edited = assert(store.put_comment(repo, first))
+    local edited = assert(store.put_annotation(repo, first))
 
     eq(edited.id, first.id)
     eq(edited.created_at, first.created_at)
     eq(bodies(assert(store.load(repo))), { 'edited', 'second' })
 
-    assert(store.remove_comments(repo, { first.id }))
+    assert(store.remove_annotations(repo, { first.id }))
 
-    eq(assert(store.load(repo)).comments, { second })
+    eq(assert(store.load(repo)).annotations, { second })
 end
 
-T['writes']['edit only a comment that still exists'] = function()
-    local kept = assert(store.put_comment(repo, comment('kept')))
-    local gone = assert(store.put_comment(repo, comment('gone')))
-    assert(store.remove_comments(repo, { gone.id }))
+T['writes']['edit only an annotation that still exists'] = function()
+    local kept = assert(store.put_annotation(repo, annotation('kept')))
+    local gone = assert(store.put_annotation(repo, annotation('gone')))
+    assert(store.remove_annotations(repo, { gone.id }))
     local path = assert(store.path(repo))
     local before = assert(vim.uv.fs_stat(path)).ino
 
     gone.body = 'edited after delete'
-    local saved, err = store.edit_comment(repo, gone)
+    local saved, err = store.edit_annotation(repo, gone)
 
     eq(saved, nil)
-    eq(err, 'The comment no longer exists')
+    eq(err, 'The annotation no longer exists')
     eq(assert(vim.uv.fs_stat(path)).ino, before)
     eq(bodies(assert(store.load(repo))), { 'kept' })
 
     kept.body = 'edited'
-    local edited = assert(store.edit_comment(repo, kept))
+    local edited = assert(store.edit_annotation(repo, kept))
 
     eq(edited.created_at, kept.created_at)
     eq(bodies(assert(store.load(repo))), { 'edited' })
@@ -343,20 +343,24 @@ T['writes']['report a store directory that cannot be made'] = function()
     local dir = vim.fs.dirname(assert(store.path(repo)))
     write(vim.fs.dirname(dir), 'a file where a directory belongs')
 
-    local saved, err = store.put_comment(repo, comment('x'))
+    local saved, err = store.put_annotation(repo, annotation('x'))
 
     eq(saved, nil)
     eq(
-        vim.startswith(assert(err), 'Cannot create the comment store directory'),
+        vim.startswith(
+            assert(err),
+            'Cannot create the annotation store directory'
+        ),
         true
     )
 end
 
-T['writes']['give every comment its own id'] = function()
+T['writes']['give every annotation its own id'] = function()
     local ids = {}
 
     for i = 1, 50 do
-        ids[assert(store.put_comment(repo, comment(tostring(i)))).id] = true
+        ids[assert(store.put_annotation(repo, annotation(tostring(i)))).id] =
+            true
     end
 
     eq(vim.tbl_count(ids), 50)
@@ -374,18 +378,18 @@ T['writes']['clear a viewed record'] = function()
 end
 
 T['writes']['replace the file by rename and leave no temp file'] = function()
-    assert(store.put_comment(repo, comment('first')))
+    assert(store.put_annotation(repo, annotation('first')))
     local path = assert(store.path(repo))
     local before = assert(vim.uv.fs_stat(path)).ino
 
-    assert(store.put_comment(repo, comment('second')))
+    assert(store.put_annotation(repo, annotation('second')))
 
     MiniTest.expect.no_equality(assert(vim.uv.fs_stat(path)).ino, before)
     eq(entries(vim.fs.dirname(path)), { 'main.json' })
 end
 
 T['writes']['keep an empty viewed table an object'] = function()
-    assert(store.put_comment(repo, comment('first')))
+    assert(store.put_annotation(repo, annotation('first')))
 
     local text = assert(read(assert(store.path(repo))))
 
@@ -396,7 +400,7 @@ T['writes']['fail outside a repository'] = function()
     local dir = vim.fn.tempname()
     vim.fn.mkdir(dir, 'p')
 
-    local saved, err = store.put_comment(dir, comment('x'))
+    local saved, err = store.put_annotation(dir, annotation('x'))
     helpers.cleanup(dir)
 
     eq(saved, nil)
@@ -415,11 +419,11 @@ T['two instances'] = new_set({
 })
 
 ---@param body string
----@return IterComment
+---@return IterAnnotation
 local function child_put(body)
     return child.lua(
-        'return require("iter.store").put_comment(...)',
-        { repo, comment(body) }
+        'return require("iter.store").put_annotation(...)',
+        { repo, annotation(body) }
     )
 end
 
@@ -427,13 +431,13 @@ T['two instances']['share the test data dir'] = function()
     eq(child.fn.stdpath('data'), vim.fn.stdpath('data'))
 end
 
-T['two instances']['keep both interleaved comments'] = function()
+T['two instances']['keep both interleaved annotations'] = function()
     local stale = assert(store.load(repo))
 
     child_put('from child')
-    assert(store.put_comment(repo, comment('from parent')))
+    assert(store.put_annotation(repo, annotation('from parent')))
 
-    eq(#stale.comments, 0)
+    eq(#stale.annotations, 0)
     eq(bodies(assert(store.load(repo))), { 'from child', 'from parent' })
     eq(
         bodies(child.lua('return require("iter.store").load(...)', { repo })),
@@ -442,10 +446,10 @@ T['two instances']['keep both interleaved comments'] = function()
 end
 
 T['two instances']['do not undo each other on delete'] = function()
-    local mine = assert(store.put_comment(repo, comment('mine')))
+    local mine = assert(store.put_annotation(repo, annotation('mine')))
     child_put('theirs')
 
-    assert(store.remove_comments(repo, { mine.id }))
+    assert(store.remove_annotations(repo, { mine.id }))
     child_put('later')
 
     eq(bodies(assert(store.load(repo))), { 'later', 'theirs' })
@@ -454,11 +458,11 @@ end
 T['branches'] = new_set()
 
 T['branches']['follow a checkout'] = function()
-    assert(store.put_comment(repo, comment('on main')))
+    assert(store.put_annotation(repo, annotation('on main')))
 
     helpers.git(repo, { 'checkout', '--quiet', '-b', 'other' })
-    eq(assert(store.load(repo)).comments, {})
-    assert(store.put_comment(repo, comment('on other')))
+    eq(assert(store.load(repo)).annotations, {})
+    assert(store.put_annotation(repo, annotation('on other')))
 
     helpers.git(repo, { 'checkout', '--quiet', 'main' })
     eq(bodies(assert(store.load(repo))), { 'on main' })
@@ -467,7 +471,7 @@ T['branches']['follow a checkout'] = function()
     eq(bodies(assert(store.load(repo))), { 'on other' })
 
     helpers.git(repo, { 'checkout', '--quiet', '--detach' })
-    eq(assert(store.load(repo)).comments, {})
+    eq(assert(store.load(repo)).annotations, {})
     eq(vim.fs.basename(assert(store.path(repo))), 'HEAD.json')
 end
 

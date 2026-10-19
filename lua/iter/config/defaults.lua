@@ -12,7 +12,7 @@
 ---@field word_diff? boolean
 
 ---@class IterExportOptions
----@field intro? string Text placed before the exported comments
+---@field intro? string Text placed before the exported annotations
 
 ---@class IterRefreshOptions
 ---@field poll_ms? integer
@@ -20,7 +20,7 @@
 ---@class IterConfirmOptions
 ---@field discard? boolean Ask before discarding changes
 
----@alias IterView 'drawer'|'review_drawer'|'diff'|'comment'|'picker'|'help'
+---@alias IterView 'drawer'|'review_drawer'|'diff'|'annotation'|'picker'|'help'
 
 ---@alias IterKeyValue string|string[]|false
 
@@ -52,7 +52,7 @@ M.options = {
         word_diff = true,
     },
     export = {
-        intro = 'I reviewed your changes and have these comments.\n'
+        intro = 'I reviewed your changes and have these annotations.\n'
             .. 'Please address them.',
     },
     refresh = {
@@ -89,7 +89,7 @@ M.keys = {
         discard = 'd',
         viewed = 'v',
         mode = 'm',
-        comment_file = 'C',
+        annotate_file = 'A',
         picker = 'L',
         yank = 'y',
         close = 'q',
@@ -100,14 +100,14 @@ M.keys = {
     diff = {
         next_hunk = ']c',
         prev_hunk = '[c',
-        next_comment = ']a',
-        prev_comment = '[a',
+        next_annotation = ']a',
+        prev_annotation = '[a',
         next_file = ']f',
         prev_file = '[f',
         stage = 's',
         unstage = 'u',
-        comment = 'c',
-        comment_file = 'C',
+        annotate = 'a',
+        annotate_file = 'A',
         edit = 'e',
         delete = 'x',
         expand = '<CR>',
@@ -119,7 +119,7 @@ M.keys = {
         close = 'q',
         help = '?',
     },
-    comment = {
+    annotation = {
         save = '<C-s>',
         toggle = '<C-t>',
         cancel = '<C-c>',

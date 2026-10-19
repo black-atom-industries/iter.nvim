@@ -19,12 +19,12 @@ A Git staging and code review tool for Neovim.
 - **Hunk staging** in the review diff, applied exactly like `git add -p`.
 - **Diff rendering** in Lua: treesitter syntax, word emphasis on changed lines,
   old and new line numbers, hidden context that expands on demand.
-- **Comments** on a line, a range, a deleted line, a file or the whole review,
-  in the review diff and in normal file buffers. Comments follow their code
+- **Annotations** on a line, a range, a deleted line, a file or the whole review,
+  in the review diff and in normal file buffers. Annotations follow their code
   when it moves and turn outdated when it is gone.
-- **Comment picker** grouped by file, to filter, jump, edit and delete.
+- **Annotation picker** grouped by file, to filter, jump, edit and delete.
 - **Viewed marks** per file that drop back when the file changes afterwards.
-- **Export:** copy all comments as a prompt for an agent, then clear them if
+- **Export:** copy all annotations as a prompt for an agent, then clear them if
   you like.
 - **Saved per repository and branch**, shared by linked worktrees.
 - **Auto refresh** on index and HEAD changes, focus and writes.
@@ -66,7 +66,7 @@ require('iter').setup()
 }
 ```
 
-Call `setup()` at startup. It is what shows comments in normal file buffers,
+Call `setup()` at startup. It is what shows annotations in normal file buffers,
 so a plugin manager must not delay it until the first `:Iter`.
 
 ## Usage
@@ -79,7 +79,7 @@ so a plugin manager must not delay it until the first `:Iter`.
 
 Outside a git repository iter warns and opens nothing. On a clean tree the
 drawer says "Working tree clean"; the review tab still opens for review
-comments.
+annotations.
 
 In the drawer, `j` and `k` move through the files and the window above shows
 the diff. `<CR>` opens the file there and closes the drawer. `r` opens the
@@ -90,31 +90,31 @@ review tab. `?` lists the keys of the current view.
 ```lua
 local iter = require('iter')
 
-iter.setup(opts)                    -- see Configuration
-iter.status()                       -- same as :Iter status
-iter.review()                       -- same as :Iter review
-iter.comment()                      -- comment on the cursor line or the visual range
-iter.comment({ scope = 'review' })  -- comment on the whole review
-iter.comments()                     -- open the comment picker
-iter.yank()                         -- copy the review as a prompt
-iter.statusline()                   -- text for your statusline
+iter.setup(opts)                     -- see Configuration
+iter.status()                        -- same as :Iter status
+iter.review()                        -- same as :Iter review
+iter.annotate()                      -- annotate the cursor line or the visual range
+iter.annotate({ scope = 'review' })  -- annotate the whole review
+iter.annotations()                   -- open the annotation picker
+iter.yank()                          -- copy the review as a prompt
+iter.statusline()                    -- text for your statusline
 ```
 
-`comment()` works in any buffer of a file inside a git repository. Map it in
+`annotate()` works in any buffer of a file inside a git repository. Map it in
 normal and visual mode:
 
 ```lua
-vim.keymap.set({ 'n', 'x' }, '<leader>c', function()
-    require('iter').comment()
-end, { desc = 'Comment' })
+vim.keymap.set({ 'n', 'x' }, '<leader>a', function()
+    require('iter').annotate()
+end, { desc = 'Annotate' })
 ```
 
-`yank()` copies the comments to the `+` and `"` registers: the
-`export.intro` text, then a numbered list with `file:line`, the commented code
-and the comment. It then asks once whether to clear the comments.
+`yank()` copies the annotations to the `+` and `"` registers: the
+`export.intro` text, then a numbered list with `file:line`, the annotated code
+and the annotation. It then asks once whether to clear the annotations.
 
 `statusline()` returns `review · <file> · <i>/<n>` inside the review tab
-(`review` when no file is shown) and `''` elsewhere. While a comment draft is hidden it adds `draft comment`.
+(`review` when no file is shown) and `''` elsewhere. While an annotation draft is hidden it adds `draft annotation`.
 
 ## Configuration
 
@@ -124,7 +124,7 @@ and the comment. It then asks once whether to clear the comments.
 require('iter').setup({
     drawer = {
         height = 0.3,     -- fraction of the window height
-        zindex = 40,      -- float stacking order; help, picker and comment floats sit above it
+        zindex = 40,      -- float stacking order; help, picker and annotation floats sit above it
         breakpoint = 80,  -- drawer width below which the columns stack
     },
     diff = {
@@ -133,7 +133,7 @@ require('iter').setup({
         word_diff = true,          -- highlight the changed words in changed lines
     },
     export = {
-        intro = 'I reviewed your changes and have these comments.\n'
+        intro = 'I reviewed your changes and have these annotations.\n'
             .. 'Please address them.',
     },
     refresh = {
@@ -160,7 +160,7 @@ Keys are buffer-local and set per view. A value is a key, a list of keys, or
 require('iter').setup({
     keys = {
         drawer = { stage = { 's', '<Space>' }, discard = false },
-        diff = { comment = 'gc' },
+        diff = { annotate = 'gc' },
     },
 })
 ```
@@ -188,8 +188,8 @@ The drawer of the review tab (`review_drawer`):
 | `u` | `unstage` | Unstage the file |
 | `d` | `discard` | Discard changes in the file |
 | `v` | `viewed` | Toggle viewed |
-| `C` | `comment_file` | Comment on the file |
-| `L` | `picker` | List comments |
+| `A` | `annotate_file` | Annotate the file |
+| `L` | `picker` | List annotations |
 | `y` | `yank` | Copy the review |
 | `q` | `close` | Close |
 | `?` | `help` | Show the keys |
@@ -202,20 +202,20 @@ The diff pane of the review tab (`diff`):
 | --- | ------ | ---- |
 | `]c` | `next_hunk` | Next hunk |
 | `[c` | `prev_hunk` | Previous hunk |
-| `]a` | `next_comment` | Next comment |
-| `[a` | `prev_comment` | Previous comment |
+| `]a` | `next_annotation` | Next annotation |
+| `[a` | `prev_annotation` | Previous annotation |
 | `]f` | `next_file` | Next file |
 | `[f` | `prev_file` | Previous file |
 | `s` | `stage` | Stage the hunk |
 | `u` | `unstage` | Unstage the hunk |
-| `c` | `comment` | Comment on the line or range (normal and visual mode) |
-| `C` | `comment_file` | Comment on the file |
-| `e` | `edit` | Edit the comment |
-| `x` | `delete` | Delete the comment |
+| `a` | `annotate` | Annotate the line or range (normal and visual mode) |
+| `A` | `annotate_file` | Annotate the file |
+| `e` | `edit` | Edit the annotation |
+| `x` | `delete` | Delete the annotation |
 | `<CR>` | `expand` | Expand hidden context |
 | `gf` | `goto_file` | Go to the line in the file |
 | `v` | `viewed` | Toggle viewed |
-| `L` | `picker` | List comments |
+| `L` | `picker` | List annotations |
 | `y` | `yank` | Copy the review |
 | `q` | `close` | Close |
 | `?` | `help` | Show the keys |
@@ -226,28 +226,28 @@ in the tab the review came from, and the pane keeps its diff. A mode change
 shows in the diff header as `mode 100644 → 100755`; `s` on the file in the
 drawer stages it.
 
-The comment float (`comment`). `:w` also saves and `:wq` saves and closes.
+The annotation float (`annotation`). `:w` also saves and `:wq` saves and closes.
 
 | Key | Action | Does |
 | --- | ------ | ---- |
-| `<C-s>` | `save` | Save the comment (normal and insert mode) |
+| `<C-s>` | `save` | Save the annotation (normal and insert mode) |
 | `<C-t>` | `toggle` | Hide or show the draft (normal and insert mode) |
 | `<C-c>` | `cancel` | Drop the draft (normal and insert mode) |
-| `q` | `close` | Close a saved comment |
+| `q` | `close` | Close a saved annotation |
 
 While a draft is hidden, `<C-t>` in normal mode shows it again from any
 buffer. A `<C-t>` mapping of your own comes back once the draft is gone.
 
-The comment picker (`picker`). Type to filter. All keys work in normal and
+The annotation picker (`picker`). Type to filter. All keys work in normal and
 insert mode.
 
 | Key | Action | Does |
 | --- | ------ | ---- |
-| `<C-n>` | `next` | Next comment |
-| `<C-p>` | `prev` | Previous comment |
-| `<CR>` | `jump` | Jump to the comment |
-| `<C-e>` | `edit` | Edit the comment |
-| `<C-x>` | `delete` | Delete the comment |
+| `<C-n>` | `next` | Next annotation |
+| `<C-p>` | `prev` | Previous annotation |
+| `<CR>` | `jump` | Jump to the annotation |
+| `<C-e>` | `edit` | Edit the annotation |
+| `<C-x>` | `delete` | Delete the annotation |
 | `<Esc>` | `close` | Close |
 
 The help float (`help`): `close` on `q`, `?` and `<Esc>`.
@@ -260,7 +260,7 @@ colorscheme on every `ColorScheme` event. The list is in
 
 ### Files
 
-Comments and viewed marks live in
+Annotations and viewed marks live in
 `stdpath('data')/iter/<repo>/<branch>.json`. Linked worktrees of one
 repository share them. The log is `stdpath('state')/iter/iter.log`.
 

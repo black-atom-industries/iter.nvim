@@ -1,6 +1,6 @@
-local anchor = require('iter.comments.anchor')
+local anchor = require('iter.annotations.anchor')
 local Drawer = require('iter.ui.drawer')
-local editor = require('iter.comments.editor')
+local editor = require('iter.annotations.editor')
 local git = require('iter.git')
 local help = require('iter.ui.help')
 local model = require('iter.diff.model')
@@ -12,7 +12,7 @@ local util = require('iter.util')
 ---@field config IterConfig
 ---@field path? string absolute path of a file to select when it changed
 ---@field side? IterSide side to look for `path` on first
----@field on_comments? fun() after a comment of the review is saved or deleted
+---@field on_annotations? fun() after an annotation of the review is saved or deleted
 ---@field on_close? fun(review: IterReview)
 
 ---@class IterReview
@@ -26,7 +26,7 @@ local util = require('iter.util')
 ---@field help? IterHelp help float of the diff pane
 ---@field group integer
 ---@field closed boolean
----@field on_comments? fun()
+---@field on_annotations? fun()
 ---@field on_close? fun(review: IterReview)
 local Review = {}
 Review.__index = Review
@@ -94,7 +94,7 @@ function Review.open(opts)
     vim.validate('opts.config', opts.config, 'table')
     vim.validate('opts.path', opts.path, 'string', true)
     vim.validate('opts.side', opts.side, 'string', true)
-    vim.validate('opts.on_comments', opts.on_comments, 'function', true)
+    vim.validate('opts.on_annotations', opts.on_annotations, 'function', true)
     vim.validate('opts.on_close', opts.on_close, 'function', true)
 
     local origin_tab = vim.api.nvim_get_current_tabpage()
@@ -128,7 +128,7 @@ function Review.open(opts)
         spacer_win = spacer_win,
         buf = buf,
         closed = false,
-        on_comments = opts.on_comments,
+        on_annotations = opts.on_annotations,
         on_close = opts.on_close,
     }, Review)
 
@@ -141,7 +141,7 @@ function Review.open(opts)
         path = opts.path,
         side = opts.side,
         view_handlers = self:view_handlers(),
-        on_comments = opts.on_comments,
+        on_annotations = opts.on_annotations,
         on_close = function()
             self:close()
         end,
@@ -177,11 +177,11 @@ function Review:view_handlers()
         prev_hunk = function()
             self.drawer.view:jump_hunk(-1)
         end,
-        next_comment = function()
-            self.drawer.view:jump_comment(1)
+        next_annotation = function()
+            self.drawer.view:jump_annotation(1)
         end,
-        prev_comment = function()
-            self.drawer.view:jump_comment(-1)
+        prev_annotation = function()
+            self.drawer.view:jump_annotation(-1)
         end,
         next_file = function()
             self.drawer:step_file(1)
@@ -198,23 +198,23 @@ function Review:view_handlers()
         goto_file = function()
             self:goto_file()
         end,
-        comment = function()
-            self:comment()
+        annotate = function()
+            self:annotate()
         end,
-        comment_file = function()
-            self:comment_file()
+        annotate_file = function()
+            self:annotate_file()
         end,
         edit = function()
-            self:edit_comment()
+            self:edit_annotation()
         end,
         delete = function()
-            self:delete_comment()
+            self:delete_annotation()
         end,
         viewed = function()
             self:toggle_viewed()
         end,
         picker = function()
-            require('iter').comments()
+            require('iter').annotations()
         end,
         yank = function()
             require('iter').yank()
@@ -636,15 +636,15 @@ function Review:open_file(path, line)
     )
 end
 
---- Show the diff that places `comment` and put the cursor on its row,
+--- Show the diff that places `annotation` and put the cursor on its row,
 --- switching to the review tab. False, and nothing switched, when the
---- comment's file isn't among the changes.
----@param comment IterComment
+--- annotation's file isn't among the changes.
+---@param annotation IterAnnotation
 ---@return boolean
-function Review:show_comment(comment)
-    self.drawer:refresh_comments()
+function Review:show_annotation(annotation)
+    self.drawer:refresh_annotations()
 
-    if not self.drawer:show_comment(comment) then
+    if not self.drawer:show_annotation(annotation) then
         return false
     end
 
@@ -657,25 +657,25 @@ function Review:show_comment(comment)
     return true
 end
 
----@param comment table
-function Review:open_editor(comment)
+---@param annotation table
+function Review:open_editor(annotation)
     editor.open({
         root = self.drawer.changes.root,
-        comment = comment,
+        annotation = annotation,
         config = self.drawer.config,
         pane = self.diff_win,
         on_save = function()
-            self:comments_changed()
+            self:annotations_changed()
         end,
     })
 end
 
---- Draw the stored comments again after this review wrote them.
-function Review:comments_changed()
-    if self.on_comments ~= nil then
-        self.on_comments()
+--- Draw the stored annotations again after this review wrote them.
+function Review:annotations_changed()
+    if self.on_annotations ~= nil then
+        self.on_annotations()
     else
-        self.drawer:refresh_comments()
+        self.drawer:refresh_annotations()
     end
 end
 
@@ -748,9 +748,9 @@ function Review:anchor_rows(file, first, last)
     return nil, 'No line under the cursor'
 end
 
---- Comment on the line under the cursor of the diff pane, or on the
+--- Annotate the line under the cursor of the diff pane, or on the
 --- visual range.
-function Review:comment()
+function Review:annotate()
     local view = self.drawer.view
     local file = view:is_shown() and view.files[1] or nil
 
@@ -761,7 +761,7 @@ function Review:comment()
     local first, last = editor.selection()
 
     if file.binary then
-        util.warn('A binary file takes file comments only')
+        util.warn('A binary file takes file annotations only')
         return
     end
 
@@ -778,8 +778,8 @@ function Review:comment()
     })
 end
 
---- Comment on the file of the diff pane.
-function Review:comment_file()
+--- Annotate the file of the diff pane.
+function Review:annotate_file()
     local view = self.drawer.view
     local file = view:is_shown() and view.files[1] or nil
 
@@ -793,9 +793,9 @@ function Review:comment_file()
     })
 end
 
---- The first comment placed below the cursor row of the diff pane.
----@return IterComment?
-function Review:comment_under_cursor()
+--- The first annotation placed below the cursor row of the diff pane.
+---@return IterAnnotation?
+function Review:annotation_under_cursor()
     local view = self.drawer.view
 
     if not view:is_shown() then
@@ -806,45 +806,46 @@ function Review:comment_under_cursor()
 
     for _, mark in ipairs(view.marks) do
         if mark.lnum == lnum then
-            return mark.comment
+            return mark.annotation
         end
     end
 
-    util.warn('No comment on this line')
+    util.warn('No annotation on this line')
     return nil
 end
 
-function Review:edit_comment()
-    local comment = self:comment_under_cursor()
+function Review:edit_annotation()
+    local annotation = self:annotation_under_cursor()
 
-    if comment ~= nil then
-        self:open_editor(comment)
+    if annotation ~= nil then
+        self:open_editor(annotation)
     end
 end
 
-function Review:delete_comment()
-    local comment = self:comment_under_cursor()
+function Review:delete_annotation()
+    local annotation = self:annotation_under_cursor()
 
-    if comment == nil then
+    if annotation == nil then
         return
     end
 
-    local first = vim.split(comment.body, '\n')[1]
+    local first = vim.split(annotation.body, '\n')[1]
 
     if
-        vim.fn.confirm('Delete the comment?\n' .. first, '&Delete\n&No', 2) ~= 1
+        vim.fn.confirm('Delete the annotation?\n' .. first, '&Delete\n&No', 2)
+        ~= 1
     then
         return
     end
 
     local _, err =
-        store.remove_comments(self.drawer.changes.root, { comment.id })
+        store.remove_annotations(self.drawer.changes.root, { annotation.id })
 
     if err ~= nil then
-        util.warn('Cannot delete the comment: ' .. err)
+        util.warn('Cannot delete the annotation: ' .. err)
     end
 
-    self:comments_changed()
+    self:annotations_changed()
 end
 
 return Review

@@ -1,5 +1,5 @@
 local helpers = dofile('tests/helpers.lua')
-local marks = require('iter.comments.marks')
+local marks = require('iter.annotations.marks')
 
 local new_set = MiniTest.new_set
 local eq = MiniTest.expect.equality
@@ -42,11 +42,11 @@ local function create_marks_repo()
     return path
 end
 
--- One comment of each kind on `m.txt`, one on `n.txt`, one on the review.
-local COMMENTS = {
+-- One annotation of each kind on `m.txt`, one on `n.txt`, one on the review.
+local ANNOTATIONS = {
     {
         scope = 'line',
-        body = 'Line comment',
+        body = 'Line annotation',
         anchor = {
             path = 'm.txt',
             side = 'new',
@@ -57,7 +57,7 @@ local COMMENTS = {
     },
     {
         scope = 'range',
-        body = 'A range comment that is long enough to wrap at the width of '
+        body = 'A range annotation that is long enough to wrap at the width of '
             .. 'the diff window, which is eighty columns minus the rail',
         anchor = {
             path = 'm.txt',
@@ -69,7 +69,7 @@ local COMMENTS = {
     },
     {
         scope = 'line',
-        body = 'Deleted line comment',
+        body = 'Deleted line annotation',
         anchor = {
             path = 'm.txt',
             side = 'old',
@@ -81,12 +81,12 @@ local COMMENTS = {
     },
     {
         scope = 'file',
-        body = 'File comment',
+        body = 'File annotation',
         anchor = { path = 'm.txt', side = 'new' },
     },
     {
         scope = 'line',
-        body = 'Outdated comment',
+        body = 'Outdated annotation',
         anchor = {
             path = 'm.txt',
             side = 'new',
@@ -97,7 +97,7 @@ local COMMENTS = {
     },
     {
         scope = 'line',
-        body = 'Hidden comment',
+        body = 'Hidden annotation',
         anchor = {
             path = 'm.txt',
             side = 'new',
@@ -108,7 +108,7 @@ local COMMENTS = {
     },
     {
         scope = 'line',
-        body = 'Other file comment',
+        body = 'Other file annotation',
         anchor = {
             path = 'n.txt',
             side = 'new',
@@ -119,23 +119,23 @@ local COMMENTS = {
     },
     {
         scope = 'review',
-        body = 'Review comment',
+        body = 'Review annotation',
         anchor = { side = 'new' },
     },
 }
 
---- Store `comments` for the child's repository.
----@param comments table[]
-local function seed(comments)
+--- Store `annotations` for the child's repository.
+---@param annotations table[]
+local function seed(annotations)
     child.lua(
         [[
         local store = require('iter.store')
-        for _, comment in ipairs(...) do
-            comment.outdated = comment.outdated or false
-            assert(store.put_comment(vim.fn.getcwd(), comment))
+        for _, annotation in ipairs(...) do
+            annotation.outdated = annotation.outdated or false
+            assert(store.put_annotation(vim.fn.getcwd(), annotation))
         end
     ]],
-        { comments }
+        { annotations }
     )
 end
 
@@ -176,13 +176,13 @@ local function open_review(expected)
     wait_diff(expected or 'unstaged m.txt')
 end
 
---- Each comment mark of the review's diff buffer as `<lnum> <text>`, the
+--- Each annotation mark of the review's diff buffer as `<lnum> <text>`, the
 --- text being its virtual lines joined by `|` with trailing blanks cut.
 ---@return string[]
 local function placed()
     return child.lua_get([[(function()
         local view = require('iter').current_review.drawer.view
-        local ns = vim.api.nvim_get_namespaces()['iter.diff.comments']
+        local ns = vim.api.nvim_get_namespaces()['iter.diff.annotations']
         local result = {}
         for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(view.buf, ns, 0, -1, { details = true })) do
             local lines = {}
@@ -222,31 +222,31 @@ local T = new_set({
 
 T['diff view'] = new_set()
 
-T['diff view']['shows each comment kind under its row'] = function()
-    seed(COMMENTS)
+T['diff view']['shows each annotation kind under its row'] = function()
+    seed(ANNOTATIONS)
     open_review()
 
     eq(placed(), {
-        '1 ▎ File comment',
-        '3 ▎ Line comment',
-        '9 ▎ A range comment that is long enough to wrap at the width of the diff'
-            .. '|▎ window, which is eighty columns minus the rail',
-        '11 ▎ Deleted line comment',
-        '13 ▎ outdated · Outdated comment',
-        '15 ▎ Hidden comment',
+        '1 ▎ File annotation',
+        '3 ▎ Line annotation',
+        '9 ▎ A range annotation that is long enough to wrap at the width of the'
+            .. '|▎ diff window, which is eighty columns minus the rail',
+        '11 ▎ Deleted line annotation',
+        '13 ▎ outdated · Outdated annotation',
+        '15 ▎ Hidden annotation',
     })
     eq(child.v.errmsg, '')
 
     helpers.expect_screenshot(child, 'marks-diff')
 end
 
-T['diff view']['dims outdated comments'] = function()
-    seed(COMMENTS)
+T['diff view']['dims outdated annotations'] = function()
+    seed(ANNOTATIONS)
     open_review()
 
     local groups = child.lua_get([[(function()
         local view = require('iter').current_review.drawer.view
-        local ns = vim.api.nvim_get_namespaces()['iter.diff.comments']
+        local ns = vim.api.nvim_get_namespaces()['iter.diff.annotations']
         local result = {}
         for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(view.buf, ns, 0, -1, { details = true })) do
             result[mark[2] + 1] = mark[4].virt_lines[1][2][2]
@@ -254,29 +254,30 @@ T['diff view']['dims outdated comments'] = function()
         return result
     end)()]])
 
-    eq(groups[3], 'IterDiffComment')
-    eq(groups[13], 'IterDiffCommentOutdated')
+    eq(groups[3], 'IterDiffAnnotation')
+    eq(groups[13], 'IterDiffAnnotationOutdated')
 end
 
 T['diff view']['rewraps the text when the window width changes'] = function()
-    seed({ COMMENTS[2] })
+    seed({ ANNOTATIONS[2] })
     open_review()
 
     eq(placed(), {
-        '9 ▎ A range comment that is long enough to wrap at the width of the diff'
-            .. '|▎ window, which is eighty columns minus the rail',
+        '9 ▎ A range annotation that is long enough to wrap at the width of the'
+            .. '|▎ diff window, which is eighty columns minus the rail',
     })
 
     child.o.columns = 50
     helpers.wait_until(
         child,
-        [[#vim.api.nvim_buf_get_extmarks(require('iter').current_review.drawer.view.buf, vim.api.nvim_get_namespaces()['iter.diff.comments'], 0, -1, { details = true })[1][4].virt_lines > 2]]
+        [[#vim.api.nvim_buf_get_extmarks(require('iter').current_review.drawer.view.buf, vim.api.nvim_get_namespaces()['iter.diff.annotations'], 0, -1, { details = true })[1][4].virt_lines > 2]]
     )
 
     eq(placed(), {
-        '9 ▎ A range comment that is long enough to'
-            .. '|▎ wrap at the width of the diff window,'
-            .. '|▎ which is eighty columns minus the rail',
+        '9 ▎ A range annotation that is long enough'
+            .. '|▎ to wrap at the width of the diff'
+            .. '|▎ window, which is eighty columns minus'
+            .. '|▎ the rail',
     })
 
     -- Stacked at 50 columns, the count still ends the full-width cell.
@@ -292,7 +293,7 @@ T['diff view']['rewraps the text when the window width changes'] = function()
 end
 
 T['diff view']['rewraps when only the diff window narrows'] = function()
-    seed({ COMMENTS[2] })
+    seed({ ANNOTATIONS[2] })
     open_review()
 
     child.lua([[
@@ -304,7 +305,7 @@ T['diff view']['rewraps when only the diff window narrows'] = function()
     ]])
     helpers.wait_until(
         child,
-        [[#vim.api.nvim_buf_get_extmarks(require('iter').current_review.drawer.view.buf, vim.api.nvim_get_namespaces()['iter.diff.comments'], 0, -1, { details = true })[1][4].virt_lines > 2]]
+        [[#vim.api.nvim_buf_get_extmarks(require('iter').current_review.drawer.view.buf, vim.api.nvim_get_namespaces()['iter.diff.annotations'], 0, -1, { details = true })[1][4].virt_lines > 2]]
     )
 
     eq(
@@ -312,18 +313,19 @@ T['diff view']['rewraps when only the diff window narrows'] = function()
         50
     )
     eq(placed(), {
-        '9 ▎ A range comment that is long enough to'
-            .. '|▎ wrap at the width of the diff window,'
-            .. '|▎ which is eighty columns minus the rail',
+        '9 ▎ A range annotation that is long enough'
+            .. '|▎ to wrap at the width of the diff'
+            .. '|▎ window, which is eighty columns minus'
+            .. '|▎ the rail',
     })
     eq(child.lua_get(R .. '.drawer.layout'), 'columns')
 end
 
-T['diff view']['expanding a gap moves a hidden comment to its line'] = function()
-    seed({ COMMENTS[6] })
+T['diff view']['expanding a gap moves a hidden annotation to its line'] = function()
+    seed({ ANNOTATIONS[6] })
     open_review()
 
-    eq(placed(), { '15 ▎ Hidden comment' })
+    eq(placed(), { '15 ▎ Hidden annotation' })
 
     child.lua([[
         local view = require('iter').current_review.drawer.view
@@ -331,23 +333,23 @@ T['diff view']['expanding a gap moves a hidden comment to its line'] = function(
     ]])
 
     -- The gap of nine lines opens whole: l12 to l20 on rows 15 to 23.
-    eq(placed(), { '19 ▎ Hidden comment' })
+    eq(placed(), { '19 ▎ Hidden annotation' })
     eq(child.lua_get(R .. '.drawer.view.rows[19].text'), 'l16')
 end
 
-T['diff view']['a refresh picks up comments written meanwhile'] = function()
+T['diff view']['a refresh picks up annotations written meanwhile'] = function()
     open_review()
     eq(placed(), {})
 
-    seed({ COMMENTS[1] })
+    seed({ ANNOTATIONS[1] })
     child.lua(R .. '.drawer:refresh()')
 
-    eq(placed(), { '3 ▎ Line comment' })
+    eq(placed(), { '3 ▎ Line annotation' })
 end
 
-T['diff view']['a fully staged file outdates a lost comment'] = function()
+T['diff view']['a fully staged file outdates a lost annotation'] = function()
     helpers.git(repo, { 'add', 'm.txt' })
-    seed({ COMMENTS[5] })
+    seed({ ANNOTATIONS[5] })
     open_review('unstaged n.txt')
     child.lua([[
         local d = require('iter').current_review.drawer
@@ -355,10 +357,10 @@ T['diff view']['a fully staged file outdates a lost comment'] = function()
     ]])
     wait_diff('staged m.txt')
 
-    eq(placed(), { '13 ▎ outdated · Outdated comment' })
+    eq(placed(), { '13 ▎ outdated · Outdated annotation' })
 end
 
-T['diff view']['a partly staged file leaves a lost comment out'] = function()
+T['diff view']['a partly staged file leaves a lost annotation out'] = function()
     helpers.git(repo, { 'add', 'm.txt' })
     helpers.write_file(
         vim.fs.joinpath(repo, 'm.txt'),
@@ -367,7 +369,7 @@ T['diff view']['a partly staged file leaves a lost comment out'] = function()
             vim.fn.readfile(vim.fs.joinpath(repo, 'm.txt'))
         )
     )
-    seed({ COMMENTS[5] })
+    seed({ ANNOTATIONS[5] })
     open_review()
     child.lua([[
         local d = require('iter').current_review.drawer
@@ -379,18 +381,18 @@ T['diff view']['a partly staged file leaves a lost comment out'] = function()
     eq(placed(), {})
 end
 
-T['diff view']['a failed store read keeps the comments'] = function()
-    seed({ COMMENTS[1] })
+T['diff view']['a failed store read keeps the annotations'] = function()
+    seed({ ANNOTATIONS[1] })
     open_review()
-    eq(placed(), { '3 ▎ Line comment' })
+    eq(placed(), { '3 ▎ Line annotation' })
 
     child.lua([[
         local path = require('iter.store').path(vim.fn.getcwd())
-        vim.fn.writefile({ '{"version":2,"comments":[],"viewed":{}}' }, path)
+        vim.fn.writefile({ '{"version":2,"annotations":[],"viewed":{}}' }, path)
         require('iter').current_review.drawer:refresh()
     ]])
 
-    eq(placed(), { '3 ▎ Line comment' })
+    eq(placed(), { '3 ▎ Line annotation' })
     eq(
         child.lua_get(
             [[#vim.api.nvim_buf_get_lines(]]
@@ -402,7 +404,7 @@ T['diff view']['a failed store read keeps the comments'] = function()
 end
 
 T['diff view']['a refresh reads the store only when its file changed'] = function()
-    seed({ COMMENTS[1] })
+    seed({ ANNOTATIONS[1] })
     open_review()
     child.lua([[
         local store = require('iter.store')
@@ -418,7 +420,7 @@ T['diff view']['a refresh reads the store only when its file changed'] = functio
     ]])
     eq(child.lua_get('_G.loads'), 0)
 
-    seed({ COMMENTS[2] })
+    seed({ ANNOTATIONS[2] })
     child.lua(R .. [[.drawer:refresh('poll')]])
 
     eq(child.lua_get('_G.loads'), 1)
@@ -427,8 +429,8 @@ end
 
 T['keys'] = new_set()
 
-T['keys'][']a and [a step through the comment rows in order'] = function()
-    seed(COMMENTS)
+T['keys'][']a and [a step through the annotation rows in order'] = function()
+    seed(ANNOTATIONS)
     open_review()
     child.lua([[vim.api.nvim_set_current_win(]] .. R .. [[.diff_win)]])
     child.lua([[vim.api.nvim_win_set_cursor(]] .. R .. [[.diff_win, { 1, 0 })]])
@@ -456,7 +458,7 @@ end
 local BUFFER_MAP = [[vim.fn.maparg(']a', 'n', false, true).buffer or 0]]
 
 T['keys'][']a is mapped only in iter buffers'] = function()
-    seed(COMMENTS)
+    seed(ANNOTATIONS)
     child.cmd('edit m.txt')
     eq(child.lua_get(BUFFER_MAP), 0)
 
@@ -464,11 +466,11 @@ T['keys'][']a is mapped only in iter buffers'] = function()
     child.lua([[vim.api.nvim_set_current_win(]] .. R .. [[.diff_win)]])
     eq(
         child.lua_get([[vim.fn.maparg(']a', 'n', false, true).desc]]),
-        'Next comment'
+        'Next annotation'
     )
     eq(
         child.lua_get([[vim.fn.maparg('[a', 'n', false, true).desc]]),
-        'Previous comment'
+        'Previous annotation'
     )
 
     child.cmd('tabprevious')
@@ -478,7 +480,7 @@ end
 T['counts'] = new_set()
 
 T['counts']['the review drawer shows counts on rows and in the header'] = function()
-    seed(COMMENTS)
+    seed(ANNOTATIONS)
     open_review()
 
     local lines = child.lua_get(
@@ -503,11 +505,11 @@ T['counts']['the review drawer shows counts on rows and in the header'] = functi
         return text
     end)()]])
 
-    eq(title, 'HEAD main · viewed 0 of 2 · 8 comments')
+    eq(title, 'HEAD main · viewed 0 of 2 · 8 annotations')
 end
 
 T['counts']['the status drawer shows no counts and no marks'] = function()
-    seed(COMMENTS)
+    seed(ANNOTATIONS)
     child.cmd('edit m.txt')
     child.cmd('Iter')
     helpers.wait_until(
@@ -521,12 +523,12 @@ T['counts']['the status drawer shows no counts and no marks'] = function()
         for _, chunk in ipairs(vim.api.nvim_win_get_config(d.win).title) do
             title = title .. chunk[1]
         end
-        local ns = vim.api.nvim_get_namespaces()['iter.diff.comments']
+        local ns = vim.api.nvim_get_namespaces()['iter.diff.annotations']
         return {
             lines = vim.api.nvim_buf_get_lines(d.buf, 0, -1, false),
             title = title,
             marks = ns and #vim.api.nvim_buf_get_extmarks(d.view.buf, ns, 0, -1, {}) or 0,
-            next_comment = (function()
+            next_annotation = (function()
                 for _, map in ipairs(vim.api.nvim_buf_get_keymap(d.view.buf, 'n')) do
                     if map.lhs == ']a' then
                         return map.lhs
@@ -540,7 +542,7 @@ T['counts']['the status drawer shows no counts and no marks'] = function()
     eq(state.title, 'HEAD main · 2 changes')
     eq(vim.trim(vim.split(state.lines[2], '│')[1]), 'M m.txt')
     eq(state.marks, 0)
-    eq(state.next_comment, '')
+    eq(state.next_annotation, '')
 end
 
 T['normal buffer'] = new_set()
@@ -549,13 +551,13 @@ local function setup_iter()
     child.lua([[require('iter').setup()]])
 end
 
---- Each comment mark of the current buffer as `<lnum> <text>`, the text
+--- Each annotation mark of the current buffer as `<lnum> <text>`, the text
 --- being its virtual lines joined by `|` with outer blanks cut, and each
 --- sign as `<lnum> sign`.
 ---@return string[]
 local function buffer_marks()
     return child.lua_get([[(function()
-        local ns = vim.api.nvim_get_namespaces()['iter.buffer.comments']
+        local ns = vim.api.nvim_get_namespaces()['iter.buffer.annotations']
         if ns == nil then
             return {}
         end
@@ -581,12 +583,12 @@ local function buffer_marks()
     end)()]])
 end
 
---- The stored comments as `<body> <start>-<end>[ outdated]`.
+--- The stored annotations as `<body> <start>-<end>[ outdated]`.
 ---@return string[]
 local function stored()
     return child.lua_get([[(function()
         local result = {}
-        for _, c in ipairs(require('iter.store').load(vim.fn.getcwd()).comments) do
+        for _, c in ipairs(require('iter.store').load(vim.fn.getcwd()).annotations) do
             local a = c.anchor
             table.insert(result, string.format('%s %s-%s%s', c.body,
                 tostring(a.start_line), tostring(a.end_line),
@@ -609,19 +611,19 @@ local function count_git_runs()
     ]])
 end
 
--- A line, a range, an outdated, a deleted-line and a file comment on
+-- A line, a range, an outdated, a deleted-line and a file annotation on
 -- `m.txt`, which has 19 lines in the worktree.
-local BUFFER_COMMENTS = {
-    COMMENTS[1],
-    COMMENTS[2],
-    COMMENTS[3],
-    COMMENTS[4],
-    COMMENTS[5],
-    COMMENTS[7],
+local BUFFER_ANNOTATIONS = {
+    ANNOTATIONS[1],
+    ANNOTATIONS[2],
+    ANNOTATIONS[3],
+    ANNOTATIONS[4],
+    ANNOTATIONS[5],
+    ANNOTATIONS[7],
 }
 
-T['normal buffer']['shows line and range comments with signs'] = function()
-    seed(BUFFER_COMMENTS)
+T['normal buffer']['shows line and range annotations with signs'] = function()
+    seed(BUFFER_ANNOTATIONS)
     setup_iter()
     child.o.number = true
     child.o.signcolumn = 'auto'
@@ -629,14 +631,14 @@ T['normal buffer']['shows line and range comments with signs'] = function()
 
     eq(buffer_marks(), {
         '1 sign',
-        '1 ▎ Line comment',
+        '1 ▎ Line annotation',
         '4 sign',
         '5 sign',
         '6 sign',
-        '6 ▎ A range comment that is long enough to wrap at the width of the diff'
+        '6 ▎ A range annotation that is long enough to wrap at the width of the diff'
             .. '|▎ window, which is eighty columns minus the rail',
         '9 sign',
-        '9 ▎ outdated · Outdated comment',
+        '9 ▎ outdated · Outdated annotation',
     })
     eq(child.v.errmsg, '')
 
@@ -644,44 +646,44 @@ T['normal buffer']['shows line and range comments with signs'] = function()
 end
 
 T['normal buffer']['nothing shows without setup()'] = function()
-    seed(BUFFER_COMMENTS)
+    seed(BUFFER_ANNOTATIONS)
     child.cmd('edit m.txt')
 
     eq(buffer_marks(), {})
     eq(
         child.lua_get(
-            [[pcall(vim.api.nvim_get_autocmds, { group = 'iter.buffer_comments' })]]
+            [[pcall(vim.api.nvim_get_autocmds, { group = 'iter.buffer_annotations' })]]
         ),
         false
     )
 end
 
 T['normal buffer']['setup() shows the buffers already in windows'] = function()
-    seed({ COMMENTS[1] })
+    seed({ ANNOTATIONS[1] })
     child.cmd('edit m.txt')
     setup_iter()
 
-    eq(buffer_marks(), { '1 sign', '1 ▎ Line comment' })
+    eq(buffer_marks(), { '1 sign', '1 ▎ Line annotation' })
 end
 
-T['normal buffer']['saving after inserting lines above moves the comments'] = function()
-    seed({ COMMENTS[1], COMMENTS[2] })
+T['normal buffer']['saving after inserting lines above moves the annotations'] = function()
+    seed({ ANNOTATIONS[1], ANNOTATIONS[2] })
     setup_iter()
     child.cmd('edit m.txt')
     child.api.nvim_buf_set_lines(0, 0, 0, false, { 'new a', 'new b' })
     child.cmd('write')
 
     eq(stored(), {
-        'Line comment 3-3',
-        COMMENTS[2].body .. ' 6-8',
+        'Line annotation 3-3',
+        ANNOTATIONS[2].body .. ' 6-8',
     })
     eq(buffer_marks()[1], '3 sign')
-    eq(buffer_marks()[2], '3 ▎ Line comment')
+    eq(buffer_marks()[2], '3 ▎ Line annotation')
     eq(buffer_marks()[5], '8 sign')
 end
 
 T['normal buffer']['a reload after an outside edit moves the marks'] = function()
-    seed({ COMMENTS[1], COMMENTS[2] })
+    seed({ ANNOTATIONS[1], ANNOTATIONS[2] })
     setup_iter()
     child.cmd('edit m.txt')
 
@@ -695,31 +697,31 @@ T['normal buffer']['a reload after an outside edit moves the marks'] = function(
     eq(child.api.nvim_buf_get_lines(0, 0, 1, false), { 'agent b' })
     eq(buffer_marks(), {
         '3 sign',
-        '3 ▎ Line comment',
+        '3 ▎ Line annotation',
         '6 sign',
         '7 sign',
         '8 sign',
-        '8 ▎ A range comment that is long enough to wrap at the width of the diff window,'
-            .. '|▎ which is eighty columns minus the rail',
+        '8 ▎ A range annotation that is long enough to wrap at the width of the diff'
+            .. '|▎ window, which is eighty columns minus the rail',
     })
 end
 
 T['normal buffer']['saving after deleting the anchored line outdates it'] = function()
-    seed({ COMMENTS[1], COMMENTS[2] })
+    seed({ ANNOTATIONS[1], ANNOTATIONS[2] })
     setup_iter()
     child.cmd('edit m.txt')
     child.cmd('1delete')
     child.cmd('write')
 
     eq(stored(), {
-        'Line comment 1-1 outdated',
-        COMMENTS[2].body .. ' 3-5',
+        'Line annotation 1-1 outdated',
+        ANNOTATIONS[2].body .. ' 3-5',
     })
-    eq(buffer_marks()[2], '1 ▎ outdated · Line comment')
+    eq(buffer_marks()[2], '1 ▎ outdated · Line annotation')
     eq(child.v.errmsg, '')
 end
 
-T['normal buffer']['saving the last line away keeps the comment on the buffer'] = function()
+T['normal buffer']['saving the last line away keeps the annotation on the buffer'] = function()
     seed({
         {
             scope = 'line',
@@ -744,7 +746,7 @@ T['normal buffer']['saving the last line away keeps the comment on the buffer'] 
 end
 
 T['normal buffer']['an unchanged save leaves the store file alone'] = function()
-    seed({ COMMENTS[1] })
+    seed({ ANNOTATIONS[1] })
     setup_iter()
     child.cmd('edit m.txt')
 
@@ -758,14 +760,14 @@ T['normal buffer']['an unchanged save leaves the store file alone'] = function()
     eq(child.lua_get(stat), before)
 end
 
-T['normal buffer']['writing to another file does not move the comments'] = function()
-    seed({ COMMENTS[1] })
+T['normal buffer']['writing to another file does not move the annotations'] = function()
+    seed({ ANNOTATIONS[1] })
     setup_iter()
     child.cmd('edit m.txt')
     child.api.nvim_buf_set_lines(0, 0, 0, false, { 'new a' })
     child.cmd('write other.txt')
 
-    eq(stored(), { 'Line comment 1-1' })
+    eq(stored(), { 'Line annotation 1-1' })
 end
 
 T['normal buffer']['buffers outside repos and non-file buffers spawn no git'] = function()
@@ -773,7 +775,7 @@ T['normal buffer']['buffers outside repos and non-file buffers spawn no git'] = 
     vim.fn.mkdir(outside, 'p')
     helpers.write_file(vim.fs.joinpath(outside, 'x.txt'), { 'x' })
 
-    seed({ COMMENTS[1] })
+    seed({ ANNOTATIONS[1] })
     setup_iter()
     count_git_runs()
     child.cmd('enew')
@@ -789,7 +791,7 @@ T['normal buffer']['buffers outside repos and non-file buffers spawn no git'] = 
 end
 
 T['normal buffer']['showing a repo buffer again spawns no git'] = function()
-    seed({ COMMENTS[1] })
+    seed({ ANNOTATIONS[1] })
     setup_iter()
     child.cmd('edit m.txt')
     count_git_runs()
@@ -797,23 +799,23 @@ T['normal buffer']['showing a repo buffer again spawns no git'] = function()
     child.cmd('buffer m.txt')
 
     eq(child.lua_get('_G.git_runs'), 0)
-    eq(buffer_marks(), { '1 sign', '1 ▎ Line comment' })
+    eq(buffer_marks(), { '1 sign', '1 ▎ Line annotation' })
 end
 
-T['normal buffer']['a comment written meanwhile shows on the next enter'] = function()
+T['normal buffer']['an annotation written meanwhile shows on the next enter'] = function()
     setup_iter()
     child.cmd('edit m.txt')
     eq(buffer_marks(), {})
 
-    seed({ COMMENTS[1] })
+    seed({ ANNOTATIONS[1] })
     child.cmd('edit n.txt')
     child.cmd('buffer m.txt')
 
-    eq(buffer_marks(), { '1 sign', '1 ▎ Line comment' })
+    eq(buffer_marks(), { '1 sign', '1 ▎ Line annotation' })
 end
 
-T['normal buffer']['a branch switch shows the other branch comments'] = function()
-    seed({ COMMENTS[1] })
+T['normal buffer']['a branch switch shows the other branch annotations'] = function()
+    seed({ ANNOTATIONS[1] })
     setup_iter()
     child.cmd('edit m.txt')
     helpers.git(repo, { 'checkout', '--quiet', '-b', 'other' })
@@ -826,28 +828,28 @@ T['normal buffer']['a branch switch shows the other branch comments'] = function
     child.cmd('edit n.txt')
     child.cmd('buffer m.txt')
 
-    eq(buffer_marks(), { '1 sign', '1 ▎ Line comment' })
+    eq(buffer_marks(), { '1 sign', '1 ▎ Line annotation' })
 end
 
-T['normal buffer']['a linked worktree shows its branch comments'] = function()
+T['normal buffer']['a linked worktree shows its branch annotations'] = function()
     local linked = vim.fn.resolve(vim.fn.tempname())
     helpers.git(repo, { 'worktree', 'add', '--quiet', '-b', 'wt', linked })
     child.cmd('cd ' .. vim.fn.fnameescape(linked))
-    seed({ COMMENTS[1] })
+    seed({ ANNOTATIONS[1] })
     setup_iter()
     child.cmd('edit m.txt')
 
-    eq(buffer_marks(), { '1 sign', '1 ▎ Line comment' })
+    eq(buffer_marks(), { '1 sign', '1 ▎ Line annotation' })
 
     helpers.cleanup(linked)
 end
 
 T['normal buffer']['adds no keymaps and no buffer-local autocmds'] = function()
-    seed({ COMMENTS[1] })
+    seed({ ANNOTATIONS[1] })
     setup_iter()
 
     local count =
-        [[#vim.api.nvim_get_autocmds({ group = 'iter.buffer_comments' })]]
+        [[#vim.api.nvim_get_autocmds({ group = 'iter.buffer_annotations' })]]
     local autocmds = child.lua_get(count)
     child.cmd('edit m.txt')
 
@@ -862,7 +864,7 @@ T['normal buffer']['adds no keymaps and no buffer-local autocmds'] = function()
     eq(child.lua_get(count), autocmds)
     eq(
         child.lua_get(
-            [[#vim.api.nvim_get_autocmds({ group = 'iter.buffer_comments', buffer = 0 })]]
+            [[#vim.api.nvim_get_autocmds({ group = 'iter.buffer_annotations', buffer = 0 })]]
         ),
         0
     )
@@ -872,7 +874,7 @@ T['normal buffer']['a second setup() adds no autocmds'] = function()
     setup_iter()
 
     local count =
-        [[#vim.api.nvim_get_autocmds({ group = 'iter.buffer_comments' })]]
+        [[#vim.api.nvim_get_autocmds({ group = 'iter.buffer_annotations' })]]
     local autocmds = child.lua_get(count)
     setup_iter()
 
@@ -880,7 +882,7 @@ T['normal buffer']['a second setup() adds no autocmds'] = function()
 end
 
 T['normal buffer']['rewraps when the window width changes'] = function()
-    seed({ COMMENTS[2] })
+    seed({ ANNOTATIONS[2] })
     setup_iter()
     child.cmd('edit m.txt')
     child.cmd('vsplit')
@@ -889,14 +891,14 @@ T['normal buffer']['rewraps when the window width changes'] = function()
     eq(#vim.split(buffer_marks()[4], '|', { plain = true }) > 2, true)
 end
 
-T['normal buffer']['a buffer without comments reads none of its lines'] = function()
-    seed({ COMMENTS[1] })
+T['normal buffer']['a buffer without annotations reads none of its lines'] = function()
+    seed({ ANNOTATIONS[1] })
     setup_iter()
     child.lua([[
         local get_lines = vim.api.nvim_buf_get_lines
         _G.line_reads = 0
         vim.api.nvim_buf_get_lines = function(...)
-            if debug.getinfo(2, 'S').source:find('iter/comments/marks', 1, true) then
+            if debug.getinfo(2, 'S').source:find('iter/annotations/marks', 1, true) then
                 _G.line_reads = _G.line_reads + 1
             end
             return get_lines(...)
@@ -909,8 +911,8 @@ T['normal buffer']['a buffer without comments reads none of its lines'] = functi
     eq(child.lua_get('_G.line_reads') > 0, true)
 end
 
-T['normal buffer']['a failing save of moved comments warns once'] = function()
-    seed({ COMMENTS[1] })
+T['normal buffer']['a failing save of moved annotations warns once'] = function()
+    seed({ ANNOTATIONS[1] })
     setup_iter()
     child.cmd('edit m.txt')
     child.lua([[require('iter.store').update = function()
@@ -923,26 +925,26 @@ T['normal buffer']['a failing save of moved comments warns once'] = function()
     end
 
     eq(child.lua_get('_G.notes'), {
-        { '[iter] Cannot save the moved comments: disk full', 3 },
+        { '[iter] Cannot save the moved annotations: disk full', 3 },
     })
-    eq(stored(), { 'Line comment 1-1' })
+    eq(stored(), { 'Line annotation 1-1' })
 end
 
 T['normal buffer'][':file and :saveas re-render for the new name'] = function()
-    seed({ COMMENTS[1] })
+    seed({ ANNOTATIONS[1] })
     setup_iter()
     child.cmd('edit n.txt')
     eq(buffer_marks(), {})
 
     child.cmd('file m.txt')
-    eq(buffer_marks(), { '1 sign', '1 ▎ outdated · Line comment' })
+    eq(buffer_marks(), { '1 sign', '1 ▎ outdated · Line annotation' })
 
     child.cmd('silent saveas copy.txt')
     eq(buffer_marks(), {})
 end
 
 T['normal buffer']['a float showing the buffer keeps the normal window wrap'] = function()
-    seed({ COMMENTS[2] })
+    seed({ ANNOTATIONS[2] })
     setup_iter()
     child.cmd('edit m.txt')
 
@@ -985,8 +987,8 @@ end
 
 ---@param body string
 ---@param a table
----@return IterComment
-local function comment(body, a)
+---@return IterAnnotation
+local function annotation(body, a)
     return {
         id = body,
         scope = a.start_line and 'line' or 'file',
@@ -998,29 +1000,29 @@ local function comment(body, a)
     }
 end
 
----@param result IterCommentMark[]
+---@param result IterAnnotationMark[]
 ---@return string[]
 local function summary(result)
     return vim.tbl_map(function(mark)
         return string.format(
             '%d %s%s',
             mark.lnum,
-            mark.comment.body,
+            mark.annotation.body,
             mark.outdated and ' (outdated)' or ''
         )
     end, result)
 end
 
-T['place()']['puts old-side comments only in the view of their base'] = function()
-    local comments = {
-        comment('index', {
+T['place()']['puts old-side annotations only in the view of their base'] = function()
+    local annotations = {
+        annotation('index', {
             side = 'old',
             base = 'index',
             start_line = 2,
             end_line = 2,
             lines = { 'b' },
         }),
-        comment('head', {
+        annotation('head', {
             side = 'old',
             base = 'HEAD',
             start_line = 2,
@@ -1029,19 +1031,19 @@ T['place()']['puts old-side comments only in the view of their base'] = function
         }),
     }
 
-    eq(summary(marks.place(file_diff('unstaged'), comments)), { '4 index' })
-    eq(summary(marks.place(file_diff('staged'), comments)), { '4 head' })
+    eq(summary(marks.place(file_diff('unstaged'), annotations)), { '4 index' })
+    eq(summary(marks.place(file_diff('staged'), annotations)), { '4 head' })
 end
 
-T['place()']['outdates new-side comments only against the worktree'] = function()
-    local comments = {
-        comment('found', {
+T['place()']['outdates new-side annotations only against the worktree'] = function()
+    local annotations = {
+        annotation('found', {
             side = 'new',
             start_line = 2,
             end_line = 2,
             lines = { 'B' },
         }),
-        comment('gone', {
+        annotation('gone', {
             side = 'new',
             start_line = 3,
             end_line = 3,
@@ -1050,25 +1052,25 @@ T['place()']['outdates new-side comments only against the worktree'] = function(
     }
 
     eq(
-        summary(marks.place(file_diff('unstaged'), comments)),
+        summary(marks.place(file_diff('unstaged'), annotations)),
         { '5 found', '6 gone (outdated)' }
     )
     -- The index is not the version the anchor follows, so a miss there says
-    -- nothing about the comment.
-    eq(summary(marks.place(file_diff('staged'), comments)), { '5 found' })
+    -- nothing about the annotation.
+    eq(summary(marks.place(file_diff('staged'), annotations)), { '5 found' })
 end
 
 T['place()']['puts what has no row on the header'] = function()
     local file = file_diff('unstaged')
-    local comments = {
-        comment('file', { side = 'new' }),
-        comment('beyond', {
+    local annotations = {
+        annotation('file', { side = 'new' }),
+        annotation('beyond', {
             side = 'new',
             start_line = 40,
             end_line = 40,
             lines = { 'gone' },
         }),
-        comment('elsewhere', {
+        annotation('elsewhere', {
             path = 'other.txt',
             side = 'new',
             start_line = 1,
@@ -1087,14 +1089,14 @@ T['place()']['puts what has no row on the header'] = function()
     }
 
     eq(
-        summary(marks.place(file, comments)),
+        summary(marks.place(file, annotations)),
         { '1 file', '1 beyond (outdated)' }
     )
 end
 
 T['place()']['outdates against the index when it is the worktree'] = function()
-    local comments = {
-        comment('gone', {
+    local annotations = {
+        annotation('gone', {
             side = 'new',
             start_line = 3,
             end_line = 3,
@@ -1104,7 +1106,11 @@ T['place()']['outdates against the index when it is the worktree'] = function()
 
     eq(
         summary(
-            marks.place(file_diff('staged'), comments, { new_follows = true })
+            marks.place(
+                file_diff('staged'),
+                annotations,
+                { new_follows = true }
+            )
         ),
         { '6 gone (outdated)' }
     )
@@ -1113,7 +1119,7 @@ end
 T['place()']['uses stored lines when the versions are missing'] = function()
     local file = file_diff('unstaged')
     file.old_lines, file.new_lines = nil, nil
-    local stored = comment('stored', {
+    local stored = annotation('stored', {
         side = 'new',
         start_line = 2,
         end_line = 2,
@@ -1124,13 +1130,13 @@ T['place()']['uses stored lines when the versions are missing'] = function()
     eq(summary(marks.place(file, { stored })), { '5 stored (outdated)' })
 end
 
-T['place()']['places old-side comments of a rename by its old path'] = function()
+T['place()']['places old-side annotations of a rename by its old path'] = function()
     local file = file_diff('staged')
     file.path, file.orig_path = 'g.txt', 'f.txt'
 
     eq(
         summary(marks.place(file, {
-            comment('old', {
+            annotation('old', {
                 side = 'old',
                 base = 'HEAD',
                 start_line = 2,
@@ -1150,7 +1156,7 @@ T['lines()']['wraps on words, splits long words and keeps line breaks'] = functi
             return line[2][1]
         end,
         marks.lines(
-            comment('one two three\n\nabcdefghijkl', { side = 'new' }),
+            annotation('one two three\n\nabcdefghijkl', { side = 'new' }),
             false,
             8
         )

@@ -9,7 +9,7 @@ local child = MiniTest.new_child_neovim()
 local repo
 
 local R = [[require('iter').current_review]]
-local INTRO = 'I reviewed your changes and have these comments.\n'
+local INTRO = 'I reviewed your changes and have these annotations.\n'
     .. 'Please address them.'
 
 ---@param path string
@@ -88,11 +88,11 @@ local FIXTURE = {
     },
 }
 
----@param comments table[]
+---@param annotations table[]
 ---@param order? string[]
 ---@return string
-local function text(comments, order)
-    return export.text(comments, {
+local function text(annotations, order)
+    return export.text(annotations, {
         intro = INTRO,
         order = order,
         lines_of = function(path)
@@ -201,10 +201,10 @@ T['text']['omits the language of an unknown filetype'] = function()
 end
 
 T['text']['indents to the width of the item number'] = function()
-    local comments = {}
+    local annotations = {}
 
     for i = 1, 10 do
-        table.insert(comments, {
+        table.insert(annotations, {
             id = tostring(i),
             scope = 'review',
             body = 'r' .. i .. '\nsecond',
@@ -213,7 +213,7 @@ T['text']['indents to the width of the item number'] = function()
         })
     end
 
-    local lines = vim.split(text(comments), '\n')
+    local lines = vim.split(text(annotations), '\n')
 
     eq(lines[#lines - 2], '10. Review')
     eq(lines[#lines - 1], '    r10')
@@ -272,12 +272,12 @@ local function seed()
     child.lua([[
         local store = require('iter.store')
         local root = vim.fn.getcwd()
-        assert(store.put_comment(root, {
+        assert(store.put_annotation(root, {
             scope = 'review',
             body = 'Overall fine',
             anchor = { side = 'new' },
         }))
-        assert(store.put_comment(root, {
+        assert(store.put_annotation(root, {
             scope = 'line',
             body = 'Why this?',
             anchor = {
@@ -289,7 +289,7 @@ local function seed()
 end
 
 local EXPECTED = table.concat({
-    'I reviewed your changes and have these comments.',
+    'I reviewed your changes and have these annotations.',
     'Please address them.',
     '',
     '1. a.lua:2',
@@ -305,7 +305,7 @@ local EXPECTED = table.concat({
 ---@return integer
 local function stored_count()
     return child.lua_get(
-        [[#require('iter.store').load(vim.fn.getcwd()).comments]]
+        [[#require('iter.store').load(vim.fn.getcwd()).annotations]]
     )
 end
 
@@ -333,7 +333,10 @@ end
 local function expect_copied()
     eq(child.fn.getreg('+'), EXPECTED)
     eq(child.fn.getreg('"'), EXPECTED)
-    eq(child.lua_get('_G.echoes'), { 'Copied 2 comments. Clear them? [y/N]' })
+    eq(
+        child.lua_get('_G.echoes'),
+        { 'Copied 2 annotations. Clear them? [y/N]' }
+    )
 end
 
 T['yank']['y in the drawer copies and clears on y'] = function()
@@ -343,13 +346,13 @@ T['yank']['y in the drawer copies and clears on y'] = function()
     child.type_keys('y')
     helpers.wait_until(
         child,
-        [[#require('iter.store').load(vim.fn.getcwd()).comments == 0]]
+        [[#require('iter.store').load(vim.fn.getcwd()).annotations == 0]]
     )
     expect_copied()
     eq(child.lua_get(R .. [[:is_open()]]), true)
 end
 
-T['yank']['n keeps the comments'] = function()
+T['yank']['n keeps the annotations'] = function()
     seed()
     open_review()
     child.type_keys('y')
@@ -359,7 +362,7 @@ T['yank']['n keeps the comments'] = function()
     eq(stored_count(), 2)
 end
 
-T['yank']['Enter keeps the comments'] = function()
+T['yank']['Enter keeps the annotations'] = function()
     seed()
     open_review()
     child.type_keys('y')
@@ -368,7 +371,7 @@ T['yank']['Enter keeps the comments'] = function()
     eq(stored_count(), 2)
 end
 
-T['yank']['Esc keeps the comments'] = function()
+T['yank']['Esc keeps the annotations'] = function()
     seed()
     open_review()
     child.type_keys('y')
@@ -390,7 +393,7 @@ T['yank']['y in the diff pane works'] = function()
     child.type_keys('y')
     helpers.wait_until(
         child,
-        [[#require('iter.store').load(vim.fn.getcwd()).comments == 0]]
+        [[#require('iter.store').load(vim.fn.getcwd()).annotations == 0]]
     )
     expect_copied()
 end
@@ -404,15 +407,15 @@ T['yank']['clearing refreshes the review'] = function()
         child,
         [[not table.concat(vim.api.nvim_buf_get_lines(]]
             .. R
-            .. [[.drawer.buf, 0, -1, false), '\n'):find('comments')]]
+            .. [[.drawer.buf, 0, -1, false), '\n'):find('annotations')]]
     )
 end
 
-T['yank']['clears only the comments that were copied'] = function()
+T['yank']['clears only the annotations that were copied'] = function()
     seed()
     child.lua_notify([[require('iter').yank()]])
     helpers.wait_until(child, [[#_G.echoes == 1]])
-    assert(require('iter.store').put_comment(repo, {
+    assert(require('iter.store').put_annotation(repo, {
         scope = 'review',
         body = 'Late',
         anchor = { side = 'new' },
@@ -420,11 +423,11 @@ T['yank']['clears only the comments that were copied'] = function()
     child.type_keys('y')
     helpers.wait_until(
         child,
-        [[#require('iter.store').load(vim.fn.getcwd()).comments == 1]]
+        [[#require('iter.store').load(vim.fn.getcwd()).annotations == 1]]
     )
     eq(
         child.lua_get(
-            [[require('iter.store').load(vim.fn.getcwd()).comments[1].body]]
+            [[require('iter.store').load(vim.fn.getcwd()).annotations[1].body]]
         ),
         'Late'
     )
@@ -436,7 +439,7 @@ T['yank']['the API works without a review'] = function()
     child.type_keys('y')
     helpers.wait_until(
         child,
-        [[#require('iter.store').load(vim.fn.getcwd()).comments == 0]]
+        [[#require('iter.store').load(vim.fn.getcwd()).annotations == 0]]
     )
     expect_copied()
 end
@@ -445,7 +448,7 @@ T['yank']['warns when there is nothing to copy'] = function()
     open_review()
     child.type_keys('y')
     helpers.wait_until(child, [[#_G.notes == 1]])
-    eq(notes(), { '[iter] No comments to copy' })
+    eq(notes(), { '[iter] No annotations to copy' })
     eq(child.lua_get('_G.echoes'), {})
     eq(child.fn.getreg('"'), '')
     eq(child.fn.getreg('+'), '')

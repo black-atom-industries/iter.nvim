@@ -1,11 +1,11 @@
---- Comments as `virt_lines` below the rows of a diff view, and with signs
+--- Annotations as `virt_lines` below the rows of a diff view, and with signs
 --- in normal buffers of repo files.
 
-local anchor = require('iter.comments.anchor')
+local anchor = require('iter.annotations.anchor')
 
----@class IterCommentMark
----@field lnum integer row the comment sits below
----@field comment IterComment
+---@class IterAnnotationMark
+---@field lnum integer row the annotation sits below
+---@field annotation IterAnnotation
 ---@field outdated boolean
 
 local M = {}
@@ -56,16 +56,16 @@ local function header_of(rows)
     return 1
 end
 
---- Where `comment` sits in `file`, or nil when it belongs to another view.
+--- Where `annotation` sits in `file`, or nil when it belongs to another view.
 ---@param file IterFileDiff
----@param comment IterComment
+---@param annotation IterAnnotation
 ---@param new_follows boolean the new version is the worktree file
 ---@return integer? lnum
 ---@return boolean outdated
-local function locate(file, comment, new_follows)
-    local a = comment.anchor
+local function locate(file, annotation, new_follows)
+    local a = annotation.anchor
 
-    if comment.scope == 'review' then
+    if annotation.scope == 'review' then
         return nil, false
     end
 
@@ -76,7 +76,7 @@ local function locate(file, comment, new_follows)
         return nil, false
     end
 
-    if comment.scope == 'file' then
+    if annotation.scope == 'file' then
         return header_of(file.rows), false
     end
 
@@ -91,7 +91,7 @@ local function locate(file, comment, new_follows)
     local stop, outdated
 
     if lines == nil then
-        stop, outdated = a.end_line, comment.outdated
+        stop, outdated = a.end_line, annotation.outdated
     else
         local start
         start, stop = anchor.resolve(a, lines)
@@ -112,29 +112,30 @@ local function locate(file, comment, new_follows)
     return lnum or header_of(file.rows), outdated
 end
 
---- The comments of `file` with the row each sits below, in row order and
---- stored order within a row. Line and range comments resolve against the
---- view's own version and sit below their last line, deleted-line comments
---- go to the view whose old version is their base, file comments sit below
---- the header, and a line hidden in a gap puts its comment below the gap.
---- A staged view outdates new-side comments only with `opts.new_follows`,
+--- The annotations of `file` with the row each sits below, in row order and
+--- stored order within a row. Line and range annotations resolve against the
+--- view's own version and sit below their last line, deleted-line annotations
+--- go to the view whose old version is their base, file annotations sit below
+--- the header, and a line hidden in a gap puts its annotation below the gap.
+--- A staged view outdates new-side annotations only with `opts.new_follows`,
 --- set when the file has no unstaged changes, so the index is the worktree.
 ---@param file IterFileDiff
----@param comments IterComment[]
+---@param annotations IterAnnotation[]
 ---@param opts? { new_follows?: boolean }
----@return IterCommentMark[]
-function M.place(file, comments, opts)
+---@return IterAnnotationMark[]
+function M.place(file, annotations, opts)
     local new_follows = file.side == 'unstaged'
         or (opts ~= nil and opts.new_follows == true)
     local result = {}
-    ---@type table<IterCommentMark, integer>
+    ---@type table<IterAnnotationMark, integer>
     local order = {}
 
-    for index, comment in ipairs(comments) do
-        local lnum, outdated = locate(file, comment, new_follows)
+    for index, annotation in ipairs(annotations) do
+        local lnum, outdated = locate(file, annotation, new_follows)
 
         if lnum ~= nil then
-            local mark = { lnum = lnum, comment = comment, outdated = outdated }
+            local mark =
+                { lnum = lnum, annotation = annotation, outdated = outdated }
             order[mark] = index
             table.insert(result, mark)
         end
@@ -194,18 +195,19 @@ local function wrap(text, width)
     return pieces
 end
 
---- The virtual lines of one comment for a text area `width` cells wide:
+--- The virtual lines of one annotation for a text area `width` cells wide:
 --- a bar, then the body wrapped and padded to the width. An outdated one is
 --- labelled and dimmed.
----@param comment IterComment
+---@param annotation IterAnnotation
 ---@param outdated boolean
 ---@param width integer
 ---@return [string, string][][]
-function M.lines(comment, outdated, width)
-    local group = outdated and 'IterDiffCommentOutdated' or 'IterDiffComment'
+function M.lines(annotation, outdated, width)
+    local group = outdated and 'IterDiffAnnotationOutdated'
+        or 'IterDiffAnnotation'
     local text_width = math.max(1, width - vim.fn.strdisplaywidth(BAR))
     local body = (outdated and OUTDATED or '')
-        .. (comment.body:gsub('\t', '    '))
+        .. (annotation.body:gsub('\t', '    '))
     local result = {}
 
     for _, paragraph in ipairs(vim.split(body, '\n', { plain = true })) do
@@ -225,7 +227,7 @@ end
 --- Draw `marks` into `ns` of `buf`, below their rows.
 ---@param buf integer
 ---@param ns integer
----@param marks IterCommentMark[]
+---@param marks IterAnnotationMark[]
 ---@param width integer text area width of the window
 function M.apply(buf, ns, marks, width)
     vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
@@ -236,7 +238,7 @@ function M.apply(buf, ns, marks, width)
         by_row[mark.lnum] = by_row[mark.lnum] or {}
         vim.list_extend(
             by_row[mark.lnum],
-            M.lines(mark.comment, mark.outdated, width)
+            M.lines(mark.annotation, mark.outdated, width)
         )
     end
 
@@ -247,24 +249,24 @@ function M.apply(buf, ns, marks, width)
     end
 end
 
--- Normal file buffers of repo files. Per buffer, `b:iter_comment_target`
+-- Normal file buffers of repo files. Per buffer, `b:iter_annotation_target`
 -- holds `{ root, path }`, or false for a buffer that is not a repo file, so
 -- each buffer is checked once and the state dies with the buffer.
 
 local SIGN = '▍'
-local TARGET = 'iter_comment_target'
-local WIDTH = 'iter_comment_width'
+local TARGET = 'iter_annotation_target'
+local WIDTH = 'iter_annotation_width'
 
-local buffer_ns = vim.api.nvim_create_namespace('iter.buffer.comments')
+local buffer_ns = vim.api.nvim_create_namespace('iter.buffer.annotations')
 
----@class IterRootComments
+---@class IterRootAnnotations
 ---@field head_path? string
 ---@field head? string contents of `head_path` when `store_path` was resolved
 ---@field store_path? string
----@field stat? string stat of `store_path` when `comments` was read
----@field comments IterComment[]
+---@field stat? string stat of `store_path` when `annotations` was read
+---@field annotations IterAnnotation[]
 
----@type table<string, IterRootComments>
+---@type table<string, IterRootAnnotations>
 local roots = {}
 
 -- Save errors shown so far, so a failing store warns once per message.
@@ -335,16 +337,16 @@ local function head_path(root)
     return vim.fs.joinpath(gitdir, 'HEAD')
 end
 
---- The stored comments of the repo at `root`. The store path is resolved
+--- The stored annotations of the repo at `root`. The store path is resolved
 --- again only when HEAD changed, and the file read again only when its
---- stat changed. A failed read keeps the comments there are.
+--- stat changed. A failed read keeps the annotations there are.
 ---@param root string
----@return IterComment[]
-local function root_comments(root)
+---@return IterAnnotation[]
+local function root_annotations(root)
     local cache = roots[root]
 
     if cache == nil then
-        cache = { head_path = head_path(root), comments = {} }
+        cache = { head_path = head_path(root), annotations = {} }
         roots[root] = cache
     end
 
@@ -359,18 +361,18 @@ local function root_comments(root)
     local stat = cache.store_path and stat_key(cache.store_path)
 
     if stat ~= nil and stat == cache.stat then
-        return cache.comments
+        return cache.annotations
     end
 
     local data = cache.store_path
         and require('iter.store').read(cache.store_path)
 
     if data ~= nil then
-        cache.comments = data.comments
+        cache.annotations = data.annotations
         cache.stat = stat
     end
 
-    return cache.comments
+    return cache.annotations
 end
 
 --- The repo root and repo-relative path of `buf`, or nil when it is not a
@@ -415,16 +417,16 @@ local function target_of(buf)
     return target or nil
 end
 
----@param comment IterComment
+---@param annotation IterAnnotation
 ---@param path string
 ---@return boolean
-local function follows_buffer(comment, path)
-    return (comment.scope == 'line' or comment.scope == 'range')
-        and comment.anchor.side == 'new'
-        and comment.anchor.path == path
+local function follows_buffer(annotation, path)
+    return (annotation.scope == 'line' or annotation.scope == 'range')
+        and annotation.anchor.side == 'new'
+        and annotation.anchor.path == path
 end
 
---- Draw the comments of `buf` for `win`: a sign on each anchored line and
+--- Draw the annotations of `buf` for `win`: a sign on each anchored line and
 --- the text below the last one. They resolve against the buffer's lines
 --- without persisting; one that isn't found sits outdated at its stored
 --- line.
@@ -437,11 +439,11 @@ local function render(buf, win)
         return
     end
 
-    local comments = vim.tbl_filter(function(comment)
-        return follows_buffer(comment, target.path)
-    end, root_comments(target.root))
+    local annotations = vim.tbl_filter(function(annotation)
+        return follows_buffer(annotation, target.path)
+    end, root_annotations(target.root))
 
-    if #comments == 0 then
+    if #annotations == 0 then
         vim.api.nvim_buf_clear_namespace(buf, buffer_ns, 0, -1)
         vim.b[buf][WIDTH] = vim.api.nvim_win_get_width(win)
         return
@@ -473,20 +475,21 @@ local function render(buf, win)
 
     vim.api.nvim_buf_clear_namespace(buf, buffer_ns, 0, -1)
 
-    for _, comment in ipairs(comments) do
-        local start, stop = anchor.resolve(comment.anchor, lines)
+    for _, annotation in ipairs(annotations) do
+        local start, stop = anchor.resolve(annotation.anchor, lines)
         local outdated = start == nil
 
         if outdated then
-            stop = math.min(math.max(comment.anchor.end_line or 1, 1), #lines)
+            stop =
+                math.min(math.max(annotation.anchor.end_line or 1, 1), #lines)
             start = stop
         end
 
         ---@cast start integer
         ---@cast stop integer
 
-        local group = outdated and 'IterDiffCommentOutdated'
-            or 'IterCommentSign'
+        local group = outdated and 'IterDiffAnnotationOutdated'
+            or 'IterAnnotationSign'
 
         for lnum = start, stop do
             vim.api.nvim_buf_set_extmark(buf, buffer_ns, lnum - 1, 0, {
@@ -495,7 +498,7 @@ local function render(buf, win)
             })
         end
 
-        local virt_lines = M.lines(comment, outdated, width)
+        local virt_lines = M.lines(annotation, outdated, width)
 
         for _, line in ipairs(virt_lines) do
             table.insert(line, 1, pad)
@@ -510,7 +513,7 @@ local function render(buf, win)
     vim.b[buf][WIDTH] = wininfo.width
 end
 
---- Re-anchor the comments of `buf` against its lines after a write and
+--- Re-anchor the annotations of `buf` against its lines after a write and
 --- persist the ones that moved, turned outdated or were found again.
 ---@param buf integer
 local function reanchor(buf)
@@ -521,8 +524,8 @@ local function reanchor(buf)
     end
 
     local path = target.path
-    local any = vim.iter(root_comments(target.root)):any(function(comment)
-        return follows_buffer(comment, path)
+    local any = vim.iter(root_annotations(target.root)):any(function(annotation)
+        return follows_buffer(annotation, path)
     end)
 
     if not any then
@@ -533,12 +536,12 @@ local function reanchor(buf)
     local data, err = require('iter.store').update(target.root, function(stored)
         local changed = false
 
-        for index, comment in ipairs(stored.comments) do
-            if follows_buffer(comment, path) then
-                local moved, did = anchor.follow(comment, lines)
+        for index, annotation in ipairs(stored.annotations) do
+            if follows_buffer(annotation, path) then
+                local moved, did = anchor.follow(annotation, lines)
 
                 if did then
-                    stored.comments[index] = moved
+                    stored.annotations[index] = moved
                     changed = true
                 end
             end
@@ -548,7 +551,7 @@ local function reanchor(buf)
     end)
 
     if data == nil then
-        local message = 'Cannot save the moved comments: ' .. tostring(err)
+        local message = 'Cannot save the moved annotations: ' .. tostring(err)
 
         if not save_warned[message] then
             save_warned[message] = true
@@ -561,7 +564,7 @@ local function reanchor(buf)
     local cache = roots[target.root]
 
     if cache ~= nil then
-        cache.comments = data.comments
+        cache.annotations = data.annotations
         cache.stat = cache.store_path and stat_key(cache.store_path)
     end
 end
@@ -594,7 +597,7 @@ function M.target(buf)
     return target_of(buf)
 end
 
---- Draw the comments of `buf` again in a normal window showing it.
+--- Draw the annotations of `buf` again in a normal window showing it.
 ---@param buf integer
 function M.render_buffer(buf)
     local win = vim.api.nvim_buf_is_valid(buf) and normal_win_of(buf)
@@ -604,13 +607,13 @@ function M.render_buffer(buf)
     end
 end
 
---- Show comments in normal buffers of repo files and keep them anchored
+--- Show annotations in normal buffers of repo files and keep them anchored
 --- as the files are written. Safe to call more than once.
 function M.watch_buffers()
     require('iter.highlight').setup()
 
     local group =
-        vim.api.nvim_create_augroup('iter.buffer_comments', { clear = true })
+        vim.api.nvim_create_augroup('iter.buffer_annotations', { clear = true })
 
     vim.api.nvim_create_autocmd('BufWinEnter', {
         group = group,

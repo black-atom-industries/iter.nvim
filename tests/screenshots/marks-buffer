@@ -1,17 +1,17 @@
 --|---------|---------|---------|---------|---------|---------|---------|---------|
 01|▍   1 l1                                                                        
-02|      ▎ Line comment                                                            
+02|      ▎ Line annotation                                                         
 03|    2 l2                                                                        
 04|    3 l3 new                                                                    
 05|▍   4 l4                                                                        
 06|▍   5 l5                                                                        
 07|▍   6 l6                                                                        
-08|      ▎ A range comment that is long enough to wrap at the width of the diff    
+08|      ▎ A range annotation that is long enough to wrap at the width of the diff 
 09|      ▎ window, which is eighty columns minus the rail                          
 10|    7 l7                                                                        
 11|    8 l9                                                                        
 12|▍   9 l10                                                                       
-13|      ▎ outdated · Outdated comment                                             
+13|      ▎ outdated · Outdated annotation                                          
 14|   10 l11                                                                       
 15|   11 l12                                                                       
 16|   12 l13                                                                       

@@ -4,7 +4,7 @@
 
 ---@class IterStoreFile stdpath('data')/iter/<repo-id>/<branch>.json
 ---@field version 1
----@field comments IterComment[]
+---@field annotations IterAnnotation[]
 ---@field viewed table<string, IterViewed>
 
 local git = require('iter.git')
@@ -21,7 +21,7 @@ local newer_warned = {}
 
 ---@return IterStoreFile
 local function empty()
-    return { version = VERSION, comments = {}, viewed = {} }
+    return { version = VERSION, annotations = {}, viewed = {} }
 end
 
 ---@param branch string
@@ -39,12 +39,14 @@ local function is_valid(data)
         return false
     end
 
-    if type(data.comments) ~= 'table' or not vim.islist(data.comments) then
+    if
+        type(data.annotations) ~= 'table' or not vim.islist(data.annotations)
+    then
         return false
     end
 
-    for _, comment in ipairs(data.comments) do
-        if type(comment) ~= 'table' or type(comment.id) ~= 'string' then
+    for _, annotation in ipairs(data.annotations) do
+        if type(annotation) ~= 'table' or type(annotation.id) ~= 'string' then
             return false
         end
     end
@@ -89,7 +91,7 @@ local function set_aside(path)
 
     util.warn(
         string.format(
-            'The comment store %s was corrupt and is kept as %s; starting empty',
+            'The annotation store %s was corrupt and is kept as %s; starting empty',
             path,
             vim.fs.basename(target)
         )
@@ -135,7 +137,7 @@ local function read(path)
             newer_warned[path] = true
             util.warn(
                 string.format(
-                    'The comment store %s was written by a newer iter; leaving it untouched',
+                    'The annotation store %s was written by a newer iter; leaving it untouched',
                     path
                 )
             )
@@ -165,7 +167,7 @@ local function write(path, data)
     if not made or vim.fn.isdirectory(dir) == 0 then
         return nil,
             string.format(
-                'Cannot create the comment store directory %s: %s',
+                'Cannot create the annotation store directory %s: %s',
                 dir,
                 made and 'not a directory' or tostring(mkdir_err)
             )
@@ -173,7 +175,7 @@ local function write(path, data)
 
     local encoded = vim.json.encode({
         version = data.version,
-        comments = data.comments,
+        annotations = data.annotations,
         viewed = next(data.viewed) == nil and vim.empty_dict() or data.viewed,
     })
 
@@ -235,7 +237,7 @@ function M.path(root)
     return vim.fs.joinpath(vim.fn.stdpath('data'), 'iter', id, name)
 end
 
---- The stored comments and viewed records. A missing file reads as empty; a
+--- The stored annotations and viewed records. A missing file reads as empty; a
 --- corrupt one is renamed aside with a warning and reads as empty.
 ---@param root string
 ---@return IterStoreFile?
@@ -259,7 +261,7 @@ function M.read(path)
 end
 
 --- Re-read the store from disk, let `fn` change it in place, and write it
---- back. Every write goes through here, so changes apply by comment id and
+--- back. Every write goes through here, so changes apply by annotation id and
 --- path to what other instances wrote in the meantime. When `fn` returns
 --- false, nothing is written.
 ---@param root string
@@ -292,30 +294,30 @@ function M.update(root, fn)
     return data
 end
 
---- Add a comment, or replace the stored one with the same id. A new comment
+--- Add an annotation, or replace the stored one with the same id. A new annotation
 --- gets its id and `created_at`; `updated_at` is set on every put.
 ---@param root string
----@param comment IterComment|{ id?: string, created_at?: integer, updated_at?: integer }
----@return IterComment?
+---@param annotation IterAnnotation|{ id?: string, created_at?: integer, updated_at?: integer }
+---@return IterAnnotation?
 ---@return string? error
-function M.put_comment(root, comment)
-    vim.validate('comment', comment, 'table')
+function M.put_annotation(root, annotation)
+    vim.validate('annotation', annotation, 'table')
 
-    local saved = vim.deepcopy(comment)
+    local saved = vim.deepcopy(annotation)
     local now = os.time()
     saved.id = saved.id or new_id()
     saved.created_at = saved.created_at or now
     saved.updated_at = now
 
     local _, err = M.update(root, function(data)
-        for i, stored in ipairs(data.comments) do
+        for i, stored in ipairs(data.annotations) do
             if stored.id == saved.id then
-                data.comments[i] = saved
+                data.annotations[i] = saved
                 return
             end
         end
 
-        table.insert(data.comments, saved)
+        table.insert(data.annotations, saved)
     end)
 
     if err ~= nil then
@@ -325,25 +327,25 @@ function M.put_comment(root, comment)
     return saved
 end
 
---- Replace the stored comment with the same id, and only that: when another
+--- Replace the stored annotation with the same id, and only that: when another
 --- instance deleted it meanwhile, nothing is written back.
 ---@param root string
----@param comment IterComment
----@return IterComment? saved nil when the comment no longer exists
+---@param annotation IterAnnotation
+---@return IterAnnotation? saved nil when the annotation no longer exists
 ---@return string? error
-function M.edit_comment(root, comment)
-    vim.validate('comment', comment, 'table')
-    vim.validate('comment.id', comment.id, 'string')
+function M.edit_annotation(root, annotation)
+    vim.validate('annotation', annotation, 'table')
+    vim.validate('annotation.id', annotation.id, 'string')
 
-    local saved = vim.deepcopy(comment)
+    local saved = vim.deepcopy(annotation)
     saved.updated_at = os.time()
     local found = false
 
     local _, err = M.update(root, function(data)
-        for i, stored in ipairs(data.comments) do
+        for i, stored in ipairs(data.annotations) do
             if stored.id == saved.id then
                 saved.created_at = stored.created_at
-                data.comments[i] = saved
+                data.annotations[i] = saved
                 found = true
                 return true
             end
@@ -357,7 +359,7 @@ function M.edit_comment(root, comment)
     end
 
     if not found then
-        return nil, 'The comment no longer exists'
+        return nil, 'The annotation no longer exists'
     end
 
     return saved
@@ -367,7 +369,7 @@ end
 ---@param ids string[]
 ---@return IterStoreFile?
 ---@return string? error
-function M.remove_comments(root, ids)
+function M.remove_annotations(root, ids)
     local remove = {}
 
     for _, id in ipairs(ids) do
@@ -375,9 +377,9 @@ function M.remove_comments(root, ids)
     end
 
     return M.update(root, function(data)
-        data.comments = vim.tbl_filter(function(comment)
-            return not remove[comment.id]
-        end, data.comments)
+        data.annotations = vim.tbl_filter(function(annotation)
+            return not remove[annotation.id]
+        end, data.annotations)
     end)
 end
 

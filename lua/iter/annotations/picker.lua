@@ -1,14 +1,14 @@
---- The comment picker: every stored comment grouped by file in a float,
+--- The annotation picker: every stored annotation grouped by file in a float,
 --- filtered by what is typed in a prompt float above it.
 
-local anchor = require('iter.comments.anchor')
+local anchor = require('iter.annotations.anchor')
 local highlight = require('iter.highlight')
 local keymap = require('iter.keymap')
 local store = require('iter.store')
 local util = require('iter.util')
 
 ---@class IterPickerItem
----@field comment IterComment
+---@field annotation IterAnnotation
 ---@field index integer position in the store
 ---@field loc string
 ---@field outdated boolean
@@ -26,9 +26,9 @@ local util = require('iter.util')
 ---@field root string
 ---@field config IterConfig
 ---@field order? string[] file paths in the order the groups follow
----@field jump fun(comment: IterComment)
----@field edit fun(comment: IterComment)
----@field on_change? fun() after a comment is deleted
+---@field jump fun(annotation: IterAnnotation)
+---@field edit fun(annotation: IterAnnotation)
+---@field on_change? fun() after an annotation is deleted
 
 ---@class IterPicker
 ---@field opts IterPickerOpenOptions
@@ -82,13 +82,13 @@ function M.file_lines(root, path)
     return ok and lines or nil
 end
 
---- The line of `lines` that `comment` stands for: where its text is now,
+--- The line of `lines` that `annotation` stands for: where its text is now,
 --- else its stored end line kept inside the file.
----@param comment IterComment
+---@param annotation IterAnnotation
 ---@param lines? string[]
 ---@return integer
-function M.line_of(comment, lines)
-    local a = comment.anchor
+function M.line_of(annotation, lines)
+    local a = annotation.anchor
 
     if a.start_line == nil then
         return 1
@@ -105,23 +105,23 @@ function M.line_of(comment, lines)
     return math.max(1, math.min(stored, lines and #lines or 1))
 end
 
----@param comment IterComment
+---@param annotation IterAnnotation
 ---@return boolean
-local function follows_worktree(comment)
-    return (comment.scope == 'line' or comment.scope == 'range')
-        and comment.anchor.side == 'new'
-        and comment.anchor.lines ~= nil
-        and #comment.anchor.lines > 0
+local function follows_worktree(annotation)
+    return (annotation.scope == 'line' or annotation.scope == 'range')
+        and annotation.anchor.side == 'new'
+        and annotation.anchor.lines ~= nil
+        and #annotation.anchor.lines > 0
 end
 
----@param comment IterComment
+---@param annotation IterAnnotation
 ---@return string
-local function location(comment)
-    local a = comment.anchor
+local function location(annotation)
+    local a = annotation.anchor
 
-    if comment.scope == 'review' then
+    if annotation.scope == 'review' then
         return ''
-    elseif comment.scope == 'file' then
+    elseif annotation.scope == 'file' then
         return 'file'
     end
 
@@ -131,14 +131,14 @@ local function location(comment)
     return a.side == 'old' and loc .. ' old' or loc
 end
 
---- Comments in groups: the files of `order` first, in that order, then the
---- other files by name, the review last. In a group the file comment comes
---- first, then the comments by line.
----@param comments IterComment[]
+--- Annotations in groups: the files of `order` first, in that order, then the
+--- other files by name, the review last. In a group the file annotation comes
+--- first, then the annotations by line.
+---@param annotations IterAnnotation[]
 ---@param order? string[]
 ---@param lines_of fun(path: string): string[]?
 ---@return IterPickerGroup[]
-function M.groups(comments, order, lines_of)
+function M.groups(annotations, order, lines_of)
     local rank = {}
 
     for i, path in ipairs(order or {}) do
@@ -150,8 +150,9 @@ function M.groups(comments, order, lines_of)
     ---@type IterPickerGroup[]
     local groups = {}
 
-    for index, comment in ipairs(comments) do
-        local path = comment.scope ~= 'review' and comment.anchor.path or nil
+    for index, annotation in ipairs(annotations) do
+        local path = annotation.scope ~= 'review' and annotation.anchor.path
+            or nil
         local key = path or ''
         local group = by_key[key]
 
@@ -161,24 +162,24 @@ function M.groups(comments, order, lines_of)
             table.insert(groups, group)
         end
 
-        local outdated = comment.outdated == true
+        local outdated = annotation.outdated == true
 
-        if follows_worktree(comment) then
+        if follows_worktree(annotation) then
             outdated = anchor.resolve(
-                comment.anchor,
+                annotation.anchor,
                 lines_of(path --[[@as string]])
             ) == nil
         end
 
-        local loc = location(comment)
-        local text = vim.split(comment.body, '\n')[1]:gsub('\t', ' ')
+        local loc = location(annotation)
+        local text = vim.split(annotation.body, '\n')[1]:gsub('\t', ' ')
 
-        if comment.body:find('\n', 1, true) then
+        if annotation.body:find('\n', 1, true) then
             text = text .. ' …'
         end
 
         table.insert(group.items, {
-            comment = comment,
+            annotation = annotation,
             index = index,
             loc = loc,
             outdated = outdated,
@@ -186,7 +187,7 @@ function M.groups(comments, order, lines_of)
             haystack = vim.fn.tolower(table.concat({
                 group.title,
                 loc,
-                comment.body,
+                annotation.body,
                 outdated and 'outdated' or '',
             }, ' ')),
         })
@@ -194,14 +195,14 @@ function M.groups(comments, order, lines_of)
 
     for _, group in ipairs(groups) do
         table.sort(group.items, function(a, b)
-            local sa = a.comment.anchor.start_line or 0
-            local sb = b.comment.anchor.start_line or 0
+            local sa = a.annotation.anchor.start_line or 0
+            local sb = b.annotation.anchor.start_line or 0
 
-            if a.comment.scope == 'file' then
+            if a.annotation.scope == 'file' then
                 sa = 0
             end
 
-            if b.comment.scope == 'file' then
+            if b.annotation.scope == 'file' then
                 sb = 0
             end
 
@@ -300,7 +301,7 @@ local function layout(zindex, footer)
         zindex = zindex,
         style = 'minimal',
         border = 'rounded',
-        title = ' Comments ',
+        title = ' Annotations ',
         title_pos = 'left',
     }, {
         relative = 'editor',
@@ -354,16 +355,18 @@ function Picker:render()
             table.insert(marks, { #lines, 2, 2 + #item.loc, 'IterDrawerKey' })
 
             if item.outdated then
-                table.insert(
-                    marks,
-                    { #lines, 2 + #loc + 2, #line, 'IterDiffCommentOutdated' }
-                )
+                table.insert(marks, {
+                    #lines,
+                    2 + #loc + 2,
+                    #line,
+                    'IterDiffAnnotationOutdated',
+                })
             end
         end
     end
 
     if #flat == 0 then
-        lines = { '  No matching comments' }
+        lines = { '  No matching annotations' }
         marks = { { 1, 0, nil, 'IterDrawerHint' } }
     end
 
@@ -433,10 +436,10 @@ function Picker:query()
     )
 end
 
---- Apply the prompt's text, keeping the selected comment selected when it
+--- Apply the prompt's text, keeping the selected annotation selected when it
 --- is still listed.
 function Picker:refilter()
-    local keep = self.sel ~= nil and self.flat[self.sel].comment.id or nil
+    local keep = self.sel ~= nil and self.flat[self.sel].annotation.id or nil
 
     self.shown = M.filter(self.groups, self:query())
     self:render()
@@ -444,7 +447,7 @@ function Picker:refilter()
     local index = 1
 
     for i, item in ipairs(self.flat) do
-        if item.comment.id == keep then
+        if item.annotation.id == keep then
             index = i
         end
     end
@@ -452,9 +455,9 @@ function Picker:refilter()
     self:select(index)
 end
 
----@return IterComment?
+---@return IterAnnotation?
 function Picker:selected()
-    return self.sel ~= nil and self.flat[self.sel].comment or nil
+    return self.sel ~= nil and self.flat[self.sel].annotation or nil
 end
 
 ---@param restore? boolean give the focus back to the window the picker came from
@@ -490,19 +493,19 @@ function Picker:reload()
     local data, err = store.load(self.opts.root)
 
     if data == nil then
-        util.error(err, 'Cannot read the comments')
+        util.error(err, 'Cannot read the annotations')
         self:close(true)
         return
     end
 
-    if #data.comments == 0 then
+    if #data.annotations == 0 then
         self:close(true)
         return
     end
 
     local cache = {}
 
-    self.groups = M.groups(data.comments, self.opts.order, function(path)
+    self.groups = M.groups(data.annotations, self.opts.order, function(path)
         if cache[path] == nil then
             cache[path] = M.file_lines(self.opts.root, path) or false
         end
@@ -513,48 +516,49 @@ function Picker:reload()
 end
 
 function Picker:jump()
-    local comment = self:selected()
+    local annotation = self:selected()
 
-    if comment == nil then
+    if annotation == nil then
         return
     end
 
     self:close(true)
-    self.opts.jump(comment)
+    self.opts.jump(annotation)
 end
 
 function Picker:edit()
-    local comment = self:selected()
+    local annotation = self:selected()
 
-    if comment == nil then
+    if annotation == nil then
         return
     end
 
     self:close(true)
     vim.schedule(function()
-        self.opts.edit(comment)
+        self.opts.edit(annotation)
     end)
 end
 
 function Picker:delete()
-    local comment = self:selected()
+    local annotation = self:selected()
 
-    if comment == nil then
+    if annotation == nil then
         return
     end
 
-    local first = vim.split(comment.body, '\n')[1]
+    local first = vim.split(annotation.body, '\n')[1]
 
     if
-        vim.fn.confirm('Delete the comment?\n' .. first, '&Delete\n&No', 2) ~= 1
+        vim.fn.confirm('Delete the annotation?\n' .. first, '&Delete\n&No', 2)
+        ~= 1
     then
         return
     end
 
-    local _, err = store.remove_comments(self.opts.root, { comment.id })
+    local _, err = store.remove_annotations(self.opts.root, { annotation.id })
 
     if err ~= nil then
-        util.warn('Cannot delete the comment: ' .. err)
+        util.warn('Cannot delete the annotation: ' .. err)
         return
     end
 
@@ -570,7 +574,7 @@ function Picker:delete()
     end
 end
 
---- Open the picker over the comments stored for `opts.root`.
+--- Open the picker over the annotations stored for `opts.root`.
 ---@param opts IterPickerOpenOptions
 function M.open(opts)
     vim.validate('opts', opts, 'table')
@@ -584,12 +588,12 @@ function M.open(opts)
     local data, err = store.load(opts.root)
 
     if data == nil then
-        util.error(err, 'Cannot read the comments')
+        util.error(err, 'Cannot read the annotations')
         return
     end
 
-    if #data.comments == 0 then
-        util.warn('No comments')
+    if #data.annotations == 0 then
+        util.warn('No annotations')
         return
     end
 
@@ -704,8 +708,8 @@ function M.prompt_win()
     return M.is_open() and current.prompt_win or nil
 end
 
---- The selected comment, nil while closed or when nothing is listed.
----@return IterComment?
+--- The selected annotation, nil while closed or when nothing is listed.
+---@return IterAnnotation?
 function M.selected()
     return M.is_open() and current:selected() or nil
 end

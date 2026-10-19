@@ -83,19 +83,19 @@ function M.status()
     })
 end
 
---- Refresh the open review's comments after a write from outside it.
+--- Refresh the open review's annotations after a write from outside it.
 local function refresh_review()
     if M.current_review ~= nil and M.current_review:is_open() then
-        M.current_review.drawer:refresh_comments()
+        M.current_review.drawer:refresh_annotations()
     end
 end
 
---- Draw the stored comments again in the review and in the buffers shown.
-local function refresh_comments()
+--- Draw the stored annotations again in the review and in the buffers shown.
+local function refresh_annotations()
     refresh_review()
 
     for _, win in ipairs(vim.api.nvim_list_wins()) do
-        require('iter.comments.marks').render_buffer(
+        require('iter.annotations.marks').render_buffer(
             vim.api.nvim_win_get_buf(win)
         )
     end
@@ -132,7 +132,7 @@ function M.review(target)
         config = M.config,
         path = path,
         side = target and target.side,
-        on_comments = refresh_comments,
+        on_annotations = refresh_annotations,
         on_close = function(review)
             if M.current_review == review then
                 M.current_review = nil
@@ -141,14 +141,14 @@ function M.review(target)
     })
 end
 
---- Open the comment float: on the cursor line or the visual range of a
+--- Open the annotation float: on the cursor line or the visual range of a
 --- repo file's buffer, or with `scope = 'review'` on the whole review.
 ---@param opts? { scope?: 'review' }
-function M.comment(opts)
+function M.annotate(opts)
     vim.validate('opts', opts, 'table', true)
     opts = opts or {}
 
-    local editor = require('iter.comments.editor')
+    local editor = require('iter.annotations.editor')
 
     if opts.scope == 'review' then
         local root = require('iter.git').root()
@@ -160,14 +160,14 @@ function M.comment(opts)
 
         editor.open({
             root = root,
-            comment = { scope = 'review', anchor = { side = 'new' } },
+            annotation = { scope = 'review', anchor = { side = 'new' } },
             config = M.config,
             on_save = refresh_review,
         })
         return
     end
 
-    local marks = require('iter.comments.marks')
+    local marks = require('iter.annotations.marks')
     local buf = vim.api.nvim_get_current_buf()
     local first, last = editor.selection()
     local target = marks.target(buf)
@@ -181,9 +181,9 @@ function M.comment(opts)
 
     editor.open({
         root = target.root,
-        comment = {
+        annotation = {
             scope = first == last and 'line' or 'range',
-            anchor = require('iter.comments.anchor').create({
+            anchor = require('iter.annotations.anchor').create({
                 path = target.path,
                 side = 'new',
                 start_line = first,
@@ -222,16 +222,16 @@ local function edit_at(path, line)
     )
 end
 
---- Go to `comment`: in the review when it is open and has the comment's
+--- Go to `annotation`: in the review when it is open and has the annotation's
 --- file among its changes, else in the file's buffer. A deleted line only
 --- exists in the review, which opens for it.
 ---@param root string
----@param comment IterComment
-local function jump_to_comment(root, comment)
-    local a = comment.anchor
+---@param annotation IterAnnotation
+local function jump_to_annotation(root, annotation)
+    local a = annotation.anchor
     local review = open_review()
 
-    if comment.scope == 'review' then
+    if annotation.scope == 'review' then
         if review ~= nil then
             review:focus()
         else
@@ -252,14 +252,14 @@ local function jump_to_comment(root, comment)
             review = open_review()
         end
 
-        if review == nil or not review:show_comment(comment) then
+        if review == nil or not review:show_annotation(annotation) then
             util.warn(a.path .. ' has no changes to show the old side of')
         end
 
         return
     end
 
-    if review ~= nil and review:show_comment(comment) then
+    if review ~= nil and review:show_annotation(annotation) then
         return
     end
 
@@ -268,8 +268,8 @@ local function jump_to_comment(root, comment)
         return
     end
 
-    local picker = require('iter.comments.picker')
-    local line = picker.line_of(comment, picker.file_lines(root, a.path))
+    local picker = require('iter.annotations.picker')
+    local line = picker.line_of(annotation, picker.file_lines(root, a.path))
 
     if review ~= nil then
         review:open_file(path, line)
@@ -278,11 +278,11 @@ local function jump_to_comment(root, comment)
     end
 end
 
---- The repository the comment commands work on, with the files of the open
+--- The repository the annotation commands work on, with the files of the open
 --- review in drawer order: the review's, else the current directory's.
 ---@return string root
 ---@return string[] order
-local function comment_scope()
+local function annotation_scope()
     local review = open_review()
     local root = review and review.drawer.changes.root
         or require('iter.git').root()
@@ -301,10 +301,10 @@ local function comment_scope()
     return root, order
 end
 
---- Copy the comments of the repository as text for an agent, then ask once
+--- Copy the annotations of the repository as text for an agent, then ask once
 --- whether to clear them.
 function M.yank()
-    local root, order = comment_scope()
+    local root, order = annotation_scope()
 
     if root == '' then
         util.warn('Not inside a git repository')
@@ -315,15 +315,15 @@ function M.yank()
         root = root,
         config = M.config,
         order = order,
-        on_clear = refresh_comments,
+        on_clear = refresh_annotations,
     })
 end
 
---- Open the comment picker over the comments of the repository: the open
+--- Open the annotation picker over the annotations of the repository: the open
 --- review's, else the current directory's.
-function M.comments()
+function M.annotations()
     local review = open_review()
-    local root, order = comment_scope()
+    local root, order = annotation_scope()
 
     if root == '' then
         util.warn('Not inside a git repository')
@@ -336,28 +336,28 @@ function M.comments()
         pane = review.diff_win
     end
 
-    require('iter.comments.picker').open({
+    require('iter.annotations.picker').open({
         root = root,
         config = M.config,
         order = order,
-        jump = function(comment)
-            jump_to_comment(root, comment)
+        jump = function(annotation)
+            jump_to_annotation(root, annotation)
         end,
-        edit = function(comment)
-            require('iter.comments.editor').open({
+        edit = function(annotation)
+            require('iter.annotations.editor').open({
                 root = root,
-                comment = comment,
+                annotation = annotation,
                 config = M.config,
                 pane = pane,
-                on_save = refresh_comments,
+                on_save = refresh_annotations,
             })
         end,
-        on_change = refresh_comments,
+        on_change = refresh_annotations,
     })
 end
 
 --- `review · <file> · <i>/<n>` inside the review tab, `''` elsewhere, with
---- `draft comment` while a comment draft is hidden.
+--- `draft annotation` while an annotation draft is hidden.
 ---@return string
 function M.statusline()
     local parts = {}
@@ -366,7 +366,7 @@ function M.statusline()
         table.insert(parts, M.current_review:statusline())
     end
 
-    table.insert(parts, require('iter.comments.editor').statusline())
+    table.insert(parts, require('iter.annotations.editor').statusline())
 
     return table.concat(
         vim.tbl_filter(function(part)
@@ -381,7 +381,7 @@ function M.setup(opts)
     local config = require('iter.config')
     M.config = config.resolve(opts)
     M.did_setup = true
-    require('iter.comments.marks').watch_buffers()
+    require('iter.annotations.marks').watch_buffers()
 
     return M
 end

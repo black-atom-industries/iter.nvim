@@ -1,31 +1,31 @@
 --|---------|---------|---------|---------|---------|---------|---------|---------|
 01| [No Name]  3 i//review                                                        X
 02|          M m.txt                                           ○ not viewed  +1 −2 
-03|          ▎ File comment                                                        
+03|          ▎ File annotation                                                     
 04|          @@ -1,11 +1,10 @@                                                     
 05|  1   1   l1                                                                    
-06|          ▎ Line comment                                                        
+06|          ▎ Line annotation                                                     
 07|  2   2   l2                                                                    
 08|  3     - l3                                                                    
 09|      3 + l3 new                                                                
 10|  4   4   l4                                                                    
 11|  5   5   l5                                                                    
 12|  6   6   l6                                                                    
-13|          ▎ A range comment that is long enough to wrap at the width of the diff
-14|          ▎ window, which is eighty columns minus the rail                      
+13|          ▎ A range annotation that is long enough to wrap at the width of the  
+14|          ▎ diff window, which is eighty columns minus the rail                 
 15|  7   7   l7                                                                    
 16|  8     - l8                                                                    
-17|          ▎ Deleted line comment                                                
+17|          ▎ Deleted line annotation                                             
 18|  9   8   l9                                                                    
 19| 10   9   l10                                                                   
-20|          ▎ outdated · Outdated comment                                         
+20|          ▎ outdated · Outdated annotation                                      
 21| 11  10   l11                                                                   
 22|          ··· 9 unchanged lines ···  <CR> expand                                
-23|          ▎ Hidden comment                                                      
+23|          ▎ Hidden annotation                                                   
 24|~                                                                               
 25|~                                                                               
 26|iter://review-diff [-]                                                          
-27| HEAD main · viewed 0 of 2 · 8 comments                                         
+27| HEAD main · viewed 0 of 2 · 8 annotations                                      
 28| Unstaged (2)                          │ Staged (0)                             
 29| M ○ m.txt                         [6] │                                        
 30| M ○ n.txt                         [1] │                                        
@@ -63,7 +63,7 @@
 24|33333333333333333333333333333333333333333333333333333333333333333333333333333333
 25|33333333333333333333333333333333333333333333333333333333333333333333333333333333
 26|00000000000000000000000000000000000000000000000000000000000000000000000000000000
-27|544444====4444444444444444>>>>>>>>>>>>>55555555555555555555555555555555555555555
+27|544444====4444444444444444>>>>>>>>>>>>>>>>55555555555555555555555555555555555555
 28|?????????????55555555555555555555555555@???????????55555555555555555555555555555
 29|ABACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADDDDD@5555555555555555555555555555555555555555
 30|5E5<555555555555555555555555555555FFFFF@5555555555555555555555555555555555555555

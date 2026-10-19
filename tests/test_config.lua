@@ -23,7 +23,7 @@ T['resolve()']['returns the defaults without options'] = function()
     })
     eq(
         resolved.options.export.intro,
-        'I reviewed your changes and have these comments.\nPlease address them.'
+        'I reviewed your changes and have these annotations.\nPlease address them.'
     )
     eq(resolved.options.refresh.poll_ms, 2000)
     eq(resolved.options.confirm.discard, true)
@@ -237,16 +237,16 @@ T['keymap']['list() returns handled, bound actions in order'] = function()
 end
 
 T['keymap']['attach() maps a multi-mode action in each mode'] = function()
-    local keys = config.resolve().keys.comment
+    local keys = config.resolve().keys.annotation
 
-    keymap.attach(_G.buf, 'comment', keys, { save = function() end })
+    keymap.attach(_G.buf, 'annotation', keys, { save = function() end })
 
     for _, mode in ipairs({ 'n', 'i' }) do
         local descs = vim.tbl_map(function(map)
             return map.desc
         end, vim.api.nvim_buf_get_keymap(_G.buf, mode))
 
-        eq(descs, { 'Save the comment' })
+        eq(descs, { 'Save the annotation' })
     end
 
     eq(vim.api.nvim_buf_get_keymap(_G.buf, 'x'), {})
@@ -281,7 +281,7 @@ T['keymap']['actions() match the configurable keys of every view'] = function()
     table.sort(views)
     eq(
         views,
-        { 'comment', 'diff', 'drawer', 'help', 'picker', 'review_drawer' }
+        { 'annotation', 'diff', 'drawer', 'help', 'picker', 'review_drawer' }
     )
 end
 

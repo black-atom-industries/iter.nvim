@@ -1,6 +1,6 @@
 ## About the plugin
 
-This is a Neovim plugin, written in Lua, for Git staging and code review: a status drawer, and a review tab with comments, viewed marks and an export for agents.
+This is a Neovim plugin, written in Lua, for Git staging and code review: a status drawer, and a review tab with annotations, viewed marks and an export for agents.
 
 ## Working on a new issue
 
