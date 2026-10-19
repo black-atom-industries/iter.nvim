@@ -1267,6 +1267,114 @@ T['hunks']['s stages one hunk of a CRLF file byte for byte'] = function()
     eq(child.lua_get('_G.notes'), {})
 end
 
+--- The added rows the diff pane shows.
+---@return string[]
+local function added_rows()
+    return child.lua_get([[(function()
+        local out = {}
+        for _, row in ipairs(]] .. R .. [[.drawer.view.rows) do
+            if row.kind == 'add' then
+                table.insert(out, row.text)
+            end
+        end
+        return out
+    end)()]])
+end
+
+T['hunks']['visual s stages the selected lines and visual u unstages them'] = function()
+    local a = numbered('a', 1, 30)
+    table.insert(a, 11, 'n3')
+    table.insert(a, 11, 'n2')
+    table.insert(a, 11, 'n1')
+    helpers.write_file(vim.fs.joinpath(repo, 'a.txt'), a)
+
+    open_review()
+    wait_diff('unstaged a.txt')
+    cursor_on('n1')
+    child.type_keys('V', 'j', 's')
+
+    eq(child.fn.mode(), 'n')
+    eq(
+        vim.tbl_filter(function(line)
+            return vim.startswith(line, '+n')
+        end, vim.split(
+            git_out({ 'diff', '--cached', '--', 'a.txt' }),
+            '\n'
+        )),
+        { '+n1', '+n2' }
+    )
+    eq(added_rows(), { 'n3' })
+
+    select_item('staged', 'a.txt')
+    wait_diff('staged a.txt')
+    eq(added_rows(), { 'n1', 'n2' })
+
+    cursor_on('n1')
+    child.type_keys('V', 'u')
+
+    eq(git_out({ 'show', ':a.txt' }):find('n1', 1, true), nil)
+    eq(git_out({ 'show', ':a.txt' }):find('n2', 1, true) ~= nil, true)
+    helpers.wait_until(
+        child,
+        string.format(
+            [[(function()
+                local n = 0
+                for _, row in ipairs(%s.drawer.view.rows) do
+                    if row.kind == 'add' then
+                        n = n + 1
+                    end
+                end
+                return n == 1
+            end)()]],
+            R
+        )
+    )
+    eq(added_rows(), { 'n2' })
+    eq(vim.fn.readfile(vim.fs.joinpath(repo, 'a.txt')), a)
+    eq(child.lua_get('_G.notes'), {})
+end
+
+T['hunks']['visual s on a symlink warns and changes nothing'] = function()
+    local link = vim.fs.joinpath(repo, 'l')
+    vim.uv.fs_symlink('target-one', link)
+    helpers.git(repo, { 'add', 'l' })
+    helpers.git(repo, { 'commit', '--quiet', '-m', 'link' })
+    vim.fn.delete(link)
+    vim.uv.fs_symlink('target-two', link)
+    local before = git_out({ 'ls-files', '--stage', 'l' })
+
+    open_review()
+    select_item('unstaged', 'l')
+    wait_diff('unstaged l')
+    cursor_on('target-two')
+    child.type_keys('V', 's')
+
+    eq(child.fn.mode(), 'n')
+    eq(child.lua_get('_G.notes'), {
+        {
+            '[iter] Lines of a symlink or submodule cannot be staged one by one',
+            vim.log.levels.WARN,
+        },
+    })
+    eq(git_out({ 'ls-files', '--stage', 'l' }), before)
+    eq(git_out({ 'diff', '--cached', '--', 'l' }), '')
+end
+
+T['hunks']['visual s over context rows only warns once'] = function()
+    local before = git_out({ 'diff', '--cached' })
+
+    open_review()
+    wait_diff('unstaged a.txt')
+    cursor_on('a4')
+    child.type_keys('V', 'j', 's')
+
+    eq(child.fn.mode(), 'n')
+    eq(child.lua_get('_G.notes'), {
+        { '[iter] No added or deleted lines selected', vim.log.levels.WARN },
+    })
+    eq(git_out({ 'diff', '--cached' }), before)
+end
+
 T['hunks']['? in the diff pane lists its keys'] = function()
     setup([[{ keys = { diff = { stage = 'S' } } }]])
     open_review()
@@ -1292,8 +1400,8 @@ T['hunks']['? in the diff pane lists its keys'] = function()
                 ' [a    Previous annotation',
                 ' ]f    Next file',
                 ' [f    Previous file',
-                ' S     Stage the hunk',
-                ' u     Unstage the hunk',
+                ' S     Stage the hunk or the selected lines',
+                ' u     Unstage the hunk or the selected lines',
                 ' a     Annotate the line or range',
                 ' A     Annotate the file',
                 ' e     Edit the annotation',

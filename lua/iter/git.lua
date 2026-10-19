@@ -397,11 +397,11 @@ end
 ---@param opts? { check?: boolean }
 ---@return boolean
 ---@return string
-function git.apply_hunk(root, patch, kind, opts)
+function git.apply_patch(root, patch, kind, opts)
     ensure_git()
 
     if #patch == 0 then
-        return false, 'No hunk patch to apply'
+        return false, 'No patch to apply'
     end
 
     if kind ~= 'stage' and kind ~= 'unstage' then
