@@ -52,6 +52,15 @@ the review straight to an agent pane.
   and spacer sizing as the drawer's extras (`IterDrawerExtras`). Columns the extras add come after the file columns;
   their items carry a `key`, and `Drawer:selected()` returns files only.
 - Viewed marks, annotation counts and the Annotations column show only in the review drawer.
+- The ahead and behind counts with the upstream's name, and the Recent commits section, show only in the status
+  drawer. They count against the upstream as last fetched; iter never fetches. A poll reads HEAD and the upstream with
+  one `git rev-parse`, and reads the counts (`rev-list --left-right`) and the commits (`log`) again only when either
+  moved. Commit ages are computed at render from the committer date.
+- The Recent commits section is a second, non-focusable float (`IterFloat`'s strip) pinned between the file area and
+  the key hint line inside the drawer's footprint; only the file columns scroll. The float owns the strip and closes it
+  with itself.
+- The status header keeps `HEAD <branch>` whole and sheds from the right when it doesn't fit: the summary shrinks to
+  the total, then goes, then the upstream, then the arrows.
 - The export and the Annotations column list annotations through `iter.annotations.list`: files in drawer order,
   then other files by name, the review last; by line within a file. An annotation that follows the worktree is outdated
   when its text isn't in the file's lines (the loaded buffer's, else the file's).

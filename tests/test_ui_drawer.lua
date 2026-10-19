@@ -30,6 +30,12 @@ local FIXTURE_COLUMNS = {
     ' ? untracked_dir/b.txt                 │',
 }
 
+local FIXTURE_SECTION = {
+    '',
+    ' Recent commits',
+    ' 021b9c0  initial                                                            2h',
+}
+
 --- Run `:Iter` (or `command`) in the child and wait for the drawer and its
 --- first preview.
 ---@param command? string
@@ -48,6 +54,22 @@ local function drawer_lines()
         return (line:gsub('%s+$', ''))
     end, vim.api.nvim_buf_get_lines(require('iter').drawer.buf, 0, -1, false))]]
     )
+end
+
+--- Lines of the pinned Recent commits without trailing blanks, empty
+--- without its window.
+---@return string[]
+local function section_lines()
+    return child.lua_get([[(function()
+        local d = require('iter').drawer
+        local win = d.float.strip_win
+        if win == nil or not vim.api.nvim_win_is_valid(win) then
+            return {}
+        end
+        return vim.tbl_map(function(line)
+            return (line:gsub('%s+$', ''))
+        end, vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(win), 0, -1, false))
+    end)()]])
 end
 
 --- `side path` of the selected item, or nil.
@@ -127,6 +149,11 @@ end
 
 local function stub_ui()
     child.lua([[
+        -- The fixture commits are dated 2026-01-01T00:00:00Z; now is 2h later.
+        local time = os.time
+        os.time = function(date)
+            return date and time(date) or _G.now or 1767232800
+        end
         _G.notes = {}
         vim.notify = function(msg, level)
             table.insert(_G.notes, { msg, level })
@@ -204,6 +231,7 @@ T['open'][':Iter shows the columns side by side at 80 columns'] = function()
     eq(child.lua_get('vim.api.nvim_get_current_win() == ' .. d .. '.win'), true)
     eq(child.bo.filetype, 'iter')
     eq(drawer_lines(), FIXTURE_COLUMNS)
+    eq(section_lines(), FIXTURE_SECTION)
     eq(selected(), 'unstaged deleted.txt')
 
     local config = child.lua_get('vim.api.nvim_win_get_config(' .. d .. '.win)')
@@ -240,6 +268,11 @@ T['open']['stacks the columns in a 60-column split'] = function()
         '',
         ' Staged (1)',
         ' M staged.txt',
+    })
+    eq(section_lines(), {
+        '',
+        ' Recent commits',
+        ' 021b9c0  initial                                        2h',
     })
     eq(
         child.lua_get('vim.api.nvim_win_get_width(require("iter").drawer.win)'),
@@ -790,9 +823,10 @@ T['float']['keeps its place after pane resizes'] = function()
     )
 
     eq(child.lua_get(d .. '.layout'), 'stacked')
-    eq(last_row(d .. '.win', 2), last_row(d .. '.pane'))
-    -- 0.3 of the 29-row pane, minus the 2 chrome rows.
-    eq(child.lua_get('vim.api.nvim_win_get_height(' .. d .. '.win)'), 6)
+    eq(last_row(d .. '.float.strip_win', 1), last_row(d .. '.pane'))
+    -- The height share minus the chrome and the Recent commits leaves fewer
+    -- rows than the minimum of file lines, so the minimum holds.
+    eq(child.lua_get('vim.api.nvim_win_get_height(' .. d .. '.win)'), 5)
     eq(selected(), 'unstaged deleted.txt')
 
     child.o.columns = 80
@@ -834,7 +868,7 @@ T['float']['ends on the last pane row below a winbar'] = function()
     local first = child.lua_get('vim.fn.getwininfo(' .. d .. '.win)[1].winrow')
 
     eq(last_row(d .. '.pane') < child.o.lines - 2, true)
-    eq(last_row(d .. '.win', 2), last_row(d .. '.pane'))
+    eq(last_row(d .. '.float.strip_win', 1), last_row(d .. '.pane'))
     eq(vim.startswith(screen_lines()[first + 1], ' Unstaged (5)'), true)
     eq(screen_lines()[1]:find('PANE WINBAR', 1, true) ~= nil, true)
     eq(child.lua_get('vim.wo[' .. d .. '.win].winbar'), '')
@@ -849,22 +883,30 @@ T['float']['shows no global winbar of its own'] = function()
     local first = child.lua_get('vim.fn.getwininfo(' .. d .. '.win)[1].winrow')
 
     eq(last_row(d .. '.pane') < child.o.lines - 2, true)
-    eq(last_row(d .. '.win', 2), last_row(d .. '.pane'))
+    eq(last_row(d .. '.float.strip_win', 1), last_row(d .. '.pane'))
     eq(vim.startswith(screen_lines()[first + 1], ' Unstaged (5)'), true)
 end
 
 --- Text of the drawer float's header (title) and key hint line (footer).
+--- The header's padding is cut to two spaces and its end trimmed.
 ---@return { header: string, hint: string }
 local function chrome()
-    return child.lua_get([[(function()
+    local result = child.lua_get([[(function()
         local config = vim.api.nvim_win_get_config(require('iter').drawer.win)
         local function text(chunks)
             return table.concat(vim.tbl_map(function(chunk)
                 return chunk[1]
             end, chunks or {}))
         end
-        return { header = text(config.title), hint = text(config.footer) }
+        local strip = require('iter').drawer.float.strip_win
+        local footer = strip and vim.api.nvim_win_get_config(strip).footer
+            or config.footer
+        return { header = text(config.title), hint = text(footer) }
     end)()]])
+
+    result.header = result.header:gsub('%s%s%s+', '  '):gsub('%s+$', '')
+
+    return result
 end
 
 local HINT = 's stage  u unstage  d discard  <CR> open  r review  ? help'
@@ -879,7 +921,7 @@ T['header'] = new_set()
 T['header']['shows the branch, the changes and the key hint'] = function()
     open_drawer()
 
-    eq(chrome(), { header = 'HEAD main · 6 changes', hint = HINT })
+    eq(chrome(), { header = 'HEAD main  6 changes', hint = HINT })
 end
 
 T['header']['shows the commits ahead of the upstream'] = function()
@@ -888,14 +930,14 @@ T['header']['shows the commits ahead of the upstream'] = function()
     helpers.git(repo, { 'commit', '--quiet', '-m', 'ahead' })
     open_drawer()
 
-    eq(chrome().header, 'HEAD main ↑1 · 5 changes')
+    eq(chrome().header, 'HEAD main  ↑1  base  5 changes')
 end
 
 T['header']['names a detached HEAD'] = function()
     helpers.git(repo, { 'checkout', '--quiet', '--detach' })
     open_drawer()
 
-    eq(chrome().header, 'HEAD (detached) · 6 changes')
+    eq(chrome().header, 'HEAD (detached)  6 changes')
 end
 
 T['header']['the hint follows remapped keys'] = function()
@@ -915,7 +957,7 @@ T['header']['stacked, the header, hint and the selected section stay on screen']
     local screen = table.concat(screen_lines(), '\n')
 
     for _, text in ipairs({
-        'HEAD main · 5 unstaged · 1 staged',
+        '5 unstaged · 1 staged',
         ' Staged (1)',
         ' M staged.txt',
         '? help',
@@ -939,13 +981,8 @@ T['header']['stacked with a long list, the header counts both sides'] = function
     local first = child.lua_get(
         [[vim.fn.getwininfo(require('iter').drawer.win)[1].winrow]]
     )
-    eq(
-        vim.startswith(
-            screen_lines()[first],
-            ' HEAD main · 20 unstaged · 1 staged'
-        ),
-        true
-    )
+    eq(vim.startswith(screen_lines()[first], ' HEAD main  '), true)
+    eq(vim.endswith(chrome().header, '20 unstaged · 1 staged'), true)
 end
 
 T['header']['a narrow drawer with a long branch opens cleanly'] = function()
@@ -970,10 +1007,7 @@ T['header']['a narrow drawer with a long branch opens cleanly'] = function()
         ) <= 30,
         true
     )
-    eq(
-        chrome().header,
-        'HEAD feat/a-rather-long-branch-name ↑1 · 5 unstaged · 0 staged'
-    )
+    eq(chrome().header, 'HEAD feat/a-rather-long-branch-name')
 
     -- Neovim cuts a title wider than the float from the left with `<`.
     local info =
@@ -982,8 +1016,60 @@ T['header']['a narrow drawer with a long branch opens cleanly'] = function()
     local row = child.get_screenshot().text[info.winrow]
     eq(
         table.concat(row, '', info.wincol, info.wincol + info.width - 1),
-        ' <me ↑1 · 5 unstaged · 0 stage'
+        ' <eat/a-rather-long-branch-nam'
     )
+end
+
+T['header']['stacked at 60 columns keeps HEAD and the branch whole'] = function()
+    local remote = vim.fn.resolve(vim.fn.tempname())
+    vim.fn.mkdir(remote, 'p')
+    helpers.git(remote, { 'init', '--quiet', '--bare' })
+    helpers.git(repo, { 'checkout', '--quiet', '-b', 'feat/renovation' })
+    helpers.git(repo, { 'remote', 'add', 'origin', remote })
+    helpers.git(repo, { 'push', '--quiet', '-u', 'origin', 'feat/renovation' })
+
+    -- Commits made without touching the index: one only on the remote, one
+    -- only on the branch.
+    local function commit(message)
+        return vim.trim(
+            helpers.git(
+                repo,
+                { 'commit-tree', 'HEAD^{tree}', '-p', 'HEAD', '-m', message }
+            )
+        )
+    end
+    helpers.git(repo, {
+        'push',
+        '--quiet',
+        'origin',
+        commit('theirs') .. ':refs/heads/feat/renovation',
+    })
+    helpers.git(repo, { 'fetch', '--quiet' })
+    helpers.git(repo, { 'update-ref', 'HEAD', commit('mine') })
+
+    child.cmd('vsplit')
+    child.cmd('vertical resize 60')
+    open_drawer()
+    child.cmd('redraw')
+
+    eq(child.lua_get('require("iter").drawer.layout'), 'stacked')
+    eq(
+        chrome().header,
+        'HEAD feat/renovation  ↑1 ↓1  origin/feat/renovation'
+    )
+
+    local info =
+        child.lua_get('vim.fn.getwininfo(require("iter").drawer.win)[1]')
+    local row = child.get_screenshot().text[info.winrow]
+    eq(
+        vim.startswith(
+            table.concat(row, '', info.wincol, info.wincol + info.width - 1),
+            ' HEAD feat/renovation  ↑1 ↓1  origin/feat/renovation'
+        ),
+        true
+    )
+
+    helpers.cleanup(remote)
 end
 
 T['help'] = new_set()
@@ -1153,6 +1239,25 @@ T['preview']['<CR> on an added row opens its line and closes the drawer'] = func
     eq(#child.api.nvim_list_wins(), 1)
 end
 
+T['preview']['<CR> on the file the pane shows, modified, only moves the cursor'] = function()
+    child.cmd('edit a.txt')
+    child.lua([[vim.api.nvim_buf_set_lines(0, -1, -1, false, { 'unsaved' })]])
+    preview_cursor('unstaged', 'a.txt', 'add', 'a2 new')
+    child.type_keys('<CR>')
+
+    eq(landing(), {
+        drawer = false,
+        pane = true,
+        name = 'a.txt',
+        line = 3,
+        text = 'a2 new',
+    })
+    eq(child.bo.modified, true)
+    eq(child.api.nvim_buf_get_lines(0, -2, -1, false), { 'unsaved' })
+    eq(child.lua_get('_G.notes'), {})
+    eq(child.v.errmsg, '')
+end
+
 T['preview']['<CR> on a context row opens its line'] = function()
     preview_cursor('unstaged', 'a.txt', 'context', 'a5')
     child.type_keys('<CR>')
@@ -1230,6 +1335,354 @@ T['preview']['<CR> on a hunk row does nothing'] = function()
     eq(child.lua_get('_G.notes'), {})
 end
 
+---@type string?
+local remote
+
+--- Commit `message` in `repo` with the committer date `date`, staged
+--- changes included.
+---@param message string
+---@param date string
+local function commit_at(message, date)
+    local pinned = vim.env.GIT_COMMITTER_DATE
+    vim.env.GIT_COMMITTER_DATE = date
+    helpers.git(repo, { 'commit', '--quiet', '--allow-empty', '-m', message })
+    vim.env.GIT_COMMITTER_DATE = pinned
+end
+
+--- Lines of the pinned Recent commits with every short sha as `sha`.
+---@return string[]
+local function commit_lines()
+    return vim.tbl_map(function(line)
+        return (line:gsub('%f[%w]%x%x%x%x%x%x%x+%f[%W]', 'sha'))
+    end, section_lines())
+end
+
+T['commits'] = new_set({
+    hooks = {
+        pre_case = function()
+            child.stop()
+            helpers.cleanup(repo)
+
+            local pinned = vim.env.GIT_COMMITTER_DATE
+            vim.env.GIT_COMMITTER_DATE = '2025-12-31T00:00:00Z'
+            repo = helpers.create_repo({ ['a.txt'] = { 'a' } })
+            vim.env.GIT_COMMITTER_DATE = pinned
+
+            remote = helpers.create_remote(repo)
+            helpers.push_from_clone(remote, 'theirs')
+            helpers.git(repo, { 'fetch', '--quiet' })
+            commit_at(
+                'refactor(drawer): split ui/drawer.lua',
+                '2026-01-01T00:00:00Z'
+            )
+            commit_at(
+                'docs: move scope into CONVENTIONS',
+                '2026-01-01T01:00:00Z'
+            )
+            helpers.write_file(vim.fs.joinpath(repo, 'a.txt'), { 'a', 'b' })
+            helpers.start_child(child, repo, { lines = 30, columns = 100 })
+            stub_ui()
+        end,
+        post_case = function()
+            helpers.cleanup(remote)
+            remote = nil
+        end,
+    },
+})
+
+local RECENT = {
+    '',
+    ' Recent commits · ↑2 unpushed · ↓1 behind',
+    ' ↑ sha  docs: move scope into CONVENTIONS'
+        .. string.rep(' ', 52)
+        .. '1h',
+    ' ↑ sha  refactor(drawer): split ui/drawer.lua'
+        .. string.rep(' ', 48)
+        .. '2h',
+    '   sha  initial' .. string.rep(' ', 78) .. '1d',
+}
+
+--- The drawer's windows: float, section strip, and whether the strip sits
+--- right under the float and ends on the pane's last row.
+---@return { strip: boolean, focusable: boolean?, stacked: boolean?, height: integer }
+local function strip_state()
+    child.cmd('redraw')
+
+    return child.lua_get([[(function()
+        local d = require('iter').drawer
+        local strip = d.float.strip_win
+        local valid = strip ~= nil and vim.api.nvim_win_is_valid(strip)
+        local main = vim.fn.getwininfo(d.win)[1]
+        local result = { strip = valid, height = main.height }
+        if valid then
+            local info = vim.fn.getwininfo(strip)[1]
+            local pane = vim.fn.getwininfo(d.pane)[1]
+            result.focusable = vim.api.nvim_win_get_config(strip).focusable
+            -- A float's winrow is its top border: the float has a title
+            -- row, the strip only a footer row.
+            result.stacked = main.winrow + 1 + main.height == info.winrow
+                and info.winrow + info.height
+                    == pane.winrow + pane.winbar + pane.height - 1
+        end
+        return result
+    end)()]])
+end
+
+T['commits']['the header shows ahead, behind and the upstream'] = function()
+    open_drawer()
+
+    eq(chrome().header, 'HEAD main  ↑2 ↓1  origin/main  1 change')
+
+    local title = child.lua_get([[(function()
+        local config = vim.api.nvim_win_get_config(require('iter').drawer.win)
+        local text = ''
+        for _, chunk in ipairs(config.title) do
+            text = text .. chunk[1]
+        end
+        return text
+    end)()]])
+    eq(vim.fn.strdisplaywidth(title), 100)
+    eq(vim.endswith(title, ' 1 change '), true)
+end
+
+T['commits']['pins the recent commits under the files'] = function()
+    open_drawer()
+
+    eq(commit_lines(), RECENT)
+    eq(#drawer_lines(), 2)
+    -- The file area is what the height share leaves after the chrome and
+    -- the section, here enough for both file lines.
+    eq(
+        strip_state(),
+        { strip = true, focusable = false, stacked = true, height = 2 }
+    )
+    eq(chrome().hint, HINT)
+
+    helpers.expect_screenshot(child, 'drawer-recent-commits')
+end
+
+T['commits']['stay visible above a long file list'] = function()
+    for i = 1, 30 do
+        helpers.write_file(
+            vim.fs.joinpath(repo, string.format('many_%02d.txt', i)),
+            { 'x' }
+        )
+    end
+    open_drawer()
+    child.type_keys('G')
+    child.cmd('redraw')
+
+    eq(selected(), 'unstaged many_30.txt')
+    eq(commit_lines(), RECENT)
+    eq(strip_state().stacked, true)
+
+    -- The share leaves fewer rows than the minimum of file lines, so the
+    -- minimum holds and the rest of the list scrolls.
+    eq(strip_state().height, 5)
+
+    helpers.expect_screenshot(child, 'drawer-recent-commits-long')
+end
+
+T['commits']['the section never takes focus'] = function()
+    open_drawer()
+    local drawer_win = child.lua_get('require("iter").drawer.win')
+
+    child.type_keys('G', 'j', 'j')
+    eq(selected(), 'unstaged a.txt')
+    eq(child.lua_get('vim.api.nvim_get_current_win()'), drawer_win)
+
+    child.cmd('wincmd w')
+    child.cmd('wincmd w')
+    eq(
+        child.lua_get(
+            'vim.api.nvim_get_current_win() ~= require("iter").drawer.float.strip_win'
+        ),
+        true
+    )
+end
+
+T['commits']['closing the drawer closes the section on every path'] = function()
+    --- Floats and buffers once the drawer reports itself closed.
+    local function after_close()
+        helpers.wait_until(
+            child,
+            [[_G.opened.closed and require('iter').drawer == nil]]
+        )
+        child.lua('vim.wait(50)')
+
+        return child.lua_get([[(function()
+            local floats = 0
+            for _, win in ipairs(vim.api.nvim_list_wins()) do
+                if vim.api.nvim_win_get_config(win).relative ~= '' then
+                    floats = floats + 1
+                end
+            end
+            return { floats = floats, bufs = #vim.api.nvim_list_bufs() }
+        end)()]])
+    end
+
+    open_drawer()
+    child.lua('_G.opened = require("iter").drawer')
+    child.type_keys('q')
+    local baseline = after_close()
+    eq(baseline.floats, 0)
+
+    -- Each path gets a window of its own (a split, or a tab of the same
+    -- buffer) that the path may close.
+    for _, path in ipairs({
+        { 'split', 'q' },
+        { 'split', ':quit' },
+        { 'split', 'close the pane' },
+        { 'tab split', ':tabclose' },
+    }) do
+        child.cmd(path[1])
+        open_drawer()
+        child.lua('_G.opened = require("iter").drawer')
+        eq({ path[2], strip_state().strip }, { path[2], true })
+        local section_buf = child.lua_get('require("iter").drawer.section_buf')
+
+        if path[2] == 'q' then
+            child.type_keys('q')
+        elseif path[2] == ':quit' then
+            child.cmd('quit')
+        elseif path[2] == ':tabclose' then
+            child.cmd('tabclose')
+        else
+            child.lua(
+                'vim.api.nvim_win_close(require("iter").drawer.pane, true)'
+            )
+        end
+
+        eq({ path[2], after_close() }, { path[2], baseline })
+        eq(
+            { path[2], child.api.nvim_buf_is_valid(section_buf) },
+            { path[2], false }
+        )
+    end
+end
+
+T['commits'][':Iter on an open drawer focuses it and keeps the section'] = function()
+    open_drawer()
+    local d = 'require("iter").drawer'
+    child.lua('vim.api.nvim_set_current_win(' .. d .. '.pane)')
+
+    child.cmd('Iter')
+
+    eq(child.lua_get('vim.api.nvim_get_current_win() == ' .. d .. '.win'), true)
+    eq(child.lua_get(d .. '.closed'), false)
+    eq(strip_state().strip, true)
+end
+
+T['commits']['drawer.commits = 0 opens no section window'] = function()
+    child.lua('require("iter").setup({ drawer = { commits = 0 } })')
+    open_drawer()
+
+    eq(#drawer_lines(), 2)
+    eq(strip_state().strip, false)
+    eq(chrome().header, 'HEAD main  ↑2 ↓1  origin/main  1 change')
+    eq(chrome().hint, HINT)
+end
+
+T['commits']['stacked, the section stays pinned at the bottom'] = function()
+    child.cmd('vsplit')
+    child.cmd('vertical resize 60')
+    open_drawer()
+
+    eq(child.lua_get('require("iter").drawer.layout'), 'stacked')
+    eq(drawer_lines(), { ' Unstaged (1)', ' M a.txt', '', ' Staged (0)' })
+    eq(commit_lines()[2], ' Recent commits · ↑2 unpushed · ↓1 behind')
+    eq(#commit_lines(), 5)
+    eq(vim.endswith(commit_lines()[5], ' 1d'), true)
+    eq(strip_state().stacked, true)
+
+    child.lua('vim.api.nvim_win_set_width(require("iter").drawer.pane, 40)')
+    helpers.wait_until(
+        child,
+        [[vim.api.nvim_win_get_width(require('iter').drawer.float.strip_win) == 40]]
+    )
+    eq(strip_state().stacked, true)
+    eq(vim.fn.strdisplaywidth(commit_lines()[3]) <= 40, true)
+end
+
+T['commits']['follows VimResized'] = function()
+    open_drawer()
+
+    child.o.lines = 40
+    child.o.columns = 70
+    helpers.wait_until(
+        child,
+        [[vim.api.nvim_win_get_width(require('iter').drawer.float.strip_win) == 70]]
+    )
+    eq(strip_state().stacked, true)
+end
+
+T['commits']['a new commit shows on the next poll'] = function()
+    child.lua('require("iter").setup({ refresh = { poll_ms = 50 } })')
+    open_drawer()
+
+    helpers.git(repo, { 'commit', '--quiet', '-am', 'feat: polled' })
+    helpers.wait_until(
+        child,
+        [[vim.api.nvim_buf_get_lines(require('iter').drawer.section_buf, 1, 2, false)[1]
+            == ' Recent commits · ↑3 unpushed · ↓1 behind']]
+    )
+    eq(drawer_lines(), { ' Working tree clean' })
+end
+
+T['commits']['an age rolling over renders without diff or log'] = function()
+    open_drawer()
+    wait_preview('unstaged a.txt')
+    child.lua([[
+        local system = vim.system
+        _G.calls = {}
+        vim.system = function(cmd, ...)
+            table.insert(_G.calls, cmd[3])
+            return system(cmd, ...)
+        end
+        _G.now = 1767232800 + 3600
+        require('iter').drawer:refresh('poll')
+        vim.system = system
+    ]])
+
+    eq(child.lua_get('_G.calls'), { 'branch', 'status', 'rev-parse' })
+    eq(
+        vim.tbl_map(function(line)
+            return line:sub(-2)
+        end, vim.list_slice(commit_lines(), 3, 5)),
+        { '2h', '3h', '1d' }
+    )
+end
+
+T['commits']['a detached HEAD lists commits without markers'] = function()
+    helpers.git(repo, { 'checkout', '--quiet', '--detach' })
+    open_drawer()
+
+    eq(chrome().header, 'HEAD (detached)  1 change')
+    eq(vim.list_slice(commit_lines(), 1, 3), {
+        '',
+        ' Recent commits',
+        ' sha  docs: move scope into CONVENTIONS'
+            .. string.rep(' ', 54)
+            .. '1h',
+    })
+end
+
+T['commits']['an unborn HEAD has no section'] = function()
+    child.stop()
+    helpers.cleanup(repo)
+    repo = vim.fn.resolve(vim.fn.tempname())
+    vim.fn.mkdir(repo, 'p')
+    helpers.git(repo, { 'init', '--quiet', '-b', 'main' })
+    helpers.write_file(vim.fs.joinpath(repo, 'a.txt'), { 'a' })
+    helpers.start_child(child, repo)
+    stub_ui()
+    open_drawer()
+
+    eq(#drawer_lines(), 2)
+    eq(strip_state().strip, false)
+    eq(chrome().header, 'HEAD main  1 change')
+end
+
 T['clean'] = new_set({
     hooks = {
         pre_case = function()
@@ -1247,7 +1700,12 @@ T['clean']['a clean tree says Working tree clean'] = function()
     open_drawer()
 
     eq(drawer_lines(), { ' Working tree clean' })
-    eq(chrome(), { header = 'HEAD main · 0 changes', hint = HINT })
+    eq(section_lines(), {
+        '',
+        ' Recent commits',
+        ' 1a6d49e  initial                                                            2h',
+    })
+    eq(chrome(), { header = 'HEAD main  0 changes', hint = HINT })
     eq(selected(), vim.NIL)
     eq(
         child.lua_get(
@@ -1330,7 +1788,7 @@ T['refresh']['two external git add in a linked worktree'] = function()
     helpers.write_file(vim.fs.joinpath(worktree, 'two.txt'), { 'two' })
     child.cmd('cd ' .. vim.fn.fnameescape(worktree))
     open_drawer()
-    eq(chrome().header, 'HEAD feat · 2 changes')
+    eq(chrome().header, 'HEAD feat  2 changes')
 
     helpers.git(worktree, { 'add', 'one.txt' })
     helpers.wait_until(child, lists('staged', 'one.txt'))

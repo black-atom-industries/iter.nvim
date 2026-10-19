@@ -539,7 +539,7 @@ T['counts']['the status drawer shows no counts and no marks'] = function()
         }
     end)()]])
 
-    eq(state.title, 'HEAD main · 2 changes')
+    eq((state.title:gsub('%s+', ' ')), 'HEAD main 2 changes ')
     eq(vim.trim(vim.split(state.lines[2], '│')[1]), 'M m.txt')
     eq(state.marks, 0)
     eq(state.next_annotation, '')

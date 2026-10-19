@@ -11,6 +11,10 @@ A Git staging and code review tool for Neovim.
 - **Status drawer:** a float at the bottom of the current window with Unstaged
   and Staged side by side (stacked in narrow windows). The window above shows
   the diff of the selected file as you move.
+- **Branch at a glance** in the status drawer: the header shows the branch,
+  how far it is ahead of (`↑`) and behind (`↓`) its upstream and the
+  upstream's name; pinned under the files, the last commits with `↑` on those
+  not pushed yet.
 - **Stage, unstage, discard** whole files. New files are listed one by one
   among the others. Discard asks first, names the paths, and never touches the
   index or ignored files.
@@ -83,6 +87,18 @@ Outside a git repository iter warns and opens nothing. On a clean tree the
 status drawer says "Working tree clean"; the review tab still opens, with its
 Annotations column.
 
+The status drawer's header reads `HEAD <branch>  ↑n ↓m  <upstream>` with the
+number of changes at the right. `↑` and `↓` show only when not 0 and count
+against the upstream as last fetched; iter never fetches. A branch without an
+upstream shows neither, and a detached HEAD shows `(detached)`. In a narrow
+drawer the change count goes first, then the upstream, then the arrows.
+
+Pinned at the bottom of the drawer, above the key hints, Recent commits lists
+the last `drawer.commits` commits: `↑` on a commit not on the upstream, the
+short sha, the subject and its age (`2h`, `3d`, `5w`). Its title adds
+`↑n unpushed` and `↓m behind` when not 0. It stays in view however long the
+file list is, and the cursor stays on the files.
+
 In the drawer, `j` and `k` move through the files and the window above shows
 the diff. `<CR>` opens the file there and closes the drawer. `r` opens the
 review tab. `?` lists the keys of the current view.
@@ -128,6 +144,7 @@ require('iter').setup({
         height = 0.3,     -- fraction of the window height
         zindex = 40,      -- float stacking order; help and annotation floats sit above it
         breakpoint = 80,  -- drawer width below which the columns stack
+        commits = 3,      -- recent commits the status drawer lists, 0 hides them
     },
     diff = {
         expand_step = 20,          -- hidden context lines shown per expand

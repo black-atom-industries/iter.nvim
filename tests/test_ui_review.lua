@@ -1757,7 +1757,7 @@ T['viewed']['the status drawer shows no viewed marks and has no v map'] = functi
         }
     end)()]])
 
-    eq(state.title, 'HEAD main · 4 changes')
+    eq((state.title:gsub('%s+', ' ')), 'HEAD main 4 changes ')
     eq(state.v_map, '')
     eq(state.marked, false)
     eq(state.header, '+2 −2 ')

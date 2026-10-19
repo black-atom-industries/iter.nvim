@@ -175,8 +175,9 @@ function git.root()
 end
 
 ---@param root? string worktree root, the one of the cwd when nil
+---@param opts? { ahead?: boolean } `ahead = false` leaves the ahead count out
 ---@return GitStatusSnapshot
-function git.status_snapshot(root)
+function git.status_snapshot(root, opts)
     if not ensure_git() then
         return {
             branch = '',
@@ -231,7 +232,7 @@ function git.status_snapshot(root)
     return {
         branch = branch,
         entries = parse_status(status_out.output),
-        ahead = git.ahead(root),
+        ahead = not (opts and opts.ahead == false) and git.ahead(root) or nil,
         detached = detached,
         root = root,
     }
@@ -626,6 +627,123 @@ function git.file_diff(root, change)
         new_lines = new_lines,
         binary = false,
     }
+end
+
+---@class GitCommit
+---@field sha string abbreviated
+---@field subject string
+---@field time integer committer date, seconds since the epoch
+---@field unpushed boolean not on the upstream
+
+---@class GitRecent where HEAD stands against its upstream
+---@field key string HEAD, the upstream and the count it was read for
+---@field upstream? string short name such as `origin/main`, nil without one
+---@field ahead integer commits on HEAD and not on the upstream
+---@field behind integer commits on the upstream and not on HEAD
+---@field commits GitCommit[] newest first
+
+local SEP = '\31'
+
+---@param line string?
+---@return boolean
+local function is_sha(line)
+    return line ~= nil
+        and (#line == 40 or #line == 64)
+        and line:match('^%x+$') ~= nil
+end
+
+--- The last `count` commits of HEAD and how far it is ahead of and behind
+--- its upstream, as last fetched. One `rev-parse` reads HEAD and the
+--- upstream; when they and `count` match `prev`, `prev` comes back as it is
+--- and nothing else runs. A detached HEAD has no upstream.
+---@param root string
+---@param count integer
+---@param prev? GitRecent
+---@return GitRecent? recent nil when HEAD has no commit
+function git.recent(root, count, prev)
+    local out = git.run({
+        'rev-parse',
+        'HEAD',
+        '@{upstream}',
+        '--abbrev-ref',
+        '@{upstream}',
+    }, { cwd = root, ignore_error = true })
+    local lines = split_output(out.output)
+    local head = lines[1]
+
+    if not is_sha(head) then
+        return nil
+    end
+
+    local upstream_sha, upstream
+
+    if out.exit_code == 0 and is_sha(lines[2]) and lines[3] ~= nil then
+        upstream_sha, upstream = lines[2], lines[3]
+    end
+
+    local key = table.concat(
+        { tostring(count), head, upstream_sha or '', upstream or '' },
+        SEP
+    )
+
+    if prev ~= nil and prev.key == key then
+        return prev
+    end
+
+    ---@type GitRecent
+    local recent = {
+        key = key,
+        upstream = upstream,
+        ahead = 0,
+        behind = 0,
+        commits = {},
+    }
+    local unpushed = {}
+
+    if upstream_sha ~= nil then
+        local sides = git.run(
+            { 'rev-list', '--left-right', head .. '...' .. upstream_sha },
+            { cwd = root, ignore_error = true }
+        )
+
+        for _, line in ipairs(split_output(sides.output)) do
+            if vim.startswith(line, '<') then
+                recent.ahead = recent.ahead + 1
+                unpushed[line:sub(2)] = true
+            elseif vim.startswith(line, '>') then
+                recent.behind = recent.behind + 1
+            end
+        end
+    end
+
+    if count == 0 then
+        return recent
+    end
+
+    local log = git.run({
+        'log',
+        '--no-color',
+        '--no-show-signature',
+        '--max-count=' .. count,
+        '--format=%H%x1f%h%x1f%ct%x1f%s',
+        head,
+        '--',
+    }, { cwd = root, ignore_error = true })
+
+    for _, line in ipairs(split_output(log.output)) do
+        local fields = vim.split(line, SEP, { plain = true })
+
+        if #fields >= 4 then
+            table.insert(recent.commits, {
+                sha = fields[2],
+                subject = table.concat(fields, SEP, 4),
+                time = tonumber(fields[3]) or 0,
+                unpushed = unpushed[fields[1]] == true,
+            })
+        end
+    end
+
+    return recent
 end
 
 return git

@@ -92,13 +92,21 @@ function M.can_leave(buf, path)
 end
 
 --- Edit `path`, an absolute file path, in the current window, at `line`
---- when given.
+--- when given. When the window already shows `path` only the cursor moves,
+--- so a modified buffer stays as it is.
 ---@param path string
 ---@param line? integer
 ---@param name? string what the error names, the basename by default
 ---@return boolean ok
 function M.edit_at(path, line, name)
-    local ok, err = pcall(vim.cmd.edit, vim.fn.fnameescape(path))
+    local current = vim.api.nvim_buf_get_name(0)
+    local shown = current ~= ''
+        and vim.fn.resolve(current) == vim.fn.resolve(path)
+    local ok, err = true, nil
+
+    if not shown then
+        ok, err = pcall(vim.cmd.edit, vim.fn.fnameescape(path))
+    end
 
     if not ok then
         M.error(

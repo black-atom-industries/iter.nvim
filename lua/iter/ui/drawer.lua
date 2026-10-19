@@ -53,6 +53,9 @@ local watch = require('iter.watch')
 ---@field handlers table<string, fun()> drawer actions by name
 ---@field config IterConfig
 ---@field changes IterChanges
+---@field recent? GitRecent the status drawer's recent commits, nil in the review or without a commit
+---@field ages string the commit ages of the last render
+---@field section_buf? integer buffer of the Recent commits, pinned under the files
 ---@field rows IterDrawerRow[]
 ---@field cells table<string, IterLayoutCell>[]
 ---@field extra IterDrawerColumnSpec[] the extras' columns of the last render
@@ -162,10 +165,94 @@ function Drawer:ordered()
     return items
 end
 
---- `HEAD <branch> ↑<ahead> · <n> changes`; `↑` only when HEAD is ahead of
---- its upstream. A file in more than one column counts once. Stacked, the
---- counts are per column, since a lower title may sit below the visible
---- lines. `extras` replaces the summary after the branch.
+---@param chunks [string, string][]
+---@return integer
+local function chunks_width(chunks)
+    local width = 0
+
+    for _, chunk in ipairs(chunks) do
+        width = width + vim.fn.strdisplaywidth(chunk[1])
+    end
+
+    return width
+end
+
+--- The status drawer's header in `width` cells: `HEAD <branch>  ↑n ↓m
+--- <upstream>` and `summary` at the right edge, `↑`, `↓` and the upstream
+--- only when there are. Too wide, it sheds from the right: the summary
+--- shrinks to `total`, then goes, then the upstream, then the arrows;
+--- `HEAD <branch>` always stays.
+---@param drawer IterDrawer
+---@param summary string
+---@param total string
+---@param width integer
+---@return [string, string][]
+local function status_header(drawer, summary, total, width)
+    local recent = drawer.recent
+    local head = {
+        { 'HEAD ', 'IterDrawerHint' },
+        {
+            drawer.changes.branch == 'HEAD' and '(detached)'
+                or drawer.changes.branch,
+            'IterHead',
+        },
+    }
+    local arrows, upstream = {}, {}
+
+    if recent ~= nil and recent.upstream ~= nil then
+        if recent.ahead > 0 then
+            table.insert(arrows, { '  ↑' .. recent.ahead, 'IterUnpushed' })
+        end
+
+        if recent.behind > 0 then
+            local gap = #arrows > 0 and ' ' or '  '
+            table.insert(
+                arrows,
+                { gap .. '↓' .. recent.behind, 'IterBehind' }
+            )
+        end
+
+        upstream = { { '  ' .. recent.upstream, 'IterDrawerHint' } }
+    end
+
+    local function build(parts, tail)
+        local chunks = vim.deepcopy(head)
+
+        for _, part in ipairs(parts) do
+            vim.list_extend(chunks, part)
+        end
+
+        if tail ~= nil then
+            tail = tail .. ' '
+            local pad = width
+                - chunks_width(chunks)
+                - vim.fn.strdisplaywidth(tail)
+
+            if pad < 2 then
+                return nil
+            end
+
+            table.insert(chunks, { string.rep(' ', pad), 'IterDrawerHint' })
+            table.insert(chunks, { tail, 'IterDrawerHint' })
+        elseif chunks_width(chunks) > width then
+            return nil
+        end
+
+        return chunks
+    end
+
+    return build({ arrows, upstream }, summary)
+        or build({ arrows, upstream }, total)
+        or build({ arrows, upstream })
+        or build({ arrows })
+        or head
+end
+
+--- The status drawer: `status_header`, with `<n> changes` at the right edge.
+--- The review: `HEAD <branch> ↑<ahead>`, `↑` only when HEAD is ahead of its
+--- upstream, and the extras' chunks. A file in more than one column counts
+--- once. Stacked, the counts are per column, since a lower title may sit
+--- below the visible lines.
 ---@param drawer IterDrawer
 ---@return [string, string][]
 local function header_chunks(drawer)
@@ -181,6 +268,27 @@ local function header_chunks(drawer)
         end
     end
 
+    local total =
+        string.format('%d %s', count, count == 1 and 'change' or 'changes')
+    local parts = { total }
+
+    if drawer.layout == 'stacked' and count > 0 then
+        parts = {}
+
+        for _, column in ipairs(columns) do
+            table.insert(
+                parts,
+                string.format('%d %s', #column.items, column.title:lower())
+            )
+        end
+    end
+
+    local width = vim.api.nvim_win_get_width(drawer.pane)
+
+    if drawer.context == 'status' then
+        return status_header(drawer, table.concat(parts, ' · '), total, width)
+    end
+
     local chunks = {
         { 'HEAD ', 'IterDrawerHint' },
         {
@@ -193,42 +301,12 @@ local function header_chunks(drawer)
         table.insert(chunks, { ' ↑' .. result.ahead, 'IterUnpushed' })
     end
 
-    local summary =
-        string.format(' · %d %s', count, count == 1 and 'change' or 'changes')
+    local tail = { ' · ' .. table.concat(parts, ' · '), 'IterDrawerHint' }
 
-    if drawer.layout == 'stacked' and count > 0 then
-        summary = ''
-
-        for _, column in ipairs(columns) do
-            summary = summary
-                .. string.format(
-                    ' · %d %s',
-                    #column.items,
-                    column.title:lower()
-                )
-        end
-    end
-
-    local tail = { summary, 'IterDrawerHint' }
-
-    if drawer.extras ~= nil then
-        local used = 0
-
-        for _, chunk in ipairs(chunks) do
-            used = used + vim.fn.strdisplaywidth(chunk[1])
-        end
-
-        vim.list_extend(
-            chunks,
-            drawer.extras:drawer_header(
-                drawer,
-                tail,
-                vim.api.nvim_win_get_width(drawer.pane) - used
-            )
-        )
-    else
-        table.insert(chunks, tail)
-    end
+    vim.list_extend(
+        chunks,
+        drawer.extras:drawer_header(drawer, tail, width - chunks_width(chunks))
+    )
 
     return chunks
 end
@@ -279,6 +357,7 @@ function Drawer.open(opts)
         rows = {},
         cells = {},
         extra = {},
+        ages = '',
         column = 'unstaged',
         lnum = 1,
         layout = 'columns',
@@ -450,8 +529,11 @@ end
 ---@return boolean loaded
 ---@return boolean extras_changed
 function Drawer:load()
-    local snapshot =
-        git.status_snapshot(self.changes and self.changes.root or nil)
+    local status = self.context == 'status'
+    local snapshot = git.status_snapshot(
+        self.changes and self.changes.root or nil,
+        { ahead = not status }
+    )
 
     if snapshot.error ~= nil then
         util.error(snapshot.error, 'Cannot read the git status')
@@ -460,6 +542,14 @@ function Drawer:load()
 
     self.changes = changes.build(snapshot)
 
+    if status then
+        self.recent = git.recent(
+            snapshot.root,
+            self.config.options.drawer.commits,
+            self.recent
+        )
+    end
+
     if self.extras == nil then
         return true, false
     end
@@ -467,8 +557,27 @@ function Drawer:load()
     return true, self.extras:drawer_load(self)
 end
 
+--- The ages the Recent commits rows show now, joined.
+---@param recent? GitRecent
+---@return string
+local function commit_ages(recent)
+    if recent == nil then
+        return ''
+    end
+
+    local now = os.time()
+
+    return table.concat(
+        vim.tbl_map(function(commit)
+            return layout.age(now - commit.time)
+        end, recent.commits),
+        ' '
+    )
+end
+
 --- Write the items into the buffer in the layout the pane's width allows,
---- with the header and key hint line around them.
+--- with the header and key hint line around them, and the Recent commits
+--- pinned under them.
 function Drawer:render()
     local width = vim.api.nvim_win_get_width(self.pane)
     local decorate = self.extras and self.extras:drawer_decorator(self)
@@ -524,11 +633,49 @@ function Drawer:render()
 
     self.float:reposition({
         min_lines = math.min(#built.lines, Drawer.MIN_LINES),
+        strip = self:render_section(width),
         title = header_chunks(self),
         footer = self:footer(),
     })
 
     self:shown()
+end
+
+--- Write the Recent commits into their buffer, created on first use.
+---@param width integer
+---@return IterFloatStrip|false strip false without commits to show
+function Drawer:render_section(width)
+    local section = layout.commits(self.recent, width, os.time())
+
+    self.ages = commit_ages(self.recent)
+
+    if #section.lines == 0 then
+        return false
+    end
+
+    table.insert(section.lines, 1, render.line(''))
+
+    local buf = self.section_buf
+
+    if buf == nil or not vim.api.nvim_buf_is_valid(buf) then
+        buf = vim.api.nvim_create_buf(false, true)
+        vim.bo[buf].bufhidden = 'hide'
+        vim.bo[buf].filetype = 'iter'
+        self.section_buf = buf
+    end
+
+    vim.bo[buf].modifiable = true
+    vim.api.nvim_buf_set_lines(
+        buf,
+        0,
+        -1,
+        false,
+        render.text_lines(section.lines)
+    )
+    vim.bo[buf].modifiable = false
+    render.apply(buf, section.lines)
+
+    return { buf = buf, lines = #section.lines }
 end
 
 --- The key hint line of the selected column.
@@ -796,8 +943,9 @@ function Drawer:resized()
 end
 
 --- Reload the status, keep the selection on its path, or select `target`
---- when it is still there, and show its diff afresh. A poll that finds
---- nothing changed leaves everything as it is.
+--- when it is still there, and show its diff afresh. A poll that finds the
+--- files unchanged leaves the diff as it is and renders only when the
+--- extras, the recent commits or their ages changed.
 ---@param reason? IterWatchReason nil after an action of the drawer
 ---@param target? { path: string, side: IterSide } absolute path, side first
 function Drawer:refresh(reason, target)
@@ -805,7 +953,7 @@ function Drawer:refresh(reason, target)
         return
     end
 
-    local before = self.changes
+    local before, before_recent = self.changes, self.recent
     local mark = self:mark()
     local loaded, extras_changed = self:load()
 
@@ -816,7 +964,11 @@ function Drawer:refresh(reason, target)
     if reason == 'poll' and vim.deep_equal(before, self.changes) then
         local item = self:selected()
 
-        if extras_changed then
+        if
+            extras_changed
+            or self.recent ~= before_recent
+            or commit_ages(self.recent) ~= self.ages
+        then
             self:render()
             self:restore_selection(mark)
         end
@@ -1244,8 +1396,10 @@ function Drawer:close()
     self.float:close()
     self.view:close()
 
-    if vim.api.nvim_buf_is_valid(self.buf) then
-        vim.api.nvim_buf_delete(self.buf, { force = true })
+    for _, buf in ipairs({ self.buf, self.section_buf }) do
+        if vim.api.nvim_buf_is_valid(buf) then
+            vim.api.nvim_buf_delete(buf, { force = true })
+        end
     end
 
     if util.is_valid_win(self.pane) then

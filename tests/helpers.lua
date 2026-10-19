@@ -103,6 +103,34 @@ function M.create_odd_paths_repo()
     return repo
 end
 
+--- Give `repo` a bare repository in a fresh temporary directory as its
+--- `origin` and push its branch `main` there as the upstream.
+---@param repo string
+---@return string remote
+function M.create_remote(repo)
+    local remote = vim.fn.resolve(vim.fn.tempname())
+    vim.fn.mkdir(remote, 'p')
+
+    M.git(remote, { 'init', '--quiet', '--bare', '-b', 'main' })
+    M.git(repo, { 'remote', 'add', 'origin', remote })
+    M.git(repo, { 'push', '--quiet', '-u', 'origin', 'main' })
+
+    return remote
+end
+
+--- Push a commit with `message` to `remote`'s `main` from a second clone,
+--- so a repository tracking it falls behind once it fetches.
+---@param remote string
+---@param message string
+function M.push_from_clone(remote, message)
+    local clone = vim.fn.resolve(vim.fn.tempname())
+
+    M.git(vim.fs.dirname(clone), { 'clone', '--quiet', remote, clone })
+    M.git(clone, { 'commit', '--quiet', '--allow-empty', '-m', message })
+    M.git(clone, { 'push', '--quiet', 'origin', 'main' })
+    M.cleanup(clone)
+end
+
 ---@param repo string?
 function M.cleanup(repo)
     if repo ~= nil and repo ~= '' then

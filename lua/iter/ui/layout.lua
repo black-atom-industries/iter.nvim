@@ -476,6 +476,137 @@ function M.progress_cell(line, progress, first, width)
     return text
 end
 
+--- The age of something `seconds` old in its largest whole unit: `now`
+--- under a minute, then minutes `5m`, hours `2h`, days `3d`, weeks `5w` and
+--- years `1y`. A negative age, from a clock behind the committer's, is `now`.
+---@param seconds integer
+---@return string
+function M.age(seconds)
+    local units = {
+        { 365 * 86400, 'y' },
+        { 7 * 86400, 'w' },
+        { 86400, 'd' },
+        { 3600, 'h' },
+        { 60, 'm' },
+    }
+
+    for _, unit in ipairs(units) do
+        if seconds >= unit[1] then
+            return math.floor(seconds / unit[1]) .. unit[2]
+        end
+    end
+
+    return 'now'
+end
+
+--- One row of a recent commit: with an upstream a `↑` slot, then the short
+--- sha, the subject cut with `…` to fit and the age at the right edge.
+--- A commit on the upstream is dimmed.
+---@param commit GitCommit
+---@param markers boolean whether the row has the `↑` slot
+---@param age string
+---@param width integer
+---@return IterRenderLine
+local function commit_line(commit, markers, age, width)
+    local line = render.line('')
+    local marker = markers and (commit.unpushed and '↑ ' or '  ') or ''
+    local prefix = ' ' .. marker .. commit.sha .. '  '
+    local suffix = ' ' .. age .. ' '
+    local room = width
+        - vim.fn.strdisplaywidth(prefix)
+        - vim.fn.strdisplaywidth(suffix)
+    local subject = fit(commit.subject, math.max(room, 0))
+    local dim = markers and not commit.unpushed
+
+    line.text = prefix .. subject .. suffix
+
+    local sha_at = 1 + #marker
+    local sha_group = commit.unpushed and 'IterUnpushed' or 'IterDrawerHint'
+
+    if commit.unpushed then
+        render.add_highlight(line, 'IterUnpushed', 1, 1 + #'↑')
+    end
+
+    render.add_highlight(line, sha_group, sha_at, sha_at + #commit.sha)
+
+    if dim then
+        render.add_highlight(
+            line,
+            'IterDrawerHint',
+            #prefix,
+            #prefix + #subject
+        )
+    end
+
+    render.add_highlight(line, 'IterDrawerHint', #prefix + #subject, #line.text)
+
+    return line
+end
+
+--- The Recent commits section, `width` cells wide: a title with
+--- `· ↑n unpushed` and `· ↓m behind` when not 0, then a row per commit. Its
+--- rows hold no items. Empty without commits.
+---@param recent GitRecent?
+---@param width integer
+---@param now integer seconds since the epoch the ages count to
+---@return IterLayout
+function M.commits(recent, width, now)
+    local result = { lines = {}, rows = {}, cells = {} }
+
+    if recent == nil or #recent.commits == 0 then
+        return result
+    end
+
+    local parts = { { ' Recent commits', 'IterDrawerTitle' } }
+
+    if recent.ahead > 0 then
+        table.insert(parts, { ' · ', 'IterDrawerHint' })
+        table.insert(
+            parts,
+            { '↑' .. recent.ahead .. ' unpushed', 'IterUnpushed' }
+        )
+    end
+
+    if recent.behind > 0 then
+        table.insert(parts, { ' · ', 'IterDrawerHint' })
+        table.insert(
+            parts,
+            { '↓' .. recent.behind .. ' behind', 'IterUnpushed' }
+        )
+    end
+
+    local title = render.line('')
+    local at = 0
+
+    for _, part in ipairs(parts) do
+        title.text = title.text .. part[1]
+        render.add_highlight(title, part[2], at, at + #part[1])
+        at = at + #part[1]
+    end
+
+    local lines = { title }
+
+    for _, commit in ipairs(recent.commits) do
+        table.insert(
+            lines,
+            commit_line(
+                commit,
+                recent.upstream ~= nil,
+                M.age(now - commit.time),
+                width
+            )
+        )
+    end
+
+    for _, line in ipairs(lines) do
+        table.insert(result.lines, line)
+        table.insert(result.rows, {})
+        table.insert(result.cells, {})
+    end
+
+    return result
+end
+
 --- Key hints `<lhs> <label>` for `actions`, in order, those without a bound
 --- key left out, as many as fit in `width`; the last one stays.
 ---@param entries IterKeymapEntry[] bound keys by action

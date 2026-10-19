@@ -182,6 +182,94 @@ T['message()'] = function()
     eq(result.cells, { {} })
 end
 
+T['age()'] = function()
+    eq(layout.age(-5), 'now')
+    eq(layout.age(59), 'now')
+    eq(layout.age(60), '1m')
+    eq(layout.age(3599), '59m')
+    eq(layout.age(2 * 3600), '2h')
+    eq(layout.age(86399), '23h')
+    eq(layout.age(3 * 86400), '3d')
+    eq(layout.age(7 * 86400), '1w')
+    eq(layout.age(5 * 7 * 86400 + 86400), '5w')
+    eq(layout.age(364 * 86400), '52w')
+    eq(layout.age(800 * 86400), '2y')
+end
+
+T['commits()'] = new_set()
+
+local NOW = 1767225600
+
+---@param recent GitRecent
+---@param width integer
+---@return string[]
+local function commit_texts(recent, width)
+    return vim.tbl_map(function(line)
+        return line.text
+    end, layout.commits(recent, width, NOW).lines)
+end
+
+---@param upstream? string
+---@param ahead integer
+---@param behind integer
+---@return GitRecent
+local function recent(upstream, ahead, behind)
+    return {
+        key = '',
+        upstream = upstream,
+        ahead = ahead,
+        behind = behind,
+        commits = {
+            {
+                sha = '3f2a9c1',
+                subject = 'refactor(drawer): split it',
+                time = NOW - 2 * 3600,
+                unpushed = ahead > 0,
+            },
+            {
+                sha = '0aa4465',
+                subject = 'fix: keep',
+                time = NOW - 86400,
+                unpushed = false,
+            },
+        },
+    }
+end
+
+T['commits()']['title, markers, subjects and right-aligned ages'] = function()
+    eq(commit_texts(recent('origin/main', 1, 2), 40), {
+        ' Recent commits · ↑1 unpushed · ↓2 behind',
+        ' ↑ 3f2a9c1  refactor(drawer): split… 2h ',
+        '   0aa4465  fix: keep                1d ',
+    })
+
+    local result = layout.commits(recent('origin/main', 1, 0), 40, NOW)
+    eq(result.rows, { {}, {}, {} })
+    eq(result.cells, { {}, {}, {} })
+    eq(spans(result.lines[2], 'IterUnpushed'), { { 1, 4 }, { 5, 12 } })
+    eq(spans(result.lines[3], 'IterDrawerHint'), {
+        { 3, 10 },
+        { 12, 36 },
+        { 36, 40 },
+    })
+end
+
+T['commits()']['without an upstream no markers and no counts'] = function()
+    eq(commit_texts(recent(nil, 0, 0), 30), {
+        ' Recent commits',
+        ' 3f2a9c1  refactor(drawer… 2h ',
+        ' 0aa4465  fix: keep        1d ',
+    })
+end
+
+T['commits()']['empty without commits'] = function()
+    local none = recent(nil, 0, 0)
+    none.commits = {}
+
+    eq(layout.commits(none, 40, NOW).lines, {})
+    eq(layout.commits(nil, 40, NOW).lines, {})
+end
+
 T['file_cell()'] = new_set()
 
 T['file_cell()']['code letter and path, padded to the width'] = function()

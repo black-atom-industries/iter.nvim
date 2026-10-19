@@ -12,9 +12,15 @@ local M = {}
 ---@field title? [string, string][] header chunks, with `chrome`
 ---@field footer? [string, string][] hint chunks, with `chrome`
 ---@field min_lines? integer text lines kept when `height` gives fewer
+---@field strip? IterFloatStrip|false a window pinned under the text, with `chrome`
+
+---@class IterFloatStrip rows pinned at the bottom of the float's footprint, between its text and the footer; never focused
+---@field buf integer
+---@field lines integer
 
 ---@class IterFloat
 ---@field win integer
+---@field strip_win? integer the strip's window while `opts.strip` has lines
 ---@field pane integer
 ---@field opts IterFloatOpts
 ---@field group integer
@@ -30,13 +36,31 @@ end
 
 -- Top and bottom edges only: one row each for the title and the footer.
 local CHROME_BORDER = { '', ' ', '', '', '', ' ', '', '' }
+-- With a strip the title row stays on the float and the footer row moves
+-- under the strip.
+local TITLE_BORDER = { '', ' ', '', '', '', '', '', '' }
+local FOOTER_BORDER = { '', '', '', '', '', ' ', '', '' }
 
---- Text rows of the float. `opts.height` counts the chrome rows too.
+---@param opts IterFloatOpts
+---@return IterFloatStrip?
+local function strip_of(opts)
+    local strip = opts.strip
+
+    if not opts.chrome or not strip or strip.lines <= 0 then
+        return nil
+    end
+
+    return strip
+end
+
+--- Text rows of the float. `opts.height` counts the chrome rows and the
+--- strip too, so the footprint stays the same with and without a strip.
 ---@param opts IterFloatOpts
 ---@return integer
 local function resolve_height(opts)
     local pane_height = text_height(opts.pane)
-    local chrome = opts.chrome and 2 or 0
+    local strip = strip_of(opts)
+    local reserved = (opts.chrome and 2 or 0) + (strip and strip.lines or 0)
     local height = opts.height
 
     if height <= 1 then
@@ -44,41 +68,70 @@ local function resolve_height(opts)
     end
 
     if opts.min_lines ~= nil then
-        height = math.max(height, opts.min_lines + chrome)
+        height = math.max(height, opts.min_lines + reserved)
     end
 
-    height = math.min(math.floor(height), pane_height) - chrome
+    height = math.min(math.floor(height), pane_height) - reserved
 
     return math.max(1, height)
 end
 
+--- The float's window config, and the strip's when there is one.
 ---@param opts IterFloatOpts
----@return table
+---@return table config
+---@return table? strip_config
 local function win_config(opts)
     local height = resolve_height(opts)
+    local strip = strip_of(opts)
+    local bottom = text_height(opts.pane)
+    local width = vim.api.nvim_win_get_width(opts.pane)
 
     local config = {
         relative = 'win',
         win = opts.pane,
         anchor = 'SW',
-        row = text_height(opts.pane),
+        row = strip and (bottom - strip.lines - 1) or bottom,
         col = 0,
-        width = vim.api.nvim_win_get_width(opts.pane),
+        width = width,
         height = height,
         zindex = opts.zindex,
         style = 'minimal',
         focusable = true,
     }
 
-    if opts.chrome then
-        config.border = CHROME_BORDER
-        config.title = opts.title or ''
-        config.title_pos = 'left'
-        config.footer = opts.footer or ''
-        config.footer_pos = 'left'
+    if not opts.chrome then
+        return config
     end
 
-    return config
+    config.title = opts.title or ''
+    config.title_pos = 'left'
+
+    if strip == nil then
+        config.border = CHROME_BORDER
+        config.footer = opts.footer or ''
+        config.footer_pos = 'left'
+
+        return config
+    end
+
+    config.border = TITLE_BORDER
+
+    return config,
+        {
+            relative = 'win',
+            win = opts.pane,
+            anchor = 'SW',
+            row = bottom,
+            col = 0,
+            width = width,
+            height = strip.lines,
+            zindex = opts.zindex,
+            style = 'minimal',
+            focusable = false,
+            border = FOOTER_BORDER,
+            footer = opts.footer or '',
+            footer_pos = 'left',
+        }
 end
 
 --- Open a float over the bottom of `opts.pane`, as wide as the pane.
@@ -91,14 +144,16 @@ function M.open(opts)
     vim.validate('opts.zindex', opts.zindex, 'number')
     vim.validate('opts.height', opts.height, 'number')
 
-    local win =
-        vim.api.nvim_open_win(opts.buf, opts.enter == true, win_config(opts))
+    local config, strip_config = win_config(opts)
+    local win = vim.api.nvim_open_win(opts.buf, opts.enter == true, config)
 
     local self = setmetatable({
         win = win,
         pane = opts.pane,
         opts = vim.deepcopy(opts),
     }, Float)
+
+    self:place_strip(strip_config)
 
     self.group =
         vim.api.nvim_create_augroup('iter.float.' .. win, { clear = true })
@@ -141,6 +196,7 @@ end
 ---@field title? [string, string][]
 ---@field footer? [string, string][]
 ---@field min_lines? integer
+---@field strip? IterFloatStrip|false
 
 --- Fit the float to its pane again, optionally with new options.
 ---@param overrides? IterFloatOverrides
@@ -156,11 +212,67 @@ function Float:reposition(overrides)
         return
     end
 
-    vim.api.nvim_win_set_config(self.win, win_config(self.opts))
+    local config, strip_config = win_config(self.opts)
+
+    -- The footer moves between the float and the strip: drop it from the
+    -- window losing its bottom edge first.
+    if strip_config ~= nil then
+        config.footer = nil
+        vim.api.nvim_win_set_config(self.win, {
+            relative = config.relative,
+            win = config.win,
+            row = config.row,
+            col = config.col,
+            footer = '',
+        })
+    end
+
+    vim.api.nvim_win_set_config(self.win, config)
+    self:place_strip(strip_config)
+end
+
+--- Open, move or close the strip's window to match `config`.
+---@param config? table
+function Float:place_strip(config)
+    local open = self.strip_win ~= nil and util.is_valid_win(self.strip_win)
+
+    if config == nil then
+        if open then
+            vim.api.nvim_win_close(self.strip_win, true)
+        end
+
+        self.strip_win = nil
+        return
+    end
+
+    local strip = strip_of(self.opts)
+
+    if strip == nil then
+        return
+    end
+
+    local buf = strip.buf
+
+    if open and vim.api.nvim_win_get_buf(self.strip_win) == buf then
+        vim.api.nvim_win_set_config(self.strip_win, config)
+        return
+    end
+
+    if open then
+        vim.api.nvim_win_close(self.strip_win, true)
+    end
+
+    self.strip_win = vim.api.nvim_open_win(buf, false, config)
+    vim.api.nvim_set_option_value(
+        'wrap',
+        false,
+        { scope = 'local', win = self.strip_win }
+    )
 end
 
 function Float:close()
     pcall(vim.api.nvim_del_augroup_by_id, self.group)
+    self:place_strip(nil)
 
     if self:is_open() then
         vim.api.nvim_win_close(self.win, true)
