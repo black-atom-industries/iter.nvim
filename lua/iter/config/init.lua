@@ -1,5 +1,5 @@
 ---@class IterResolvedOptions
----@field drawer { height: number, zindex: integer, breakpoint: integer }
+---@field drawer { height: number, zindex: integer, breakpoint: integer, commits: integer }
 ---@field diff { expand_step: integer, syntax_max_lines: integer, word_diff: boolean }
 ---@field export { intro: string }
 ---@field refresh { poll_ms: integer }
@@ -24,7 +24,12 @@ end
 -- Option name -> type for leaves, or a nested schema for tables.
 local SCHEMA = {
     debug = 'boolean',
-    drawer = { height = 'number', zindex = 'integer', breakpoint = 'integer' },
+    drawer = {
+        height = 'number',
+        zindex = 'integer',
+        breakpoint = 'integer',
+        commits = 'integer',
+    },
     diff = {
         expand_step = 'integer',
         syntax_max_lines = 'integer',
@@ -148,6 +153,12 @@ local function validate(opts)
 
     if height ~= nil and (height <= 0 or height > 1) then
         error('opts.drawer.height must be a number between 0 and 1', 0)
+    end
+
+    local commits = opts.drawer and opts.drawer.commits
+
+    if commits ~= nil and commits < 0 then
+        error('opts.drawer.commits must be 0 or more', 0)
     end
 
     if keys ~= nil then

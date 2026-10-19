@@ -209,6 +209,154 @@ T['status_snapshot()']['reads the ahead count with one rev-list'] = function()
     eq(history, { 'rev-list' })
 end
 
+---@type string?
+local remote
+
+T['recent()'] = new_set({
+    hooks = {
+        post_case = function()
+            helpers.cleanup(remote)
+            remote = nil
+        end,
+    },
+})
+
+---@param message string
+local function commit(message)
+    helpers.git(repo, { 'commit', '--quiet', '--allow-empty', '-m', message })
+end
+
+--- `↑`/`  ` mark and subject of each commit.
+---@param recent GitRecent
+---@return string[]
+local function rows(recent)
+    return vim.tbl_map(function(c)
+        return (c.unpushed and '↑ ' or '  ') .. c.subject
+    end, recent.commits)
+end
+
+---@return string
+local function with_remote()
+    remote = helpers.create_remote(repo)
+    return remote
+end
+
+T['recent()']['without an upstream: commits, no markers, no counts'] = function()
+    commit('second')
+    local recent = assert(git.recent(repo, 3))
+
+    eq(recent.upstream, nil)
+    eq({ recent.ahead, recent.behind }, { 0, 0 })
+    eq(rows(recent), { '  second', '  initial' })
+    eq(recent.commits[1].time, 1767225600)
+    eq(#recent.commits[1].sha >= 7, true)
+end
+
+T['recent()']['ahead only marks the unpushed commits'] = function()
+    with_remote()
+    commit('second')
+    commit('third')
+    local recent = assert(git.recent(repo, 3))
+
+    eq(recent.upstream, 'origin/main')
+    eq({ recent.ahead, recent.behind }, { 2, 0 })
+    eq(rows(recent), { '↑ third', '↑ second', '  initial' })
+end
+
+T['recent()']['behind only counts the fetched upstream commits'] = function()
+    helpers.push_from_clone(with_remote(), 'theirs')
+    eq(assert(git.recent(repo, 3)).behind, 0)
+
+    helpers.git(repo, { 'fetch', '--quiet' })
+    local recent = assert(git.recent(repo, 3))
+
+    eq({ recent.ahead, recent.behind }, { 0, 1 })
+    eq(rows(recent), { '  initial' })
+end
+
+T['recent()']['ahead and behind at once'] = function()
+    helpers.push_from_clone(with_remote(), 'theirs')
+    helpers.git(repo, { 'fetch', '--quiet' })
+    commit('mine')
+    local recent = assert(git.recent(repo, 3))
+
+    eq({ recent.ahead, recent.behind }, { 1, 1 })
+    eq(rows(recent), { '↑ mine', '  initial' })
+end
+
+T['recent()']['keeps the count of commits, 0 lists none'] = function()
+    with_remote()
+    commit('second')
+    commit('third')
+
+    eq(rows(assert(git.recent(repo, 1))), { '↑ third' })
+
+    local none = assert(git.recent(repo, 0))
+    eq(none.commits, {})
+    eq(none.ahead, 2)
+end
+
+T['recent()']['is nil on an unborn HEAD'] = function()
+    local unborn = vim.fn.resolve(vim.fn.tempname())
+    vim.fn.mkdir(unborn, 'p')
+    helpers.git(unborn, { 'init', '--quiet', '-b', 'main' })
+
+    eq(git.recent(unborn, 3), nil)
+    helpers.cleanup(unborn)
+end
+
+T['recent()']['a detached HEAD lists commits without an upstream'] = function()
+    with_remote()
+    commit('second')
+    helpers.git(repo, { 'checkout', '--quiet', '--detach' })
+    local recent = assert(git.recent(repo, 3))
+
+    eq(recent.upstream, nil)
+    eq(rows(recent), { '  second', '  initial' })
+end
+
+T['recent()']['reuses prev after one rev-parse while nothing moved'] = function()
+    with_remote()
+    commit('second')
+    local run = git.run
+    local history = {}
+    ---@diagnostic disable-next-line: duplicate-set-field
+    git.run = function(args, opts)
+        table.insert(history, args[1])
+        return run(args, opts)
+    end
+
+    local ok, first, second, third = pcall(function()
+        local a = git.recent(repo, 3)
+        local b = git.recent(repo, 3, a)
+        commit('third')
+        return a, b, git.recent(repo, 3, b)
+    end)
+    git.run = run
+
+    eq(ok, true)
+    eq(second == first, true)
+    eq(third == second, false)
+    eq(history, {
+        'rev-parse',
+        'rev-list',
+        'log',
+        'rev-parse',
+        'rev-parse',
+        'rev-list',
+        'log',
+    })
+end
+
+T['status_snapshot()']['leaves ahead out on request'] = function()
+    helpers.git(repo, { 'branch', 'base' })
+    helpers.git(repo, { 'branch', '--set-upstream-to=base' })
+    commit('second')
+
+    eq(git.status_snapshot(repo).ahead, 1)
+    eq(git.status_snapshot(repo, { ahead = false }).ahead, nil)
+end
+
 T['git_paths()'] = new_set()
 
 T['git_paths()']['are absolute in a normal repository'] = function()

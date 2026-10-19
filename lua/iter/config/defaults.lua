@@ -5,6 +5,7 @@
 ---@field height? number Fraction of the pane height, in (0, 1]
 ---@field zindex? integer
 ---@field breakpoint? integer Drawer width below which the columns stack
+---@field commits? integer Recent commits the status drawer lists, 0 hides them
 
 ---@class IterDiffOptions
 ---@field expand_step? integer Hidden context lines revealed per expand
@@ -45,6 +46,7 @@ M.options = {
         height = 0.3,
         zindex = 40,
         breakpoint = 80,
+        commits = 3,
     },
     diff = {
         expand_step = 20,
