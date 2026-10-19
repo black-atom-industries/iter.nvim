@@ -29,6 +29,21 @@ local newer_warned = {}
 ---@type table<string, IterStoreCache>
 local caches = {}
 
+---@alias IterStoreChange fun(data: IterStoreFile): boolean?
+
+-- A lock file older than this was left by an instance that died holding it.
+local LOCK_STALE_MS = 10000
+-- How long a write waits for another instance's lock before it queues.
+local LOCK_WAIT_MS = 500
+
+--- Changes a write couldn't make while another instance held the lock, by
+--- store path, in order. The next write of that path makes them first.
+---@type table<string, IterStoreChange[]>
+local pending = {}
+
+---@type table<string, true>
+local lock_warned = {}
+
 ---@return IterStoreFile
 local function empty()
     return { version = VERSION, annotations = {}, viewed = {} }
@@ -165,24 +180,38 @@ local function read(path)
     return empty()
 end
 
+--- Make the directory of the store file `path`.
+---@param path string
+---@return boolean? ok
+---@return string? error
+local function make_dir(path)
+    local dir = vim.fs.dirname(path)
+    local made, mkdir_err
+
+    -- Another instance making a parent at the same time fails `mkdir()`
+    -- there (E739) before it makes the rest; the next try goes on from it.
+    for _ = 1, 3 do
+        made, mkdir_err = pcall(vim.fn.mkdir, dir, 'p')
+
+        if vim.fn.isdirectory(dir) == 1 then
+            return true
+        end
+    end
+
+    return nil,
+        string.format(
+            'Cannot create the annotation store directory %s: %s',
+            dir,
+            made and 'not a directory' or tostring(mkdir_err)
+        )
+end
+
 --- Write through a temp file in the same directory, renamed into place.
 ---@param path string
 ---@param data IterStoreFile
 ---@return boolean? ok
 ---@return string? error
 local function write(path, data)
-    local dir = vim.fs.dirname(path)
-    local made, mkdir_err = pcall(vim.fn.mkdir, dir, 'p')
-
-    if not made or vim.fn.isdirectory(dir) == 0 then
-        return nil,
-            string.format(
-                'Cannot create the annotation store directory %s: %s',
-                dir,
-                made and 'not a directory' or tostring(mkdir_err)
-            )
-    end
-
     local encoded = vim.json.encode({
         version = data.version,
         annotations = data.annotations,
@@ -214,6 +243,243 @@ local function write(path, data)
     end
 
     return true
+end
+
+--- Milliseconds since `stat`'s file was last modified.
+---@param stat uv.fs_stat.result
+---@return number
+local function age_ms(stat)
+    local now = vim.uv.clock_gettime('realtime')
+    ---@cast now -nil
+
+    return (now.sec - stat.mtime.sec) * 1000
+        + (now.nsec - stat.mtime.nsec) / 1e6
+end
+
+--- Move a stale lock out of the way. The rename lets one instance take a
+--- given lock file; one that turns out fresh, made by another instance
+--- after the stat, goes back.
+---@param lock_path string
+---@param token string
+local function take_stale(lock_path, token)
+    local aside = lock_path .. '.stale-' .. token
+
+    if not vim.uv.fs_rename(lock_path, aside) then
+        return
+    end
+
+    local stat = vim.uv.fs_stat(aside)
+
+    if stat ~= nil and age_ms(stat) < LOCK_STALE_MS then
+        vim.uv.fs_link(aside, lock_path)
+    end
+
+    vim.uv.fs_unlink(aside)
+end
+
+--- Take the lock of the store file `path`: `<path>.lock`, created
+--- exclusively and holding a token of this instance. A held lock is waited
+--- for with backoff up to `wait_ms`; one older than `LOCK_STALE_MS` is taken
+--- over, once per call.
+---@param path string
+---@param wait_ms integer
+---@return string? token nil when another instance holds the lock or it can't be made
+---@return string? error
+---@return boolean? busy another instance holds the lock
+local function lock(path, wait_ms)
+    local lock_path = path .. '.lock'
+    local token = string.format('%d-%d', vim.uv.os_getpid(), vim.uv.hrtime())
+    local waited, delay = 0, 2
+    local took_stale = false
+
+    local made, dir_err = make_dir(path)
+
+    if not made then
+        return nil, dir_err
+    end
+
+    while true do
+        local fd, err, name = vim.uv.fs_open(lock_path, 'wx', 420)
+
+        if fd ~= nil then
+            vim.uv.fs_write(fd, token)
+            vim.uv.fs_close(fd)
+
+            return token
+        end
+
+        if name ~= 'EEXIST' then
+            return nil, err
+        end
+
+        local stat = vim.uv.fs_stat(lock_path)
+
+        -- One takeover per call: a stale lock that can't be moved is waited
+        -- for like a held one.
+        if not took_stale and stat ~= nil and age_ms(stat) >= LOCK_STALE_MS then
+            took_stale = true
+            take_stale(lock_path, token)
+        elseif waited >= wait_ms then
+            return nil, 'held by another instance', true
+        else
+            vim.uv.sleep(delay)
+            waited = waited + delay
+            delay = math.min(delay * 2, 50)
+        end
+    end
+end
+
+--- Release the lock of `path` when it is still the one `token` took.
+---@param path string
+---@param token string
+local function unlock(path, token)
+    local lock_path = path .. '.lock'
+    local file = io.open(lock_path, 'rb')
+
+    if file == nil then
+        return
+    end
+
+    local held = file:read('*a')
+    file:close()
+
+    if held == token then
+        vim.uv.fs_unlink(lock_path)
+    end
+end
+
+local flush_registered = false
+
+--- Under the lock of `path`: read the file, make the pending changes and
+--- `change`, and write it back when one of them changed it. Without the
+--- lock `change` joins the pending ones and the result has them made in
+--- memory. A failed read or write leaves `change` out of the pending ones,
+--- since the caller sees the error.
+---@param path string
+---@param change? IterStoreChange
+---@param wait_ms? integer how long a held lock is waited for, `LOCK_WAIT_MS` by default
+---@return IterStoreFile?
+---@return string? error
+local function commit(path, change, wait_ms)
+    local changes = vim.list_extend({}, pending[path] or {})
+
+    if change ~= nil then
+        table.insert(changes, change)
+    end
+
+    local token, lock_err, busy = lock(path, wait_ms or LOCK_WAIT_MS)
+    local ok, data, err
+
+    if token == nil and not busy then
+        return nil, lock_err
+    elseif token == nil then
+        ok, data, err = pcall(read, path)
+
+        if ok and data ~= nil then
+            for _, fn in ipairs(changes) do
+                fn(data)
+            end
+
+            pending[path] = changes
+
+            if not lock_warned[path] then
+                lock_warned[path] = true
+                util.warn(
+                    string.format(
+                        'Cannot lock the annotation store (%s); the change is kept and saved with the next one',
+                        lock_err
+                    )
+                )
+            end
+
+            if not flush_registered then
+                flush_registered = true
+                vim.api.nvim_create_autocmd('VimLeavePre', {
+                    group = vim.api.nvim_create_augroup(
+                        'iter.store',
+                        { clear = true }
+                    ),
+                    callback = function()
+                        if next(pending) == nil then
+                            return
+                        end
+
+                        vim.api.nvim_echo({
+                            {
+                                'iter: waiting for the annotation store lock…',
+                            },
+                        }, false, {})
+                        vim.cmd.redraw()
+
+                        -- One deadline for every store: long enough for the
+                        -- other instance's lock to go stale, so only a lock
+                        -- still held then loses the changes.
+                        local deadline = vim.uv.now()
+                            + LOCK_STALE_MS
+                            + LOCK_WAIT_MS
+
+                        for queued in pairs(pending) do
+                            vim.uv.update_time()
+                            commit(
+                                queued,
+                                nil,
+                                math.max(0, deadline - vim.uv.now())
+                            )
+
+                            if pending[queued] ~= nil then
+                                util.error(
+                                    string.format(
+                                        'Lost %d annotation change(s): %s stayed locked',
+                                        #pending[queued],
+                                        queued
+                                    )
+                                )
+                            end
+                        end
+                    end,
+                })
+            end
+        end
+    else
+        ok, data, err = pcall(function()
+            local current, read_err = read(path)
+
+            if current == nil then
+                return nil, read_err
+            end
+
+            local changed = false
+
+            for _, fn in ipairs(changes) do
+                if fn(current) ~= false then
+                    changed = true
+                end
+            end
+
+            if changed then
+                local written, write_err = write(path, current)
+
+                if not written then
+                    return nil, write_err
+                end
+            end
+
+            return current
+        end)
+
+        unlock(path, token)
+
+        if ok and data ~= nil then
+            pending[path] = nil
+            lock_warned[path] = nil
+        end
+    end
+
+    if not ok then
+        error(data, 0)
+    end
+
+    return data, err
 end
 
 ---@return string
@@ -351,26 +617,40 @@ function M.cached(root, fresh)
 
     local stat = util.stat_key(cache.path) or ''
 
-    if not fresh and stat == cache.stat then
+    if fresh or stat ~= cache.stat then
+        local data = M.read(cache.path)
+
+        if data ~= nil then
+            cache.data = data
+            cache.stat = stat
+        end
+    end
+
+    local changes = pending[cache.path]
+
+    if changes == nil then
         return cache.data
     end
 
-    local data = M.read(cache.path)
+    local copy = vim.deepcopy(cache.data)
 
-    if data ~= nil then
-        cache.data = data
-        cache.stat = stat
+    for _, fn in ipairs(changes) do
+        fn(copy)
     end
 
-    return cache.data
+    return copy
 end
 
 --- Re-read the store from disk, let `fn` change it in place, and write it
---- back. Every write goes through here, so changes apply by annotation id and
---- path to what other instances wrote in the meantime. When `fn` returns
---- false, nothing is written.
+--- back, all under the store's lock file. Every write goes through here, so
+--- changes apply by annotation id and path to what other instances wrote in
+--- the meantime. When `fn` returns false, nothing is written. While another
+--- instance holds the lock past a short wait, the change is kept in this
+--- instance (`cached` shows it), a warning says so, and the next update of
+--- the same file writes it first; the result is the store with the change
+--- made, as if written.
 ---@param root string
----@param fn fun(data: IterStoreFile): boolean?
+---@param fn IterStoreChange
 ---@return IterStoreFile?
 ---@return string? error
 function M.update(root, fn)
@@ -380,23 +660,7 @@ function M.update(root, fn)
         return nil, path_err
     end
 
-    local data, read_err = read(path)
-
-    if data == nil then
-        return nil, read_err
-    end
-
-    if fn(data) == false then
-        return data
-    end
-
-    local ok, write_err = write(path, data)
-
-    if not ok then
-        return nil, write_err
-    end
-
-    return data
+    return commit(path, fn)
 end
 
 --- Add an annotation, or replace the stored one with the same id. A new annotation

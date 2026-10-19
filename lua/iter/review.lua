@@ -461,7 +461,8 @@ function Review:apply_change(kind)
     end
 
     local root = self.drawer.changes.root
-    local raw = git.file_diff_bytes(root, file)
+    local raw =
+        git.file_diff_bytes(root, file, self.drawer.config.options.diff.args)
 
     if raw == nil or not vim.deep_equal(patch.text(raw), file.raw) then
         self.drawer:refresh()
@@ -487,7 +488,7 @@ function Review:apply_change(kind)
     )
 
     if not ok then
-        util.warn(string.format('Cannot %s the %s: %s', kind, what, err))
+        util.error(string.format('Cannot %s the %s: %s', kind, what, err))
         return
     end
 
@@ -562,7 +563,7 @@ function Review:drawer_load(drawer)
         not vim.deep_equal(before_annotations, self.annotations)
 
     if annotations_changed then
-        drawer.view:set_annotations(self.annotations)
+        drawer.view:set_annotations(self.annotations, root)
     end
 
     return annotations_changed or not vim.deep_equal(before_viewed, self.viewed)
@@ -608,8 +609,7 @@ end
 ---@param drawer IterDrawer
 ---@return IterDrawerColumnSpec[]
 function Review:drawer_columns(drawer)
-    local root = drawer.changes.root
-    local order, lines = {}, {}
+    local order = {}
 
     for _, item in ipairs(drawer:files()) do
         table.insert(order, item.path)
@@ -622,13 +622,8 @@ function Review:drawer_columns(drawer)
     ---@type IterReviewRow[]
     local rows = {}
     local outdated, label_width = 0, 0
-    local groups = list.groups(self.annotations, order, function(path)
-        if lines[path] == nil then
-            lines[path] = list.file_lines(root, path) or false
-        end
-
-        return lines[path] or nil
-    end)
+    local groups =
+        list.groups(self.annotations, order, list.reader(drawer.changes.root))
 
     for _, group in ipairs(groups) do
         for _, entry in ipairs(group.items) do
@@ -1148,7 +1143,7 @@ function Review:toggle_viewed(path)
     local _, err = viewed.toggle(self.drawer.changes.root, path)
 
     if err ~= nil then
-        util.warn('Cannot toggle viewed: ' .. err)
+        util.error('Cannot toggle viewed: ' .. err)
         return
     end
 

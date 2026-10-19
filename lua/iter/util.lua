@@ -84,10 +84,21 @@ function M.name_buf(buf, name)
     end
 end
 
+--- A notice to the user, also written to the iter log.
 ---@param message string
 ---@param level integer
 function M.notify(message, level)
-    vim.notify('[iter] ' .. message, level)
+    local log = require('iter.log')
+
+    if level == vim.log.levels.ERROR then
+        log.error(message)
+    elseif level == vim.log.levels.WARN then
+        log.warn(message)
+    else
+        log.info(message)
+    end
+
+    vim.notify('[iter] ' .. message, level, { title = 'iter' })
 end
 
 --- Fire the `User` autocmd `pattern` with `data`.
@@ -100,16 +111,20 @@ function M.emit(pattern, data)
     )
 end
 
+--- Tell the user about something they can act on: an action that doesn't
+--- apply where it was asked, or a state iter worked around.
 ---@param message string
 function M.warn(message)
     M.notify(message, vim.log.levels.WARN)
 end
 
+--- Tell the user that what they asked for failed: a git command, a read
+--- or a write. `fallback` stands in for an empty `message`.
 ---@param message string?
----@param fallback string
+---@param fallback? string
 function M.error(message, fallback)
     if message == nil or message == '' then
-        message = fallback
+        message = fallback or ''
     end
 
     M.notify(message, vim.log.levels.ERROR)

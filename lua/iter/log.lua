@@ -51,6 +51,11 @@ function M.debug(msg)
 end
 
 ---@type log_func
+function M.warn(msg)
+    write('WARN', msg)
+end
+
+---@type log_func
 function M.error(msg)
     write('ERROR', msg)
 end

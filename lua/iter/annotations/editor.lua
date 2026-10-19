@@ -3,6 +3,7 @@
 --- toggle key is also mapped globally in normal mode, so the draft can come
 --- back from any buffer; a user mapping on that key returns afterwards.
 
+local float = require('iter.ui.float')
 local keymap = require('iter.keymap')
 local store = require('iter.store')
 local util = require('iter.util')
@@ -21,6 +22,8 @@ local util = require('iter.util')
 ---@field annotation table the stored annotation once it has an id
 ---@field keys table<string, string[]> resolved `keys.annotation`
 ---@field geometry table float config to show the float with again
+---@field pane integer window the float is placed in
+---@field offset integer rows from the pane's top to the float's
 ---@field cursor integer[] cursor of the float when it was hidden
 ---@field at_end boolean insert after the end of the cursor line on show
 ---@field unloaded? { lines: string[], modified: boolean } text of an unloaded buffer
@@ -77,37 +80,72 @@ local function footer_of(keys)
     return ' ' .. table.concat(parts, ' · ') .. ' '
 end
 
---- Float config below the cursor line of `pane` when the pane is the
---- current window and there is room, else above it; at the bottom of the
---- pane when the cursor is elsewhere.
+--- Rows from the top of `pane` to the float: below the cursor line when
+--- the pane is the current window and there is room, else above it; at the
+--- bottom of the pane when the cursor is elsewhere.
 ---@param pane integer
----@param zindex integer
----@param title string
----@param footer string
----@return table
-local function geometry(pane, zindex, title, footer)
+---@return integer
+local function offset_in(pane)
+    local pane_height = vim.api.nvim_win_get_height(pane)
+    local outer = HEIGHT + 2
+
+    if pane ~= vim.api.nvim_get_current_win() then
+        return pane_height - outer
+    end
+
+    local line = vim.api.nvim_win_call(pane, vim.fn.winline)
+
+    if line + outer > pane_height then
+        return line - 1 - outer
+    end
+
+    return line
+end
+
+--- Where the float sits in `pane`, `offset` rows below its top, as wide as
+--- the pane.
+---@param pane integer
+---@param offset integer
+---@return vim.api.keyset.win_config
+local function placement(pane, offset)
     local pos = vim.api.nvim_win_get_position(pane)
     local pane_height = vim.api.nvim_win_get_height(pane)
     local width = math.max(20, vim.api.nvim_win_get_width(pane) - 2)
-    local outer = HEIGHT + 2
-    local row
-
-    if pane == vim.api.nvim_get_current_win() then
-        local line = vim.api.nvim_win_call(pane, vim.fn.winline)
-        row = pos[1] + line
-
-        if row + outer > pos[1] + pane_height then
-            row = pos[1] + line - 1 - outer
-        end
-    else
-        row = pos[1] + pane_height - outer
-    end
+    local row = pos[1] + math.min(offset, pane_height - HEIGHT - 2)
 
     return {
         relative = 'editor',
         row = math.max(0, row),
         col = pos[2],
         width = math.min(width, vim.o.columns - 2),
+    }
+end
+
+--- `config` moved and narrowed to fit the editor.
+---@param config vim.api.keyset.win_config
+---@return vim.api.keyset.win_config
+local function clamp(config)
+    local width = math.max(1, math.min(config.width, vim.o.columns - 2))
+    local row = config.row --[[@as number]]
+    local col = config.col --[[@as number]]
+
+    return {
+        relative = 'editor',
+        row = math.max(0, math.min(row, vim.o.lines - HEIGHT - 2)),
+        col = math.max(0, math.min(col, vim.o.columns - width - 2)),
+        width = width,
+    }
+end
+
+--- Float config at `offset` rows into `pane`.
+---@param pane integer
+---@param offset integer
+---@param zindex integer
+---@param title string
+---@param footer string
+---@return vim.api.keyset.win_config
+local function geometry(pane, offset, zindex, title, footer)
+    return vim.tbl_extend('force', placement(pane, offset), {
         height = HEIGHT,
         zindex = zindex,
         border = 'rounded',
@@ -115,7 +153,7 @@ local function geometry(pane, zindex, title, footer)
         title_pos = 'left',
         footer = footer,
         footer_pos = 'left',
-    }
+    })
 end
 
 ---@param lhs string
@@ -276,7 +314,7 @@ local function save()
     end
 
     if saved == nil then
-        util.warn(err or 'Cannot save the annotation')
+        util.error(err, 'Cannot save the annotation')
         return false
     end
 
@@ -324,8 +362,21 @@ local restore_buf
 local function open_win()
     ---@cast draft IterEditorDraft
     restore_buf()
+    draft.geometry =
+        vim.tbl_extend('force', draft.geometry, clamp(draft.geometry))
     draft.win = vim.api.nvim_open_win(draft.buf, true, draft.geometry)
     vim.wo[draft.win][0].wrap = true
+
+    float.follow_resize(draft.win, function()
+        ---@cast draft IterEditorDraft
+        local config = util.is_valid_win(draft.pane)
+                and placement(draft.pane, draft.offset)
+            or clamp(draft.geometry)
+
+        draft.geometry = vim.tbl_extend('force', draft.geometry, config)
+
+        return config
+    end)
 
     if draft.cursor ~= nil then
         pcall(vim.api.nvim_win_set_cursor, draft.win, draft.cursor)
@@ -481,6 +532,7 @@ function M.open(opts)
 
     local keys = opts.config.keys.annotation
     local pane = opts.pane or vim.api.nvim_get_current_win()
+    local offset = offset_in(pane)
     local body_lines = opts.annotation.body ~= nil
             and vim.split(opts.annotation.body, '\n')
         or {}
@@ -494,8 +546,11 @@ function M.open(opts)
         root = opts.root,
         annotation = vim.deepcopy(opts.annotation),
         keys = keys,
+        pane = pane,
+        offset = offset,
         geometry = geometry(
             pane,
+            offset,
             opts.config.options.drawer.zindex + 20,
             title_of(opts.annotation),
             footer_of(keys)
@@ -582,7 +637,7 @@ function M.delete(root, annotation)
     local _, err = store.remove_annotations(root, { annotation.id })
 
     if err ~= nil then
-        util.warn('Cannot delete the annotation: ' .. err)
+        util.error('Cannot delete the annotation: ' .. err)
         return false
     end
 

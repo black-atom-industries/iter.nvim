@@ -2,6 +2,7 @@
 --- in normal buffers of repo files.
 
 local anchor = require('iter.annotations.anchor')
+local list = require('iter.annotations.list')
 local util = require('iter.util')
 
 ---@class IterAnnotationMark
@@ -57,12 +58,15 @@ local function header_of(rows)
 end
 
 --- Where `annotation` sits in `file`, or nil when it belongs to another view.
+--- It sits where the view's version has its text; whether it is outdated
+--- comes from the version it follows, as `list.line_of` decides.
 ---@param file IterFileDiff
 ---@param annotation IterAnnotation
 ---@param new_follows boolean the new version is the worktree file
+---@param lines_of? IterLinesOf
 ---@return integer? lnum
 ---@return boolean outdated
-local function locate(file, annotation, new_follows)
+local function locate(file, annotation, new_follows, lines_of)
     local a = annotation.anchor
 
     if annotation.scope == 'review' then
@@ -88,22 +92,27 @@ local function locate(file, annotation, new_follows)
     -- The view's version is the one the anchor follows, so a miss there
     -- means the text is gone, not just elsewhere in another version.
     local follows = old or new_follows
-    local stop, outdated
+    -- An old-side view shows the anchor's base, the version it follows.
+    local followed = old and lines or nil
 
-    if lines == nil then
-        stop, outdated = a.end_line, annotation.outdated
-    else
-        local start
-        start, stop = anchor.resolve(a, lines)
+    if followed == nil and lines_of ~= nil then
+        followed = lines_of(path, anchor.version(a))
+    end
 
-        if start == nil then
-            if not follows then
-                return nil, false
-            end
+    if followed == nil and follows then
+        followed = lines
+    end
 
-            stop, outdated = a.end_line, true
-        else
-            outdated = false
+    local _, _, outdated = list.line_of(annotation, followed)
+    local stop = a.end_line
+
+    if lines ~= nil then
+        local start, found = anchor.resolve(a, lines)
+
+        if start ~= nil then
+            stop = found
+        elseif not follows then
+            return nil, false
         end
     end
 
@@ -117,21 +126,26 @@ end
 --- view's own version and sit below their last line, deleted-line annotations
 --- go to the view whose old version is their base, file annotations sit below
 --- the header, and a line hidden in a gap puts its annotation below the gap.
---- A staged view outdates new-side annotations only with `opts.new_follows`,
---- set when the file has no unstaged changes, so the index is the worktree.
+--- Outdated is read from `opts.lines_of` when given; without it from the
+--- view's own version where that is the one the annotation follows (a
+--- staged view's new side only with `opts.new_follows`, set when the file
+--- has no unstaged changes, so the index is the worktree), else from the
+--- stored flag.
 ---@param file IterFileDiff
 ---@param annotations IterAnnotation[]
----@param opts? { new_follows?: boolean }
+---@param opts? { new_follows?: boolean, lines_of?: IterLinesOf }
 ---@return IterAnnotationMark[]
 function M.place(file, annotations, opts)
-    local new_follows = file.side == 'unstaged'
-        or (opts ~= nil and opts.new_follows == true)
+    opts = opts or {}
+
+    local new_follows = file.side == 'unstaged' or opts.new_follows == true
     local result = {}
     ---@type table<IterAnnotationMark, integer>
     local order = {}
 
     for index, annotation in ipairs(annotations) do
-        local lnum, outdated = locate(file, annotation, new_follows)
+        local lnum, outdated =
+            locate(file, annotation, new_follows, opts.lines_of)
 
         if lnum ~= nil then
             local mark =
@@ -315,8 +329,7 @@ end
 
 --- Draw the annotations of `buf` for `win`: a sign on each anchored line and
 --- the text below the last one. They resolve against the buffer's lines
---- without persisting; one that isn't found sits outdated at its stored
---- line.
+--- without persisting; one that isn't found sits at its stored line.
 ---@param buf integer
 ---@param win integer
 local function render(buf, win)
@@ -363,10 +376,9 @@ local function render(buf, win)
     vim.api.nvim_buf_clear_namespace(buf, buffer_ns, 0, -1)
 
     for _, annotation in ipairs(annotations) do
-        local start, stop = anchor.resolve(annotation.anchor, lines)
-        local outdated = start == nil
+        local start, stop, outdated = list.line_of(annotation, lines)
 
-        if outdated then
+        if start == nil then
             stop =
                 math.min(math.max(annotation.anchor.end_line or 1, 1), #lines)
             start = stop
@@ -448,7 +460,7 @@ local function reanchor(buf)
 
         if not save_warned[message] then
             save_warned[message] = true
-            util.warn(message)
+            util.error(message)
         end
     end
 end

@@ -339,19 +339,20 @@ end
 function M.split(slots, width)
     local widths = M.widths(width, weights(slots))
     local last = #slots
-    local right = lay({ slots[last] }, { widths[last] }, 0, false)
+    local height = 0
     local col = (last - 1) * vim.fn.strdisplaywidth(M.SEPARATOR)
 
-    for i = 1, last - 1 do
-        col = col + widths[i]
+    for i, slot in ipairs(slots) do
+        height = math.max(height, #entries(sections(slot)))
+
+        if i < last then
+            col = col + widths[i]
+        end
     end
 
-    local left =
-        lay(vim.list_slice(slots, 1, last - 1), widths, #right.lines, true)
-
     return {
-        left = left,
-        right = lay({ slots[last] }, { widths[last] }, #left.lines, false),
+        left = lay(vim.list_slice(slots, 1, last - 1), widths, height, true),
+        right = lay({ slots[last] }, { widths[last] }, height, false),
         col = col,
     }
 end
@@ -737,14 +738,14 @@ end
 
 --- Key hints `<lhs> <label>` for `actions`, in order, those without a bound
 --- key left out, as many as fit in `width`; the last one stays.
----@param entries IterKeymapEntry[] bound keys by action
+---@param bound IterKeymapEntry[] bound keys by action
 ---@param actions [string, string][] action and label
 ---@param width integer
 ---@return [string, string][]
-function M.hints(entries, actions, width)
+function M.hints(bound, actions, width)
     local lhs = {}
 
-    for _, entry in ipairs(entries) do
+    for _, entry in ipairs(bound) do
         lhs[entry.action] = entry.lhs[1]
     end
 

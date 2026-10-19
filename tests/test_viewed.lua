@@ -213,8 +213,9 @@ T['hashing']['equal mtime and size but another ctime or inode hash again'] = fun
     local stat = assert(real(vim.fs.joinpath(repo, 'a.txt')))
     local variant = 'ctime'
 
-    ---@diagnostic disable-next-line: duplicate-set-field
-    vim.uv.fs_stat = function(path)
+    ---@param path string
+    ---@return uv.fs_stat.result?
+    local function fake_stat(path)
         if not vim.endswith(path, 'a.txt') then
             return real(path)
         end
@@ -229,6 +230,9 @@ T['hashing']['equal mtime and size but another ctime or inode hash again'] = fun
 
         return copy
     end
+
+    ---@diagnostic disable-next-line: duplicate-set-field
+    vim.uv.fs_stat = fake_stat
 
     local ok, err = pcall(function()
         states({ 'a.txt' })

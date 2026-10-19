@@ -44,6 +44,23 @@ T['warn() and error() prefix the message'] = function()
     })
 end
 
+T['warn() and error() write the notice to the log'] = function()
+    local log_path = require('iter.log').path()
+    local before = vim.fn.filereadable(log_path) == 1
+            and #vim.fn.readfile(log_path)
+        or 0
+
+    capture(function()
+        util.warn('careful')
+        util.error('boom', 'fallback')
+    end)
+
+    local lines = vim.list_slice(vim.fn.readfile(log_path), before + 1)
+    eq(#lines, 2)
+    eq(lines[1]:match('%[WARN%] careful$') ~= nil, true)
+    eq(lines[2]:match('%[ERROR%] boom$') ~= nil, true)
+end
+
 T['error() falls back when the message is empty'] = function()
     local calls = capture(function()
         util.error('', 'fallback')

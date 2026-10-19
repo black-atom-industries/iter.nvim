@@ -68,27 +68,37 @@ local function create_two_hunk_repo()
     helpers.write_file(vim.fs.joinpath(repo, 'code.lua'), code_new)
 end
 
+-- Lua source of the view options the default config gives.
+local VIEW_OPTIONS = [[(function()
+    local config = require('iter.config').resolve({})
+    local diff = config.options.diff
+    return {
+        keys = config.keys.diff,
+        expand_step = diff.expand_step,
+        syntax_max_lines = diff.syntax_max_lines,
+        word_diff = diff.word_diff,
+        icon = config.options.icons.annotation,
+    }
+end)()]]
+
 --- Open an IterDiffView on `path` (two.txt by default) in the child's
 --- current window as `_G.view`, with `opts` (Lua table source) merged into
 --- the view options.
 ---@param path? string
 ---@param opts? string
 local function open_view(path, opts)
-    child.lua(
-        [[
+    child.lua([[
         local path, opts = ...
         local git = require('iter.git')
         local model = require('iter.diff.model')
         local View = require('iter.diff.view')
         local change = { path = path, side = 'unstaged', code = 'M' }
-        local source = assert(git.file_diff(vim.fn.getcwd(), change))
+        local source = assert(git.file_diff(vim.fn.getcwd(), change, {}))
         _G.view = View.new(vim.tbl_extend('force', {
             win = vim.api.nvim_get_current_win(),
-        }, loadstring('return ' .. opts)()))
+        }, ]] .. VIEW_OPTIONS .. [[, loadstring('return ' .. opts)()))
         _G.view:show(model.build(change, source))
-    ]],
-        { path or 'two.txt', opts or '{}' }
-    )
+    ]], { path or 'two.txt', opts or '{}' })
 end
 
 --- Wait until the view's syntax for its last render is applied.
@@ -572,21 +582,20 @@ end
 ---@param change table
 ---@param source_patch? string
 local function open_change(change, source_patch)
-    child.lua(
-        [[
+    child.lua([[
         local change, patch = ...
         local git = require('iter.git')
         local model = require('iter.diff.model')
         local View = require('iter.diff.view')
-        local source = assert(git.file_diff(vim.fn.getcwd(), change))
+        local source = assert(git.file_diff(vim.fn.getcwd(), change, {}))
         if patch ~= '' then
             loadstring('return ' .. patch)()(source)
         end
-        _G.view = View.new({ win = vim.api.nvim_get_current_win() })
+        _G.view = View.new(vim.tbl_extend('force', {
+            win = vim.api.nvim_get_current_win(),
+        }, ]] .. VIEW_OPTIONS .. [[))
         _G.view:show(model.build(change, source))
-    ]],
-        { change, source_patch or '' }
-    )
+    ]], { change, source_patch or '' })
 end
 
 --- Replace `syntax.request` so the test answers each request itself.

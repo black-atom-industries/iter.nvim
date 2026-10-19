@@ -1,5 +1,5 @@
 local document = require('iter.diff.document')
-local parser = require('iter.ui.diff.parser')
+local parser = require('iter.diff.parser')
 
 local M = {}
 

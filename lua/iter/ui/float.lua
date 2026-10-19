@@ -211,6 +211,35 @@ function M.open(opts)
     return self
 end
 
+--- Give `win` the config `fit()` returns again whenever the editor or a
+--- window is resized, until `win` closes. For floats that `M.open` doesn't
+--- lay out.
+---@param win integer
+---@param fit fun(): vim.api.keyset.win_config
+function M.follow_resize(win, fit)
+    local group = vim.api.nvim_create_augroup(
+        'iter.float.resize.' .. win,
+        { clear = true }
+    )
+
+    vim.api.nvim_create_autocmd({ 'VimResized', 'WinResized' }, {
+        group = group,
+        callback = function()
+            if util.is_valid_win(win) then
+                vim.api.nvim_win_set_config(win, fit())
+            end
+        end,
+    })
+    vim.api.nvim_create_autocmd('WinClosed', {
+        group = group,
+        pattern = tostring(win),
+        once = true,
+        callback = function()
+            pcall(vim.api.nvim_del_augroup_by_id, group)
+        end,
+    })
+end
+
 ---@return boolean
 function Float:is_open()
     return util.is_valid_win(self.win)

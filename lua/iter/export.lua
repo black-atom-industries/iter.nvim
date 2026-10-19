@@ -1,7 +1,6 @@
 --- The review as text for an agent: an intro, then a numbered list of the
 --- annotations with the code they sit on. `yank` copies it and offers to clear.
 
-local anchor = require('iter.annotations.anchor')
 local list = require('iter.annotations.list')
 local store = require('iter.store')
 local util = require('iter.util')
@@ -39,20 +38,9 @@ local function fence_for(lines)
     return string.rep('`', longest + 1)
 end
 
----@param annotation IterAnnotation
----@return boolean
-local function has_code(annotation)
-    local a = annotation.anchor
-
-    return (annotation.scope == 'line' or annotation.scope == 'range')
-        and a.lines ~= nil
-        and #a.lines > 0
-end
-
 ---@param item IterAnnotationItem
----@param lines_of fun(path: string): string[]?
 ---@return string
-local function heading(item, lines_of)
+local function heading(item)
     local annotation = item.annotation
     local a = annotation.anchor
 
@@ -64,12 +52,8 @@ local function heading(item, lines_of)
 
     local first, last = a.start_line, a.end_line
 
-    if a.side == 'new' and not item.outdated and has_code(annotation) then
-        local at = anchor.resolve(a, lines_of(a.path))
-
-        if at ~= nil then
-            first, last = at, at + (last - first)
-        end
+    if item.start ~= nil then
+        first, last = item.start, item.start + (last - first)
     end
 
     local loc = first == last and tostring(first) or (first .. '-' .. last)
@@ -92,7 +76,7 @@ end
 --- The export text: `intro`, a blank line, then one numbered item per
 --- annotation. Files follow `order`, then name, with the review annotations last.
 ---@param annotations IterAnnotation[]
----@param opts { intro: string, order?: string[], lines_of: fun(path: string): string[]? }
+---@param opts { intro: string, order?: string[], lines_of: IterLinesOf }
 ---@return string
 function M.text(annotations, opts)
     vim.validate('annotations', annotations, 'table')
@@ -108,9 +92,9 @@ function M.text(annotations, opts)
             local indent = string.rep(' ', #tostring(n) + 2)
             local annotation = item.annotation
 
-            table.insert(out, n .. '. ' .. heading(item, opts.lines_of))
+            table.insert(out, n .. '. ' .. heading(item))
 
-            if has_code(annotation) then
+            if list.has_text(annotation) then
                 local code = vim.tbl_map(strip_cr, annotation.anchor.lines)
                 local fence = fence_for(code)
                 local filetype =
@@ -175,7 +159,7 @@ function M.yank(opts)
     local data, err = store.load(opts.root)
 
     if data == nil then
-        util.warn('Cannot read the annotations: ' .. tostring(err))
+        util.error('Cannot read the annotations: ' .. tostring(err))
         return
     end
 
@@ -187,9 +171,7 @@ function M.yank(opts)
     copy(M.text(data.annotations, {
         intro = opts.config.options.export.intro,
         order = opts.order,
-        lines_of = function(path)
-            return list.file_lines(opts.root, path)
-        end,
+        lines_of = list.reader(opts.root),
     }))
 
     if not ask_clear(#data.annotations) then
@@ -202,7 +184,7 @@ function M.yank(opts)
     local _, remove_err = store.remove_annotations(opts.root, ids)
 
     if remove_err ~= nil then
-        util.warn('Cannot clear the annotations: ' .. remove_err)
+        util.error('Cannot clear the annotations: ' .. remove_err)
         return
     end
 

@@ -16,6 +16,7 @@ local git = {}
 
 local log = require('iter.log')
 local patch = require('iter.diff.patch')
+local util = require('iter.util')
 
 ---@param output string
 ---@param start integer
@@ -74,17 +75,21 @@ local function parse_status(output)
     return entries
 end
 
+---@type boolean?
+local has_git
+
+--- Whether `git` is executable, checked once; the first miss tells the user.
 ---@return boolean
 local function ensure_git()
-    local ok = vim.fn.executable('git')
+    if has_git == nil then
+        has_git = vim.fn.executable('git') == 1
 
-    if ok == 0 then
-        log.error('`git` is not executable')
-        vim.print('[iter] `git` is not executable')
-        return false
+        if not has_git then
+            util.error('`git` is not executable')
+        end
     end
 
-    return true
+    return has_git
 end
 
 ---@alias GitResult {
@@ -160,8 +165,6 @@ end
 
 ---@return string
 function git.root()
-    ensure_git()
-
     local out = git.run(
         { 'rev-parse', '--show-toplevel' },
         { ignore_error = true }
@@ -396,8 +399,6 @@ end
 ---@return boolean
 ---@return string?
 local function run_on_paths(root, args, paths)
-    ensure_git()
-
     if #paths == 0 then
         return true
     end
@@ -500,8 +501,6 @@ end
 ---@return boolean
 ---@return string
 function git.apply_patch(root, lines, kind, opts)
-    ensure_git()
-
     if #lines == 0 then
         return false, 'No patch to apply'
     end
@@ -595,10 +594,11 @@ local function split_output(output)
     return lines
 end
 
+--- The lines of a blob, nil when it doesn't exist.
 ---@param root string
 ---@param spec string blob spec such as `:path` or `HEAD:path`
 ---@return string[]?
-local function blob_lines(root, spec)
+function git.blob_lines(root, spec)
     local out = git.run({ 'show', spec }, { cwd = root, ignore_error = true })
 
     if out.exit_code ~= 0 then
@@ -627,36 +627,38 @@ end
 --- keep their carriage returns.
 ---@param root string
 ---@param change { path: string, orig_path?: string, side: IterSide, code: string }
+---@param args string[] extra flags for `git diff`, the `diff.args` option
 ---@param bytes boolean
 ---@return string[]?
 ---@return string? error
-local function diff_text(root, change, bytes)
+local function diff_text(root, change, args, bytes)
+    vim.validate('args', args, 'table')
+
     local untracked = change.code == '?'
-    local args
+    local cmd
 
     if untracked then
-        args = { 'diff', '--no-index' }
+        cmd = { 'diff', '--no-index' }
     elseif change.side == 'staged' then
-        args = { 'diff', '--cached', '-M' }
+        cmd = { 'diff', '--cached', '-M' }
     else
-        args = { 'diff' }
+        cmd = { 'diff' }
     end
 
-    vim.list_extend(args, require('iter').config.options.diff.args)
-    vim.list_extend(args, DIFF_FLAGS)
-    table.insert(args, '--')
+    vim.list_extend(cmd, args)
+    vim.list_extend(cmd, DIFF_FLAGS)
+    table.insert(cmd, '--')
 
     if untracked then
-        vim.list_extend(args, { '/dev/null', change.path })
+        vim.list_extend(cmd, { '/dev/null', change.path })
     else
         if change.orig_path ~= nil then
-            table.insert(args, change.orig_path)
+            table.insert(cmd, change.orig_path)
         end
-        table.insert(args, change.path)
+        table.insert(cmd, change.path)
     end
 
-    local out =
-        git.run(args, { cwd = root, ignore_error = true, bytes = bytes })
+    local out = git.run(cmd, { cwd = root, ignore_error = true, bytes = bytes })
 
     -- `--no-index` exits 1 when the files differ.
     if out.exit_code > 1 or (out.exit_code == 1 and not untracked) then
@@ -670,12 +672,11 @@ end
 --- keep their carriage returns, as a patch for `git apply` needs them.
 ---@param root string
 ---@param change { path: string, orig_path?: string, side: IterSide, code: string }
+---@param args string[] extra flags for `git diff`, the same as for `git.file_diff`
 ---@return string[]?
 ---@return string? error
-function git.file_diff_bytes(root, change)
-    ensure_git()
-
-    return diff_text(root, change, true)
+function git.file_diff_bytes(root, change, args)
+    return diff_text(root, change, args, true)
 end
 
 --- Diff text and both full versions of one file. Unstaged compares the index
@@ -683,14 +684,13 @@ end
 --- added files have an empty old side, deleted files an empty new side.
 ---@param root string
 ---@param change IterDiffChange
+---@param args string[] extra flags for `git diff`, the `diff.args` option
 ---@return IterFileSource?
 ---@return string? error
-function git.file_diff(root, change)
-    ensure_git()
-
+function git.file_diff(root, change, args)
     -- Read as bytes and normalized here: text mode drops CRs per output
     -- chunk, so a CRLF split across two chunks would keep its CR.
-    local bytes, err = diff_text(root, change, true)
+    local bytes, err = diff_text(root, change, args, true)
 
     if bytes == nil then
         return nil, err
@@ -710,15 +710,15 @@ function git.file_diff(root, change)
     if untracked or change.code == 'A' then
         old_lines = {}
     elseif change.side == 'staged' then
-        old_lines = blob_lines(root, 'HEAD:' .. old_path)
+        old_lines = git.blob_lines(root, 'HEAD:' .. old_path)
     else
-        old_lines = blob_lines(root, ':' .. old_path)
+        old_lines = git.blob_lines(root, ':' .. old_path)
     end
 
     if change.code == 'D' then
         new_lines = {}
     elseif change.side == 'staged' then
-        new_lines = blob_lines(root, ':' .. change.path)
+        new_lines = git.blob_lines(root, ':' .. change.path)
     else
         new_lines = read_worktree_lines(change.path, root)
     end
@@ -739,8 +739,6 @@ end
 ---@param root string
 ---@return table<string, string>?
 function git.diff_ids(root)
-    ensure_git()
-
     local ids = {}
     local reads = {
         unstaged = { 'diff', '--no-renames' },
@@ -871,7 +869,7 @@ function git.recent(root, count, prev)
         return recent
     end
 
-    local log = git.run({
+    local commits = git.run({
         'log',
         '--no-color',
         '--no-show-signature',
@@ -881,7 +879,7 @@ function git.recent(root, count, prev)
         '--',
     }, { cwd = root, ignore_error = true })
 
-    for _, line in ipairs(split_output(log.output)) do
+    for _, line in ipairs(split_output(commits.output)) do
         local fields = vim.split(line, SEP, { plain = true })
 
         if #fields >= 4 then
