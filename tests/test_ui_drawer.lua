@@ -382,6 +382,33 @@ T['keys']['a key disabled with false is not mapped'] = function()
     eq(buf_map_desc('u'), 'Unstage the file')
 end
 
+T['keys']['<C-d> and <C-u> scroll the preview, the drawer keeps focus'] = function()
+    local lines = {}
+    for i = 1, 100 do
+        lines[i] = 'line ' .. i
+    end
+    helpers.write_file(vim.fs.joinpath(repo, 'modified.txt'), lines)
+
+    open_drawer()
+    select_item('unstaged', 'modified.txt')
+    wait_preview('unstaged modified.txt')
+
+    local topline =
+        [[vim.fn.getwininfo(require('iter').drawer.pane)[1].topline]]
+    local drawer_focused =
+        [[vim.api.nvim_get_current_win() == require('iter').drawer.win]]
+    local before = child.lua_get(topline)
+
+    child.type_keys('<C-d>')
+    local down = child.lua_get(topline)
+    eq(down > before, true)
+    eq(child.lua_get(drawer_focused), true)
+
+    child.type_keys('<C-u>')
+    eq(child.lua_get(topline), before)
+    eq(child.lua_get(drawer_focused), true)
+end
+
 T['stage'] = new_set()
 
 T['stage']['s stages a file and keeps the selection on the nearest row'] = function()
@@ -972,14 +999,16 @@ T['help']['? lists the current keys and closes on q, ? and <Esc>'] = function()
     for _, close in ipairs({ 'q', '?', '<Esc>' }) do
         child.type_keys('?')
         eq(help_lines(), {
-            ' <CR>  Open the file and close the drawer',
-            ' S gs  Stage or unstage the file',
-            ' u     Unstage the file',
-            ' r     Open the review tab',
-            ' q     Close',
-            ' ?     Show the keys',
-            ' h     Select the Unstaged column',
-            ' l     Select the Staged column',
+            ' <CR>   Open the file and close the drawer',
+            ' S gs   Stage or unstage the file',
+            ' u      Unstage the file',
+            ' r      Open the review tab',
+            ' q      Close',
+            ' ?      Show the keys',
+            ' <C-d>  Scroll the diff down',
+            ' <C-u>  Scroll the diff up',
+            ' h      Select the Unstaged column',
+            ' l      Select the Staged column',
         })
         eq(
             child.lua_get(

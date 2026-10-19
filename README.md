@@ -176,6 +176,8 @@ The status drawer (`drawer`):
 | `r` | `review` | Open the review tab |
 | `q` | `close` | Close |
 | `?` | `help` | Show the keys |
+| `<C-d>` | `scroll_down` | Scroll the diff down |
+| `<C-u>` | `scroll_up` | Scroll the diff up |
 | `h` | `column_left` | Select the Unstaged column |
 | `l` | `column_right` | Select the Staged column |
 
@@ -197,6 +199,8 @@ The drawer of the review tab (`review_drawer`):
 | `y` | `yank` | Copy the review |
 | `q` | `close` | Close |
 | `?` | `help` | Show the keys |
+| `<C-d>` | `scroll_down` | Scroll the diff down |
+| `<C-u>` | `scroll_up` | Scroll the diff up |
 | `h` | `column_left` | Select the Unstaged column |
 | `l` | `column_right` | Select the Staged column |
 
