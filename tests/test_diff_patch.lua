@@ -120,9 +120,9 @@ end
 ---@param kind 'stage'|'unstage'
 ---@param lines string[]
 local function apply(kind, lines)
-    local ok, err = git.apply_hunk(repo, lines, kind, { check = true })
+    local ok, err = git.apply_patch(repo, lines, kind, { check = true })
     eq({ ok, err }, { true, '' })
-    ok, err = git.apply_hunk(repo, lines, kind)
+    ok, err = git.apply_patch(repo, lines, kind)
     eq({ ok, err }, { true, '' })
 end
 
@@ -497,14 +497,292 @@ T['apply']['a failed check changes nothing'] = function()
     commit('f.txt', 'other\n')
     local before = index_hash('f.txt')
 
-    local ok, err = git.apply_hunk(repo, file_patch, 'stage', { check = true })
+    local ok, err = git.apply_patch(repo, file_patch, 'stage', { check = true })
     eq(ok, false)
     eq(err ~= '', true)
     eq(index_hash('f.txt'), before)
 end
 
 T['apply']['an empty patch is refused'] = function()
-    eq(git.apply_hunk(repo, {}, 'stage'), false)
+    eq(git.apply_patch(repo, {}, 'stage'), false)
+end
+
+T['lines'] = new_set({
+    hooks = {
+        pre_case = function()
+            repo = helpers.create_repo({})
+        end,
+        post_case = function()
+            helpers.cleanup(repo)
+        end,
+    },
+})
+
+--- A selection of del rows by old line and add rows by new line.
+---@param old integer[]
+---@param new integer[]
+---@return IterLineSelection
+local function pick(old, new)
+    local selection = { old = {}, new = {} }
+
+    for _, line in ipairs(old) do
+        selection.old[line] = true
+    end
+
+    for _, line in ipairs(new) do
+        selection.new[line] = true
+    end
+
+    return selection
+end
+
+---@param change IterDiffChange
+---@param selection IterLineSelection
+---@param kind 'stage'|'unstage'
+---@return string[]?
+local function lines_patch(change, selection, kind)
+    local raw, err = git.file_diff_bytes(repo, change)
+    eq(err, nil)
+
+    return patch.lines(assert(raw), selection, kind)
+end
+
+local STAGED_F = { path = 'f.txt', side = 'staged', code = 'M' }
+
+---@param patch_lines string[]
+---@return string[]
+local function hunk_headers(patch_lines)
+    return vim.tbl_filter(function(line)
+        return vim.startswith(line, '@@')
+    end, patch_lines)
+end
+
+T['lines']['stages one of three added lines'] = function()
+    commit('f.txt', join(numbered(1, 10)))
+    local lines = numbered(1, 10)
+    table.insert(lines, 6, 'x3')
+    table.insert(lines, 6, 'x2')
+    table.insert(lines, 6, 'x1')
+    write('f.txt', join(lines))
+
+    apply('stage', assert(lines_patch(UNSTAGED_F, pick({}, { 7 }), 'stage')))
+
+    local expected = numbered(1, 10)
+    table.insert(expected, 6, 'x2')
+    eq(run({ 'show', ':f.txt' }), table.concat(expected, '\n'))
+    eq(run({ 'diff', '--cached', '--numstat' }), '1\t0\tf.txt')
+end
+
+T['lines']['stages one of three deleted lines'] = function()
+    commit('f.txt', join(numbered(1, 10)))
+    local lines = numbered(1, 10)
+    table.remove(lines, 3)
+    table.remove(lines, 3)
+    table.remove(lines, 3)
+    write('f.txt', join(lines))
+
+    apply('stage', assert(lines_patch(UNSTAGED_F, pick({ 4 }, {}), 'stage')))
+
+    local expected = numbered(1, 10)
+    table.remove(expected, 4)
+    eq(index_hash('f.txt'), hash_of(join(expected)))
+end
+
+T['lines']['stages a deleted and an added line of one change'] = function()
+    commit('f.txt', join(numbered(1, 10)))
+    local lines = numbered(1, 10)
+    lines[3] = 'a'
+    table.insert(lines, 4, 'b')
+    write('f.txt', join(lines))
+
+    apply('stage', assert(lines_patch(UNSTAGED_F, pick({ 3 }, { 4 }), 'stage')))
+
+    local expected = numbered(1, 10)
+    expected[3] = 'b'
+    eq(index_hash('f.txt'), hash_of(join(expected)))
+end
+
+T['lines']['stages rows of two hunks and recounts both headers'] = function()
+    three_hunks('\n', true)
+
+    local file_patch =
+        assert(lines_patch(UNSTAGED_F, pick({ 13 }, { 30 }), 'stage'))
+    eq(hunk_headers(file_patch), {
+        '@@ -10,7 +10,6 @@ l9',
+        '@@ -27,4 +26,5 @@ l26',
+    })
+    apply('stage', file_patch)
+
+    local expected = numbered(1, 30)
+    table.remove(expected, 13)
+    table.insert(expected, 'l30 x')
+    eq(index_hash('f.txt'), hash_of(join(expected)))
+end
+
+T['lines']['a selection of context rows gives nil'] = function()
+    three_hunks('\n', true)
+
+    eq(lines_patch(UNSTAGED_F, pick({ 12 }, { 14 }), 'stage'), nil)
+    eq(lines_patch(UNSTAGED_F, pick({}, {}), 'unstage'), nil)
+end
+
+T['lines']['stages an added last line after an old one without a newline'] = function()
+    local lines = three_hunks('\n', false)
+
+    apply('stage', assert(lines_patch(UNSTAGED_F, pick({}, { 30 }), 'stage')))
+
+    local expected = numbered(1, 30)
+    table.insert(expected, lines[30])
+    eq(index_hash('f.txt'), hash_of(join(expected, '\n', false)))
+end
+
+T['lines']['stages the deletion of a last line without a newline'] = function()
+    three_hunks('\n', false)
+
+    apply('stage', assert(lines_patch(UNSTAGED_F, pick({ 30 }, {}), 'stage')))
+
+    eq(index_hash('f.txt'), hash_of(join(numbered(1, 29))))
+end
+
+T['lines']['unstages an added last line without a newline'] = function()
+    local lines = three_hunks('\n', false)
+    run({ 'add', 'f.txt' })
+
+    apply('unstage', assert(lines_patch(STAGED_F, pick({}, { 30 }), 'unstage')))
+
+    eq(index_hash('f.txt'), hash_of(join(vim.list_slice(lines, 1, 29))))
+end
+
+T['lines']['unstages the deletion of a last line without a newline'] = function()
+    local lines = three_hunks('\n', false)
+    run({ 'add', 'f.txt' })
+
+    apply('unstage', assert(lines_patch(STAGED_F, pick({ 30 }, {}), 'unstage')))
+
+    local expected = vim.deepcopy(lines)
+    table.insert(expected, 30, 'l30')
+    eq(index_hash('f.txt'), hash_of(join(expected, '\n', false)))
+end
+
+T['lines']['stages rows of a CRLF file byte for byte'] = function()
+    local lines = three_hunks('\r\n', true)
+
+    apply(
+        'stage',
+        assert(lines_patch(UNSTAGED_F, pick({ 1 }, { 13, 30 }), 'stage'))
+    )
+
+    local expected = numbered(2, 30)
+    table.insert(expected, 13, lines[13])
+    table.insert(expected, lines[30])
+    eq(index_hash('f.txt'), hash_of(join(expected, '\r\n')))
+end
+
+T['lines']['unstages one of three added lines'] = function()
+    commit('f.txt', join(numbered(1, 10)))
+    local lines = numbered(1, 10)
+    table.insert(lines, 6, 'x3')
+    table.insert(lines, 6, 'x2')
+    table.insert(lines, 6, 'x1')
+    write('f.txt', join(lines))
+    run({ 'add', 'f.txt' })
+
+    apply('unstage', assert(lines_patch(STAGED_F, pick({}, { 7 }), 'unstage')))
+
+    local expected = vim.deepcopy(lines)
+    table.remove(expected, 7)
+    eq(index_hash('f.txt'), hash_of(join(expected)))
+    eq(vim.fn.readfile(vim.fs.joinpath(repo, 'f.txt')), lines)
+end
+
+T['lines']['unstages one of three deleted lines'] = function()
+    commit('f.txt', join(numbered(1, 10)))
+    local lines = numbered(1, 10)
+    table.remove(lines, 3)
+    table.remove(lines, 3)
+    table.remove(lines, 3)
+    write('f.txt', join(lines))
+    run({ 'add', 'f.txt' })
+
+    apply('unstage', assert(lines_patch(STAGED_F, pick({ 4 }, {}), 'unstage')))
+
+    eq(
+        index_hash('f.txt'),
+        hash_of(join({ 'l1', 'l2', 'l4', 'l6', 'l7', 'l8', 'l9', 'l10' }))
+    )
+end
+
+T['lines']['unstages rows of two hunks and recounts both headers'] = function()
+    local lines = three_hunks('\n', true)
+    run({ 'add', 'f.txt' })
+
+    local file_patch =
+        assert(lines_patch(STAGED_F, pick({ 13 }, { 30 }), 'unstage'))
+    eq(hunk_headers(file_patch), {
+        '@@ -10,8 +10,7 @@ l9',
+        '@@ -28,3 +27,4 @@ l26',
+    })
+    apply('unstage', file_patch)
+
+    local expected = vim.list_slice(lines, 1, 29)
+    table.insert(expected, 13, 'l13')
+    eq(index_hash('f.txt'), hash_of(join(expected)))
+end
+
+T['lines']['stages part of an untracked file'] = function()
+    write('n.txt', 'a\nb\nc\n')
+
+    apply(
+        'stage',
+        assert(
+            lines_patch(
+                { path = 'n.txt', side = 'unstaged', code = '?' },
+                pick({}, { 1, 3 }),
+                'stage'
+            )
+        )
+    )
+
+    eq(index_hash('n.txt'), hash_of('a\nc\n'))
+    eq(run({ 'status', '--porcelain', 'n.txt' }), 'AM n.txt')
+end
+
+T['lines']['unstages part of a staged new file and keeps it added'] = function()
+    write('n.txt', 'a\nb\nc\n')
+    run({ 'add', 'n.txt' })
+
+    apply(
+        'unstage',
+        assert(
+            lines_patch(
+                { path = 'n.txt', side = 'staged', code = 'A' },
+                pick({}, { 2 }),
+                'unstage'
+            )
+        )
+    )
+
+    eq(index_hash('n.txt'), hash_of('a\nc\n'))
+    eq(run({ 'status', '--porcelain', 'n.txt' }), 'AM n.txt')
+end
+
+T['lines']['stages part of a deleted file and keeps it in the index'] = function()
+    commit('d.txt', 'a\nb\nc\n')
+    vim.fn.delete(vim.fs.joinpath(repo, 'd.txt'))
+
+    apply(
+        'stage',
+        assert(
+            lines_patch(
+                { path = 'd.txt', side = 'unstaged', code = 'D' },
+                pick({ 2 }, {}),
+                'stage'
+            )
+        )
+    )
+
+    eq(index_hash('d.txt'), hash_of('a\nc\n'))
+    eq(run({ 'status', '--porcelain', 'd.txt' }), 'MD d.txt')
 end
 
 return T

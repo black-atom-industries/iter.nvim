@@ -214,8 +214,8 @@ The diff pane of the review tab (`diff`):
 | `[a` | `prev_annotation` | Previous annotation |
 | `]f` | `next_file` | Next file |
 | `[f` | `prev_file` | Previous file |
-| `s` | `stage` | Stage the hunk |
-| `u` | `unstage` | Unstage the hunk |
+| `s` | `stage` | Stage the hunk or the selected lines (normal and visual mode) |
+| `u` | `unstage` | Unstage the hunk or the selected lines (normal and visual mode) |
 | `a` | `annotate` | Annotate the line or range (normal and visual mode) |
 | `A` | `annotate_file` | Annotate the file |
 | `e` | `edit` | Edit the annotation |
@@ -228,11 +228,13 @@ The diff pane of the review tab (`diff`):
 | `q` | `close` | Close |
 | `?` | `help` | Show the keys |
 
-After `s` or `u` on the last hunk of a file, the pane shows the same file on
-its other side. A file opened in the diff pane, with `:edit` for example, opens
-in the tab the review came from, and the pane keeps its diff. A mode change
-shows in the diff header as `mode 100644 → 100755`; `s` on the file in the
-drawer stages it.
+In visual mode, `s` and `u` take only the added and deleted lines of the
+selection, which may span several hunks, as `git add -p` does when you edit a
+hunk. After `s` or `u` on the last change of a file, the pane shows the same
+file on its other side. A file opened in the diff pane, with `:edit` for
+example, opens in the tab the review came from, and the pane keeps its diff. A
+mode change shows in the diff header as `mode 100644 → 100755`; `s` on the file
+in the drawer stages it.
 
 The annotation float (`annotation`). `:w` also saves and `:wq` saves and closes.
 

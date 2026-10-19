@@ -196,10 +196,10 @@ function Review:view_handlers()
             self.drawer:step_file(-1)
         end,
         stage = function()
-            self:apply_hunk('stage')
+            self:apply_change('stage')
         end,
         unstage = function()
-            self:apply_hunk('unstage')
+            self:apply_change('unstage')
         end,
         goto_file = function()
             self:goto_file()
@@ -259,31 +259,99 @@ local function cursor_to_hunk(view, index)
     end
 end
 
+--- The selected del and add rows of `file` between rows `first` and `last`;
+--- nil when there are none.
+---@param file IterFileDiff
+---@param first integer
+---@param last integer
+---@return IterLineSelection?
+local function line_selection(file, first, last)
+    local selection = { old = {}, new = {} }
+    local any = false
+
+    for lnum = first, last do
+        local row = file.rows[lnum]
+
+        if row.kind == 'del' then
+            selection.old[row.old], any = true, true
+        elseif row.kind == 'add' then
+            selection.new[row.new], any = true, true
+        end
+    end
+
+    return any and selection or nil
+end
+
+--- Whether the file header of `raw` names a symlink or submodule mode, whose
+--- one line is a link target or commit, not text.
+---@param raw string[]
+---@return boolean
+local function is_link(raw)
+    for _, line in ipairs(raw) do
+        if vim.startswith(line, '@@') then
+            break
+        end
+
+        local mode = line:match('^index %x+%.%.%x+ (%d+)$')
+            or line:match('^new file mode (%d+)$')
+            or line:match('^deleted file mode (%d+)$')
+            or line:match('^old mode (%d+)$')
+            or line:match('^new mode (%d+)$')
+
+        if mode == '120000' or mode == '160000' then
+            return true
+        end
+    end
+
+    return false
+end
+
 --- Stage (`stage`) or unstage (`unstage`) the hunk under the cursor of the
---- diff pane. The patch comes from git's diff text of this moment, byte for
---- byte, and only when that text is still the one on screen; `git apply
---- --check` runs before the apply. Afterwards the cursor goes to the hunk
---- that took its place, else the last one.
+--- diff pane, or in visual mode the selected del and add rows. The patch
+--- comes from git's diff text of this moment, byte for byte, and only when
+--- that text is still the one on screen; `git apply --check` runs before
+--- the apply. After a hunk the cursor goes to the hunk that took its place,
+--- else the last one.
 ---@param kind 'stage'|'unstage'
-function Review:apply_hunk(kind)
+function Review:apply_change(kind)
     local view = self.drawer.view
+    local visual = vim.fn.mode():find('^[vV\22]') ~= nil
+    local first, last = editor.selection()
     local file = view:is_shown() and view.files[1] or nil
 
     if file == nil then
         return
     end
 
+    local what = visual and 'selected lines' or 'hunk'
+
     if kind == 'stage' and file.side ~= 'unstaged' then
-        util.warn('The hunk is staged already')
+        util.warn(
+            visual and 'The lines are staged already'
+                or 'The hunk is staged already'
+        )
         return
     elseif kind == 'unstage' and file.side ~= 'staged' then
-        util.warn('The hunk is not staged')
+        util.warn(
+            visual and 'The lines are not staged' or 'The hunk is not staged'
+        )
         return
     end
 
     local row = view:row()
+    local selection
 
-    if row == nil or row.hunk == nil then
+    if visual and is_link(file.raw) then
+        util.warn('Lines of a symlink or submodule cannot be staged one by one')
+        return
+    elseif visual then
+        selection = line_selection(file, first, last)
+
+        if selection == nil then
+            util.warn('No added or deleted lines selected')
+            return
+        end
+    elseif row == nil or row.hunk == nil then
         util.warn('No hunk under the cursor')
         return
     end
@@ -299,14 +367,15 @@ function Review:apply_hunk(kind)
         return
     end
 
-    local lines = assert(patch.hunk(raw, row.hunk))
-    local ok, err = git.apply_hunk(root, lines, kind, { check = true })
+    local lines = selection ~= nil and assert(patch.lines(raw, selection, kind))
+        or assert(patch.hunk(raw, row.hunk))
+    local ok, err = git.apply_patch(root, lines, kind, { check = true })
 
     if ok then
-        ok, err = git.apply_hunk(root, lines, kind)
+        ok, err = git.apply_patch(root, lines, kind)
     end
 
-    -- After its last hunk the file lives on the other side; the selection
+    -- After its last change the file lives on the other side; the selection
     -- follows it there.
     self.drawer:refresh(
         nil,
@@ -314,14 +383,15 @@ function Review:apply_hunk(kind)
     )
 
     if not ok then
-        util.warn(string.format('Cannot %s the hunk: %s', kind, err))
+        util.warn(string.format('Cannot %s the %s: %s', kind, what, err))
         return
     end
 
     local shown = view.files[1]
 
     if
-        view:is_shown()
+        not visual
+        and view:is_shown()
         and shown ~= nil
         and shown.path == file.path
         and shown.side == file.side
