@@ -560,7 +560,7 @@ Each slice leaves `just checks` green and the plugin usable.
 - Tests: child UI screenshot; filter narrows; jump lands on the anchored line.
 - Removes: nothing.
 
-#### S12 · Viewed marks
+#### S12 · Viewed marks — done
 
 - Goal: `v` toggles a file viewed; drawer rows show `○`/`✓`/`↻` and the review header counts.
 - Files: new `iter/viewed.lua`; `iter/ui/drawer.lua`, `iter/review.lua`, `iter/watch.lua`, `tests/test_viewed.lua`,

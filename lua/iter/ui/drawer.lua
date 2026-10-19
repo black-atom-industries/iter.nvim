@@ -8,6 +8,7 @@ local model = require('iter.diff.model')
 local render = require('iter.ui.render')
 local store = require('iter.store')
 local util = require('iter.util')
+local viewed = require('iter.viewed')
 local View = require('iter.diff.view')
 local watch = require('iter.watch')
 
@@ -45,6 +46,8 @@ local watch = require('iter.watch')
 ---@field config IterConfig
 ---@field changes IterChanges
 ---@field comments IterComment[] stored comments, read in the review context only
+---@field records table<string, IterViewed> stored viewed records, same context
+---@field viewed? table<string, IterViewedState> state per file path, review context only
 ---@field store_branch? string branch `store_path` belongs to
 ---@field store_path? string
 ---@field store_stat? string stat of `store_path` when `comments` was read
@@ -68,6 +71,12 @@ local PREVIEW_DELAY_MS = 50
 local SEPARATOR = '│'
 local SIDES = { 'unstaged', 'staged' }
 local TITLES = { unstaged = 'Unstaged', staged = 'Staged' }
+-- Glyph and group per viewed state in a review row.
+local VIEWED_MARKS = {
+    viewed = { '✓', 'IterViewed' },
+    changed = { '↻', 'IterViewedChanged' },
+    unviewed = { '○', 'IterDrawerHint' },
+}
 -- Actions the key hint line shows, in order, with their short labels.
 local HINTS = {
     { 'stage', 'stage' },
@@ -102,6 +111,10 @@ end
 local function pad(text, width)
     return text .. string.rep(' ', width - vim.fn.strdisplaywidth(text))
 end
+
+---@class IterDrawerReview what a review row shows besides the file
+---@field counts table<string, integer> comments per path
+---@field viewed table<string, IterViewedState> state per file path
 
 ---@class IterDrawerEntry
 ---@field item IterChange
@@ -191,21 +204,29 @@ local function item_count(counts, item)
     return count
 end
 
---- One cell: code letter and path, the path cut from the left to fit, and
---- the item's comment count at the end when `counts` is given.
+--- One cell: code letter and path, the path cut from the left to fit. In a
+--- review, the viewed mark of a file follows the code letter and the
+--- item's comment count ends the cell.
 ---@param line IterRenderLine
 ---@param entry IterDrawerEntry
 ---@param first integer byte column the cell starts at
 ---@param width integer
----@param counts? table<string, integer>
+---@param review? IterDrawerReview
 ---@return string
-local function cell_text(line, entry, first, width, counts)
+local function cell_text(line, entry, first, width, review)
     local item = entry.item
     local indent = entry.parent ~= nil and '   ' or ' '
     local name = entry.parent ~= nil and item.path:sub(#entry.parent.path + 1)
         or item.path
     local prefix = indent .. item.code .. ' '
-    local count = counts and item_count(counts, item) or 0
+    local mark
+
+    if review ~= nil then
+        mark = not item.dir and VIEWED_MARKS[review.viewed[item.path]] or nil
+        prefix = prefix .. (mark and mark[1] or ' ') .. ' '
+    end
+
+    local count = review and item_count(review.counts, item) or 0
     local suffix = count > 0 and string.format(' [%d] ', count) or ''
     local text = prefix
         .. changes.truncate(
@@ -216,6 +237,12 @@ local function cell_text(line, entry, first, width, counts)
         )
 
     render.add_highlight(line, code_group(item), first + #indent)
+
+    if mark ~= nil then
+        local start = first + #indent + #item.code + 1
+
+        render.add_highlight(line, mark[2], start, start + #mark[1])
+    end
 
     if suffix == '' then
         return pad(text, width)
@@ -254,9 +281,9 @@ end
 ---@param lists table<IterSide, IterDrawerEntry[]>
 ---@param counts table<IterSide, integer>
 ---@param width integer
----@param comments? table<string, integer> comment counts per path
+---@param review? IterDrawerReview
 ---@return IterDrawerLayout
-local function columns_layout(lists, counts, width, comments)
+local function columns_layout(lists, counts, width, review)
     local widths = { unstaged = math.floor((width - 1) / 2) }
     widths.staged = width - 1 - widths.unstaged
     local result = { lines = {}, rows = {}, cells = {} }
@@ -274,7 +301,7 @@ local function columns_layout(lists, counts, width, comments)
             if index == 0 then
                 text = title_text(line, side, counts[side], first, widths[side])
             elseif entry ~= nil then
-                text = cell_text(line, entry, first, widths[side], comments)
+                text = cell_text(line, entry, first, widths[side], review)
                 row[side] = entry.item
                 cells[side] = { first = first, last = first + #text }
             else
@@ -309,9 +336,9 @@ end
 ---@param lists table<IterSide, IterDrawerEntry[]>
 ---@param counts table<IterSide, integer>
 ---@param width integer
----@param comments? table<string, integer> comment counts per path
+---@param review? IterDrawerReview
 ---@return IterDrawerLayout
-local function stacked_layout(lists, counts, width, comments)
+local function stacked_layout(lists, counts, width, review)
     local result = { lines = {}, rows = {}, cells = {} }
 
     for i, side in ipairs(SIDES) do
@@ -329,7 +356,7 @@ local function stacked_layout(lists, counts, width, comments)
 
         for _, entry in ipairs(lists[side]) do
             local line = render.line('')
-            line.text = cell_text(line, entry, 0, width, comments)
+            line.text = cell_text(line, entry, 0, width, review)
             table.insert(result.lines, line)
             table.insert(result.rows, { [side] = entry.item })
             table.insert(
@@ -363,15 +390,21 @@ local function chunks_width(chunks)
     return width
 end
 
---- `HEAD <branch> ↑<ahead> · <n> changes · <m> comments`; `↑` only when
---- HEAD is ahead of its upstream, the comments only when `comments` is
---- above 0. A file on both sides counts once. Stacked, the counts are per
---- side, since the Staged title may sit below the visible lines.
+---@class IterDrawerReviewHeader
+---@field summary IterViewedSummary
+---@field comments integer
+---@field outdated integer
+
+--- `HEAD <branch> ↑<ahead> · <n> changes`; `↑` only when HEAD is ahead of
+--- its upstream. A file on both sides counts once. Stacked, the counts are
+--- per side, since the Staged title may sit below the visible lines.
+--- A review with files has `viewed <n> of <m> · ↻ <k> changed` in place of
+--- the changes, then `· <c> comments · <o> outdated`, each only above 0.
 ---@param result IterChanges
 ---@param layout 'columns'|'stacked'
----@param comments? integer
+---@param review? IterDrawerReviewHeader
 ---@return [string, string][]
-local function header_chunks(result, layout, comments)
+local function header_chunks(result, layout, review)
     local paths = {}
     local count = 0
 
@@ -407,16 +440,41 @@ local function header_chunks(result, layout, comments)
         )
     end
 
-    table.insert(chunks, { summary, 'IterDrawerHint' })
+    if review ~= nil and review.summary.total > 0 then
+        table.insert(chunks, {
+            string.format(
+                ' · viewed %d of %d',
+                review.summary.viewed,
+                review.summary.total
+            ),
+            'IterDrawerHint',
+        })
 
-    if comments ~= nil and comments > 0 then
+        if review.summary.changed > 0 then
+            table.insert(chunks, {
+                string.format(' · ↻ %d changed', review.summary.changed),
+                'IterViewedChanged',
+            })
+        end
+    else
+        table.insert(chunks, { summary, 'IterDrawerHint' })
+    end
+
+    if review ~= nil and review.comments > 0 then
         table.insert(chunks, {
             string.format(
                 ' · %d %s',
-                comments,
-                comments == 1 and 'comment' or 'comments'
+                review.comments,
+                review.comments == 1 and 'comment' or 'comments'
             ),
             'IterDrawerCount',
+        })
+    end
+
+    if review ~= nil and review.outdated > 0 then
+        table.insert(chunks, {
+            string.format(' · %d outdated', review.outdated),
+            'IterDrawerHint',
         })
     end
 
@@ -604,6 +662,9 @@ function Drawer:make_handlers()
         handlers.open = act('enter_view')
         handlers.review = nil
         handlers.comment_file = act('comment_file')
+        handlers.viewed = function()
+            self:toggle_viewed()
+        end
         handlers.picker = function()
             require('iter').comments()
         end
@@ -679,16 +740,18 @@ function Drawer:load()
     end
 
     self.comments = self.comments or {}
+    self.records = self.records or {}
 
     if self.context == 'review' then
         self:load_comments()
+        self:load_viewed()
     end
 
     return true
 end
 
---- Read the stored comments when the store file changed since the last
---- read. A failed read keeps the comments there are.
+--- Read the stored comments and viewed records when the store file changed
+--- since the last read. A failed read keeps what there is.
 function Drawer:load_comments()
     local root = self.changes.root
 
@@ -708,8 +771,24 @@ function Drawer:load_comments()
 
     if data ~= nil then
         self.comments = data.comments
+        self.records = data.viewed
         self.store_stat = stat
     end
+end
+
+--- The viewed state of every file in the drawer, from the records and the
+--- worktree. Files whose stat is unchanged are not hashed again.
+function Drawer:load_viewed()
+    local paths, seen = {}, {}
+
+    for _, item in ipairs(self:files()) do
+        if not seen[item.path] then
+            seen[item.path] = true
+            table.insert(paths, item.path)
+        end
+    end
+
+    self.viewed = viewed.states(self.changes.root, paths, self.records)
 end
 
 --- Write the items into the buffer in the layout the pane's width allows,
@@ -729,16 +808,31 @@ function Drawer:render()
     self.layout = width >= self.config.options.drawer.breakpoint and 'columns'
         or 'stacked'
 
-    local comments = self.context == 'review' and comment_counts(self.comments)
-        or nil
+    ---@type IterDrawerReview?, IterDrawerReviewHeader?
+    local review, header
+
+    if self.context == 'review' then
+        review = {
+            counts = comment_counts(self.comments),
+            viewed = self.viewed,
+        }
+        header = {
+            summary = viewed.summary(self.viewed),
+            comments = #self.comments,
+            outdated = #vim.tbl_filter(function(comment)
+                return comment.outdated
+            end, self.comments),
+        }
+    end
+
     local layout
 
     if #lists.unstaged + #lists.staged == 0 then
         layout = clean_layout()
     elseif self.layout == 'columns' then
-        layout = columns_layout(lists, counts, width, comments)
+        layout = columns_layout(lists, counts, width, review)
     else
-        layout = stacked_layout(lists, counts, width, comments)
+        layout = stacked_layout(lists, counts, width, review)
     end
 
     self.rows, self.cells = layout.rows, layout.cells
@@ -761,16 +855,25 @@ function Drawer:render()
 
     self.float:reposition({
         fit = #layout.lines,
-        title = header_chunks(
-            self.changes,
-            self.layout,
-            self.context == 'review' and #self.comments or nil
-        ),
+        title = header_chunks(self.changes, self.layout, header),
         footer = hint_chunks(
             keymap.list(self.keys_view, self.keys, self.handlers),
             width
         ),
     })
+
+    self:sync_viewed()
+end
+
+--- Show the viewed state of the shown file in the diff header.
+function Drawer:sync_viewed()
+    if self.viewed == nil then
+        return
+    end
+
+    local file = self.view.files[1]
+
+    self.view:set_viewed(file and self.viewed[file.path])
 end
 
 --- Size the pane, a split of its own in the review tab, to the drawer's
@@ -1001,6 +1104,7 @@ function Drawer:refresh(reason)
     end
 
     local before, before_comments = self.changes, self.comments
+    local before_viewed = self.viewed
     local mark = self:mark()
 
     if not self:load() then
@@ -1008,6 +1112,7 @@ function Drawer:refresh(reason)
     end
 
     local comments_changed = not vim.deep_equal(before_comments, self.comments)
+    local viewed_changed = not vim.deep_equal(before_viewed, self.viewed)
 
     if comments_changed then
         self.view:set_comments(self.comments)
@@ -1016,7 +1121,7 @@ function Drawer:refresh(reason)
     if reason == 'poll' and vim.deep_equal(before, self.changes) then
         local item = self:selected()
 
-        if comments_changed then
+        if comments_changed or viewed_changed then
             self:render()
             self:restore_selection(mark)
         end
@@ -1046,6 +1151,31 @@ end
 function Drawer:refresh_comments()
     self.store_stat = nil
     self:refresh()
+end
+
+--- Toggle the viewed mark of `path`, the selected file by default, and
+--- refresh.
+---@param path? string
+function Drawer:toggle_viewed(path)
+    if path == nil then
+        local item = self:selected()
+
+        if item == nil or item.dir then
+            util.warn('No file selected')
+            return
+        end
+
+        path = item.path
+    end
+
+    local _, err = viewed.toggle(self.changes.root, path)
+
+    if err ~= nil then
+        util.warn('Cannot toggle viewed: ' .. err)
+        return
+    end
+
+    self:refresh_comments()
 end
 
 --- Open the comment float on the selected file.
@@ -1195,11 +1325,13 @@ function Drawer:preview(force)
         and shown.code == item.code
         and vim.deep_equal(shown.raw, source.raw)
     then
+        self:sync_viewed()
         return
     end
 
     self.previewed = key(item)
     self.view:show(model.build(item, source))
+    self:sync_viewed()
 end
 
 ---@param path string
@@ -1367,6 +1499,10 @@ function Drawer:toggle()
     else
         changes.expand(self.changes.root, dir)
         self.expanded[dir.path] = true
+    end
+
+    if self.context == 'review' then
+        self:load_viewed()
     end
 
     self:render()
