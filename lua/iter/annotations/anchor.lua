@@ -6,7 +6,7 @@
 ---@field end_line? integer
 ---@field lines? string[]        anchored text, for re-anchoring and export
 
----@class IterComment
+---@class IterAnnotation
 ---@field id string
 ---@field scope 'line'|'range'|'file'|'review'
 ---@field anchor IterAnchor
@@ -128,40 +128,40 @@ function M.resolve(a, lines)
     return best, best + count - 1
 end
 
---- The comment with its anchor moved to where `lines` has the text, or marked
+--- The annotation with its anchor moved to where `lines` has the text, or marked
 --- outdated at its old position when the text is gone. File and review
---- comments have no text to lose. `comment` itself is left untouched.
----@param comment IterComment
+--- annotations have no text to lose. `annotation` itself is left untouched.
+---@param annotation IterAnnotation
 ---@param lines? string[]
----@return IterComment
+---@return IterAnnotation
 ---@return boolean changed
-function M.follow(comment, lines)
-    if comment.scope == 'file' or comment.scope == 'review' then
-        return comment, false
+function M.follow(annotation, lines)
+    if annotation.scope == 'file' or annotation.scope == 'review' then
+        return annotation, false
     end
 
-    local a = comment.anchor
+    local a = annotation.anchor
     local start, stop = M.resolve(a, lines)
 
     if start == nil then
-        if comment.outdated then
-            return comment, false
+        if annotation.outdated then
+            return annotation, false
         end
 
-        local result = vim.deepcopy(comment)
+        local result = vim.deepcopy(annotation)
         result.outdated = true
         return result, true
     end
 
     if
-        not comment.outdated
+        not annotation.outdated
         and start == a.start_line
         and stop == a.end_line
     then
-        return comment, false
+        return annotation, false
     end
 
-    local result = vim.deepcopy(comment)
+    local result = vim.deepcopy(annotation)
     result.outdated = false
     result.anchor.start_line = start
     result.anchor.end_line = stop

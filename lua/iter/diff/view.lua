@@ -1,6 +1,6 @@
 local highlight = require('iter.highlight')
 local keymap = require('iter.keymap')
-local marks = require('iter.comments.marks')
+local marks = require('iter.annotations.marks')
 local model = require('iter.diff.model')
 local syntax = require('iter.diff.syntax')
 local util = require('iter.util')
@@ -32,8 +32,8 @@ local words = require('iter.diff.words')
 ---@field generation integer bumped by every render
 ---@field decorated integer last generation whose syntax is applied
 ---@field prev_buf? integer buffer the window showed before the view
----@field comments IterComment[] stored comments the view places on its file
----@field marks IterCommentMark[] comments placed on the shown rows
+---@field annotations IterAnnotation[] stored annotations the view places on its file
+---@field marks IterAnnotationMark[] annotations placed on the shown rows
 ---@field marks_width? integer text width the marks were wrapped to
 ---@field new_follows boolean a staged file's index equals its worktree
 ---@field viewed? IterViewedState state the header row shows
@@ -43,7 +43,7 @@ View.__index = View
 local NS = vim.api.nvim_create_namespace('iter.diff')
 local NS_SYNTAX = vim.api.nvim_create_namespace('iter.diff.syntax')
 local NS_WORDS = vim.api.nvim_create_namespace('iter.diff.words')
-local NS_COMMENTS = vim.api.nvim_create_namespace('iter.diff.comments')
+local NS_ANNOTATIONS = vim.api.nvim_create_namespace('iter.diff.annotations')
 
 -- Del and add rows draw below syntax, word emphasis above it, so an
 -- emphasis background also shows over a capture that sets one.
@@ -131,7 +131,7 @@ function View.new(opts)
         word_diff = opts.word_diff,
         generation = 0,
         decorated = 0,
-        comments = {},
+        annotations = {},
         marks = {},
         new_follows = false,
     }, View)
@@ -426,25 +426,25 @@ function View:text_width()
     )
 end
 
---- Place the comments on the shown rows, wrapped to the window.
+--- Place the annotations on the shown rows, wrapped to the window.
 function View:render_marks()
     local file = self.files[1]
 
     self.marks = file ~= nil
             and marks.place(
                 file,
-                self.comments,
+                self.annotations,
                 { new_follows = self.new_follows }
             )
         or {}
     self.marks_width = self:text_width()
-    marks.apply(self.buf, NS_COMMENTS, self.marks, self.marks_width)
+    marks.apply(self.buf, NS_ANNOTATIONS, self.marks, self.marks_width)
 end
 
---- Show `comments`, the stored ones of the repository, on the file.
----@param comments IterComment[]
-function View:set_comments(comments)
-    self.comments = comments
+--- Show `annotations`, the stored ones of the repository, on the file.
+---@param annotations IterAnnotation[]
+function View:set_annotations(annotations)
+    self.annotations = annotations
 
     if vim.api.nvim_buf_is_valid(self.buf) then
         self:render_marks()
@@ -468,7 +468,7 @@ function View:set_viewed(state)
 end
 
 --- Tell the view whether a staged file's index is also its worktree
---- version, which lets a miss there outdate a new-side comment.
+--- version, which lets a miss there outdate a new-side annotation.
 ---@param value boolean
 function View:set_new_follows(value)
     if value == self.new_follows then
@@ -482,7 +482,7 @@ function View:set_new_follows(value)
     end
 end
 
---- Wrap the comments again when the window width changed.
+--- Wrap the annotations again when the window width changed.
 function View:rewrap()
     if
         vim.api.nvim_buf_is_valid(self.buf)
@@ -710,9 +710,9 @@ function View:jump_hunk(dir)
 end
 
 --- Move the cursor to the next (`dir` 1) or previous (-1) row with a
---- comment. At the last or first one the cursor stays.
+--- annotation. At the last or first one the cursor stays.
 ---@param dir 1|-1
-function View:jump_comment(dir)
+function View:jump_annotation(dir)
     if not self:is_shown() then
         return
     end

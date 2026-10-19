@@ -29,7 +29,7 @@ local watch = require('iter.watch')
 ---@field view_win? integer window the diff view borrows, the pane by default
 ---@field view_handlers? table<string, fun()> diff view actions
 ---@field height? number float height, `drawer.height` by default
----@field on_comments? fun() after a comment of the drawer is saved
+---@field on_annotations? fun() after an annotation of the drawer is saved
 ---@field on_close? fun(drawer: IterDrawer)
 
 ---@class IterDrawer
@@ -46,12 +46,12 @@ local watch = require('iter.watch')
 ---@field handlers table<string, fun()> drawer actions by name
 ---@field config IterConfig
 ---@field changes IterChanges
----@field comments IterComment[] stored comments, read in the review context only
+---@field annotations IterAnnotation[] stored annotations, read in the review context only
 ---@field records table<string, IterViewed> stored viewed records, same context
 ---@field viewed? table<string, IterViewedState> state per file path, review context only
 ---@field store_branch? string branch `store_path` belongs to
 ---@field store_path? string
----@field store_stat? string stat of `store_path` when `comments` was read
+---@field store_stat? string stat of `store_path` when `annotations` was read
 ---@field rows IterDrawerRow[]
 ---@field cells table<IterSide, IterDrawerCell>[]
 ---@field column IterSide selected column
@@ -62,7 +62,7 @@ local watch = require('iter.watch')
 ---@field preview_tick integer bumped per scheduled preview; only the last one runs
 ---@field group integer
 ---@field closed boolean
----@field on_comments? fun()
+---@field on_annotations? fun()
 ---@field on_close? fun(drawer: IterDrawer)
 local Drawer = {}
 Drawer.__index = Drawer
@@ -116,7 +116,7 @@ local function pad(text, width)
 end
 
 ---@class IterDrawerReview what a review row shows besides the file
----@field counts table<string, integer> comments per path
+---@field counts table<string, integer> annotations per path
 ---@field viewed table<string, IterViewedState> state per file path
 
 --- Every item in drawer order: Unstaged, then Staged.
@@ -144,16 +144,16 @@ local function stat_key(path)
     return string.format('%d.%d:%d', stat.mtime.sec, stat.mtime.nsec, stat.size)
 end
 
---- Comments per path, review comments left out.
----@param comments IterComment[]
+--- Annotations per path, review annotations left out.
+---@param annotations IterAnnotation[]
 ---@return table<string, integer>
-local function comment_counts(comments)
+local function annotation_counts(annotations)
     local counts = {}
 
-    for _, comment in ipairs(comments) do
-        local path = comment.anchor.path
+    for _, annotation in ipairs(annotations) do
+        local path = annotation.anchor.path
 
-        if comment.scope ~= 'review' and path ~= nil then
+        if annotation.scope ~= 'review' and path ~= nil then
             counts[path] = (counts[path] or 0) + 1
         end
     end
@@ -161,7 +161,7 @@ local function comment_counts(comments)
     return counts
 end
 
---- Comments on `item`; a directory counts those on the files inside it.
+--- Annotations on `item`; a directory counts those on the files inside it.
 ---@param counts table<string, integer>
 ---@param item IterChange
 ---@return integer
@@ -183,7 +183,7 @@ end
 
 --- One cell: code letter and path, the path cut from the left to fit. In a
 --- review, the viewed mark of a file follows the code letter and the
---- item's comment count ends the cell.
+--- item's annotation count ends the cell.
 ---@param line IterRenderLine
 ---@param item IterChange
 ---@param first integer byte column the cell starts at
@@ -367,14 +367,14 @@ end
 
 ---@class IterDrawerReviewHeader
 ---@field summary IterViewedSummary
----@field comments integer
+---@field annotations integer
 ---@field outdated integer
 
 --- `HEAD <branch> ↑<ahead> · <n> changes`; `↑` only when HEAD is ahead of
 --- its upstream. A file on both sides counts once. Stacked, the counts are
 --- per side, since the Staged title may sit below the visible lines.
 --- A review with files has `viewed <n> of <m> · ↻ <k> changed` in place of
---- the changes, then `· <c> comments · <o> outdated`, each only above 0.
+--- the changes, then `· <c> annotations · <o> outdated`, each only above 0.
 ---@param result IterChanges
 ---@param layout 'columns'|'stacked'
 ---@param review? IterDrawerReviewHeader
@@ -435,12 +435,12 @@ local function header_chunks(result, layout, review)
         table.insert(chunks, { summary, 'IterDrawerHint' })
     end
 
-    if review ~= nil and review.comments > 0 then
+    if review ~= nil and review.annotations > 0 then
         table.insert(chunks, {
             string.format(
                 ' · %d %s',
-                review.comments,
-                review.comments == 1 and 'comment' or 'comments'
+                review.annotations,
+                review.annotations == 1 and 'annotation' or 'annotations'
             ),
             'IterDrawerCount',
         })
@@ -528,7 +528,7 @@ function Drawer.open(opts)
     vim.validate('opts.view_win', opts.view_win, 'number', true)
     vim.validate('opts.view_handlers', opts.view_handlers, 'table', true)
     vim.validate('opts.height', opts.height, 'number', true)
-    vim.validate('opts.on_comments', opts.on_comments, 'function', true)
+    vim.validate('opts.on_annotations', opts.on_annotations, 'function', true)
     vim.validate('opts.on_close', opts.on_close, 'function', true)
 
     local view_win = opts.view_win or opts.pane
@@ -564,7 +564,7 @@ function Drawer.open(opts)
         layout = 'columns',
         preview_tick = 0,
         closed = false,
-        on_comments = opts.on_comments,
+        on_annotations = opts.on_annotations,
         on_close = opts.on_close,
     }, Drawer)
 
@@ -583,7 +583,7 @@ function Drawer.open(opts)
         name = review and 'iter://review-diff' or nil,
         bufhidden = review and 'hide' or nil,
     })
-    self.view:set_comments(self.comments)
+    self.view:set_annotations(self.annotations)
     self.float = float.open({
         pane = opts.pane,
         buf = buf,
@@ -641,12 +641,12 @@ function Drawer:make_handlers()
     if self.context == 'review' then
         handlers.open = act('enter_view')
         handlers.review = nil
-        handlers.comment_file = act('comment_file')
+        handlers.annotate_file = act('annotate_file')
         handlers.viewed = function()
             self:toggle_viewed()
         end
         handlers.picker = function()
-            require('iter').comments()
+            require('iter').annotations()
         end
         handlers.yank = function()
             require('iter').yank()
@@ -716,20 +716,20 @@ function Drawer:load()
 
     self.changes = changes.build(snapshot)
 
-    self.comments = self.comments or {}
+    self.annotations = self.annotations or {}
     self.records = self.records or {}
 
     if self.context == 'review' then
-        self:load_comments()
+        self:load_annotations()
         self:load_viewed()
     end
 
     return true
 end
 
---- Read the stored comments and viewed records when the store file changed
+--- Read the stored annotations and viewed records when the store file changed
 --- since the last read. A failed read keeps what there is.
-function Drawer:load_comments()
+function Drawer:load_annotations()
     local root = self.changes.root
 
     if self.store_path == nil or self.store_branch ~= self.changes.branch then
@@ -747,7 +747,7 @@ function Drawer:load_comments()
     local data = store.load(root)
 
     if data ~= nil then
-        self.comments = data.comments
+        self.annotations = data.annotations
         self.records = data.viewed
         self.store_stat = stat
     end
@@ -789,15 +789,15 @@ function Drawer:render()
 
     if self.context == 'review' then
         review = {
-            counts = comment_counts(self.comments),
+            counts = annotation_counts(self.annotations),
             viewed = self.viewed,
         }
         header = {
             summary = viewed.summary(self.viewed),
-            comments = #self.comments,
-            outdated = #vim.tbl_filter(function(comment)
-                return comment.outdated
-            end, self.comments),
+            annotations = #self.annotations,
+            outdated = #vim.tbl_filter(function(annotation)
+                return annotation.outdated
+            end, self.annotations),
         }
     end
 
@@ -1081,7 +1081,7 @@ function Drawer:refresh(reason, target)
         return
     end
 
-    local before, before_comments = self.changes, self.comments
+    local before, before_annotations = self.changes, self.annotations
     local before_viewed = self.viewed
     local mark = self:mark()
 
@@ -1089,17 +1089,18 @@ function Drawer:refresh(reason, target)
         return
     end
 
-    local comments_changed = not vim.deep_equal(before_comments, self.comments)
+    local annotations_changed =
+        not vim.deep_equal(before_annotations, self.annotations)
     local viewed_changed = not vim.deep_equal(before_viewed, self.viewed)
 
-    if comments_changed then
-        self.view:set_comments(self.comments)
+    if annotations_changed then
+        self.view:set_annotations(self.annotations)
     end
 
     if reason == 'poll' and vim.deep_equal(before, self.changes) then
         local item = self:selected()
 
-        if comments_changed or viewed_changed then
+        if annotations_changed or viewed_changed then
             self:render()
             self:restore_selection(mark)
         end
@@ -1126,9 +1127,9 @@ function Drawer:refresh(reason, target)
     self:preview(true)
 end
 
---- Read the stored comments again whatever the store file's stat says,
+--- Read the stored annotations again whatever the store file's stat says,
 --- then refresh. For writes of this instance, which can keep the stat.
-function Drawer:refresh_comments()
+function Drawer:refresh_annotations()
     self.store_stat = nil
     self:refresh()
 end
@@ -1155,11 +1156,11 @@ function Drawer:toggle_viewed(path)
         return
     end
 
-    self:refresh_comments()
+    self:refresh_annotations()
 end
 
---- Open the comment float on the selected file.
-function Drawer:comment_file()
+--- Open the annotation float on the selected file.
+function Drawer:annotate_file()
     local item = self:selected()
 
     if item == nil or item.dir then
@@ -1167,32 +1168,32 @@ function Drawer:comment_file()
         return
     end
 
-    require('iter.comments.editor').open({
+    require('iter.annotations.editor').open({
         root = self.changes.root,
-        comment = {
+        annotation = {
             scope = 'file',
             anchor = { path = item.path, side = 'new' },
         },
         config = self.config,
         pane = self.view.win,
         on_save = function()
-            if self.on_comments ~= nil then
-                self.on_comments()
+            if self.on_annotations ~= nil then
+                self.on_annotations()
             else
-                self:refresh_comments()
+                self:refresh_annotations()
             end
         end,
     })
 end
 
---- Select the file `comment` belongs to, show its diff and put the diff
---- cursor on the comment's row. A comment is found in the staged diff or
+--- Select the file `annotation` belongs to, show its diff and put the diff
+--- cursor on the annotation's row. An annotation is found in the staged diff or
 --- the unstaged one, the side of its old version first. False when the file
 --- isn't among the changes.
----@param comment IterComment
+---@param annotation IterAnnotation
 ---@return boolean
-function Drawer:show_comment(comment)
-    local a = comment.anchor
+function Drawer:show_annotation(annotation)
+    local a = annotation.anchor
 
     if a.path == nil then
         return false
@@ -1222,7 +1223,7 @@ function Drawer:show_comment(comment)
         self:preview(false)
 
         for _, mark in ipairs(self.view.marks) do
-            if mark.comment.id == comment.id then
+            if mark.annotation.id == annotation.id then
                 vim.api.nvim_win_set_cursor(self.view.win, { mark.lnum, 0 })
                 return true
             end

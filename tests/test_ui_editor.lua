@@ -8,7 +8,7 @@ local child = MiniTest.new_child_neovim()
 local repo
 
 local R = [[require('iter').current_review]]
-local E = [[require('iter.comments.editor')]]
+local E = [[require('iter.annotations.editor')]]
 
 ---@param prefix string
 ---@param from integer
@@ -62,7 +62,7 @@ end
 ---@return table[]
 local function stored()
     return child.lua_get(
-        [[require('iter.store').load(vim.fn.getcwd()).comments]]
+        [[require('iter.store').load(vim.fn.getcwd()).annotations]]
     )
 end
 
@@ -127,7 +127,7 @@ end
 ---@return integer
 local function iter_ctrl_t_maps()
     return child.lua_get([[#vim.tbl_filter(function(m)
-        return m.desc == 'Show the draft comment'
+        return m.desc == 'Show the draft annotation'
     end, vim.api.nvim_get_keymap('n'))]])
 end
 
@@ -144,25 +144,25 @@ local function global_ctrl_t_desc()
 end
 
 ---@return integer
-local function comment_buffers()
+local function annotation_buffers()
     return child.lua_get([[#vim.tbl_filter(function(b)
-        return vim.api.nvim_buf_get_name(b):match('^iter://comment/') ~= nil
+        return vim.api.nvim_buf_get_name(b):match('^iter://annotation/') ~= nil
     end, vim.api.nvim_list_bufs())]])
 end
 
 ---@return boolean
 local function editor_augroup()
     return child.lua_get(
-        [[pcall(vim.api.nvim_get_autocmds, { group = 'iter.comment' })]]
+        [[pcall(vim.api.nvim_get_autocmds, { group = 'iter.annotation' })]]
     )
 end
 
---- Start a line comment on `l3 new` and type `text` in insert mode.
+--- Start a line annotation on `l3 new` and type `text` in insert mode.
 ---@param text string
-local function start_comment(text)
+local function start_annotation(text)
     open_review()
     diff_cursor('l3 new')
-    child.type_keys('c')
+    child.type_keys('a')
     wait_editor()
     child.type_keys(text)
 end
@@ -185,7 +185,7 @@ local T = new_set({
 T['float'] = new_set()
 
 T['float']['opens in insert mode above the drawer with the key hint'] = function()
-    start_comment('')
+    start_annotation('')
 
     eq(mode(), 'i')
 
@@ -202,17 +202,17 @@ T['float']['opens in insert mode above the drawer with the key hint'] = function
 end
 
 T['float']['<C-s> saves in insert mode and keeps the float'] = function()
-    start_comment('first')
+    start_annotation('first')
     child.type_keys('<C-s>')
 
     eq(editor_shown(), true)
     eq(mode(), 'i')
 
-    local comments = stored()
-    eq(#comments, 1)
-    eq(comments[1].body, 'first')
-    eq(comments[1].scope, 'line')
-    eq(comments[1].anchor, {
+    local annotations = stored()
+    eq(#annotations, 1)
+    eq(annotations[1].body, 'first')
+    eq(annotations[1].scope, 'line')
+    eq(annotations[1].anchor, {
         path = 'm.txt',
         side = 'new',
         start_line = 3,
@@ -223,13 +223,13 @@ T['float']['<C-s> saves in insert mode and keeps the float'] = function()
 
     child.type_keys(' second', '<C-s>')
 
-    comments = stored()
-    eq(#comments, 1)
-    eq(comments[1].body, 'first second')
+    annotations = stored()
+    eq(#annotations, 1)
+    eq(annotations[1].body, 'first second')
 end
 
 T['float']['<C-s> saves in normal mode'] = function()
-    start_comment('multi')
+    start_annotation('multi')
     child.type_keys('<CR>', 'line', '<Esc>', '<C-s>')
 
     eq(stored()[1].body, 'multi\nline')
@@ -237,7 +237,7 @@ T['float']['<C-s> saves in normal mode'] = function()
 end
 
 T['float'][':w saves and :wq saves and closes'] = function()
-    start_comment('by write')
+    start_annotation('by write')
     child.type_keys('<Esc>')
     child.cmd('write')
 
@@ -250,46 +250,46 @@ T['float'][':w saves and :wq saves and closes'] = function()
     eq(stored()[1].body, 'by write and quit')
     eq(#stored(), 1)
     eq(editor_shown(), false)
-    eq(comment_buffers(), 0)
+    eq(annotation_buffers(), 0)
     eq(iter_ctrl_t_maps(), 0)
     eq(editor_augroup(), false)
 end
 
-T['float']['the diff pane shows the saved comment'] = function()
-    start_comment('shown')
+T['float']['the diff pane shows the saved annotation'] = function()
+    start_annotation('shown')
     child.type_keys('<C-s>', '<C-c>')
 
     helpers.wait_until(child, [[#]] .. R .. [[.drawer.view.marks == 1]])
-    eq(child.lua_get(R .. [[.drawer.view.marks[1].comment.body]]), 'shown')
+    eq(child.lua_get(R .. [[.drawer.view.marks[1].annotation.body]]), 'shown')
 end
 
-T['float']['an empty comment is not saved'] = function()
-    start_comment('  ')
+T['float']['an empty annotation is not saved'] = function()
+    start_annotation('  ')
     child.type_keys('<C-s>')
 
     eq(#stored(), 0)
-    eq(notes(), { '[iter] The comment is empty' })
+    eq(notes(), { '[iter] The annotation is empty' })
 end
 
 T['toggle'] = new_set()
 
 T['toggle']['<C-t> hides the float and shows it in the same place'] = function()
-    start_comment('draft')
+    start_annotation('draft')
     local before =
         child.lua_get([[vim.api.nvim_win_get_config(]] .. E .. [[.win())]])
     child.type_keys('<C-t>')
 
     eq(editor_shown(), false)
     eq(mode(), 'n')
-    eq(comment_buffers(), 1)
+    eq(annotation_buffers(), 1)
     eq(iter_ctrl_t_maps(), 1)
     eq(
         child.lua_get([[require('iter').statusline()]]),
-        'review · m.txt · 1/1 · draft comment'
+        'review · m.txt · 1/1 · draft annotation'
     )
 
     child.cmd('tabnew')
-    eq(child.lua_get([[require('iter').statusline()]]), 'draft comment')
+    eq(child.lua_get([[require('iter').statusline()]]), 'draft annotation')
     child.cmd('tabprevious')
     child.type_keys('<C-t>')
     wait_editor()
@@ -312,15 +312,15 @@ T['toggle']['<C-t> hides the float and shows it in the same place'] = function()
 end
 
 T['toggle']['<C-t> hides from normal mode too'] = function()
-    start_comment('draft')
+    start_annotation('draft')
     child.type_keys('<Esc>', '<C-t>')
 
     eq(editor_shown(), false)
-    eq(comment_buffers(), 1)
+    eq(annotation_buffers(), 1)
 end
 
 T['toggle']['<C-t> shows the draft from another tab'] = function()
-    start_comment('draft')
+    start_annotation('draft')
     child.type_keys('<C-t>')
     child.cmd('tabnew')
     child.type_keys('<C-t>')
@@ -335,9 +335,9 @@ T['toggle']['a user <C-t> map comes back after save'] = function()
     child.lua(
         [[vim.keymap.set('n', '<C-t>', function() _G.user_ctrl_t = true end, { desc = 'user ctrl-t' })]]
     )
-    start_comment('draft')
+    start_annotation('draft')
 
-    eq(global_ctrl_t_desc(), 'Show the draft comment')
+    eq(global_ctrl_t_desc(), 'Show the draft annotation')
 
     child.type_keys('<C-s>')
 
@@ -351,7 +351,7 @@ end
 
 T['toggle']['a user <C-t> map comes back after cancel'] = function()
     child.cmd('nnoremap <C-t> :let g:user_ctrl_t = 1<CR>')
-    start_comment('draft')
+    start_annotation('draft')
     child.type_keys('<C-t>')
     child.type_keys('<C-t>')
     wait_editor()
@@ -363,7 +363,7 @@ T['toggle']['a user <C-t> map comes back after cancel'] = function()
 end
 
 T['toggle']['no <C-t> map is left after save and after cancel'] = function()
-    start_comment('saved')
+    start_annotation('saved')
     child.type_keys('<C-s>')
 
     eq(iter_ctrl_t_maps(), 0)
@@ -371,7 +371,7 @@ T['toggle']['no <C-t> map is left after save and after cancel'] = function()
 
     child.type_keys('<C-c>')
     diff_cursor('l3 new')
-    child.type_keys('c')
+    child.type_keys('a')
     wait_editor()
     eq(iter_ctrl_t_maps(), 1)
     child.type_keys('dropped', '<C-c>')
@@ -379,16 +379,16 @@ T['toggle']['no <C-t> map is left after save and after cancel'] = function()
     eq(iter_ctrl_t_maps(), 0)
     eq(global_ctrl_t_desc(), vim.NIL)
     eq(editor_shown(), false)
-    eq(comment_buffers(), 0)
+    eq(annotation_buffers(), 0)
     eq(editor_augroup(), false)
     eq(mode(), 'n')
 end
 
 T['toggle']['a disabled toggle key maps nothing globally'] = function()
     child.lua(
-        [[require('iter').setup({ keys = { comment = { toggle = false } } })]]
+        [[require('iter').setup({ keys = { annotation = { toggle = false } } })]]
     )
-    start_comment('draft')
+    start_annotation('draft')
 
     eq(global_ctrl_t_desc(), vim.NIL)
     eq(
@@ -402,12 +402,12 @@ end
 T['lifecycle'] = new_set()
 
 T['lifecycle']['<C-c> drops the draft'] = function()
-    start_comment('dropped')
+    start_annotation('dropped')
     child.type_keys('<C-c>')
 
     eq(#stored(), 0)
     eq(editor_shown(), false)
-    eq(comment_buffers(), 0)
+    eq(annotation_buffers(), 0)
     eq(mode(), 'n')
     eq(
         child.lua_get([[vim.api.nvim_get_current_win()]]),
@@ -415,33 +415,35 @@ T['lifecycle']['<C-c> drops the draft'] = function()
     )
 end
 
-T['lifecycle']['q closes only when the comment is saved'] = function()
-    start_comment('unsaved')
+T['lifecycle']['q closes only when the annotation is saved'] = function()
+    start_annotation('unsaved')
     child.type_keys('<Esc>', 'q')
 
     eq(editor_shown(), true)
     eq(notes(), {
-        '[iter] The comment has unsaved changes; save or cancel it',
+        '[iter] The annotation has unsaved changes; save or cancel it',
     })
 
     child.type_keys('<C-s>', 'q')
 
     eq(editor_shown(), false)
-    eq(comment_buffers(), 0)
+    eq(annotation_buffers(), 0)
     eq(stored()[1].body, 'unsaved')
 end
 
-T['lifecycle'][':q on an unsaved comment keeps it as a hidden draft'] = function()
-    start_comment('kept')
+T['lifecycle'][':q on an unsaved annotation keeps it as a hidden draft'] = function()
+    start_annotation('kept')
     child.type_keys('<Esc>')
     child.cmd('quit')
 
     eq(editor_shown(), false)
-    eq(comment_buffers(), 1)
+    eq(annotation_buffers(), 1)
     eq(iter_ctrl_t_maps(), 1)
     eq(
-        child.lua_get([[require('iter').statusline()]]):match('draft comment$'),
-        'draft comment'
+        child
+            .lua_get([[require('iter').statusline()]])
+            :match('draft annotation$'),
+        'draft annotation'
     )
 
     child.type_keys('<C-t>')
@@ -456,7 +458,7 @@ end
 for _, command in ipairs({ 'bunload!', 'bdelete!', 'bwipeout!' }) do
     for _, state in ipairs({ 'hidden', 'shown' }) do
         T['lifecycle'][':' .. command .. ' on the ' .. state .. ' draft keeps its text'] = function()
-            start_comment('kept text')
+            start_annotation('kept text')
 
             if state == 'hidden' then
                 child.type_keys('<C-t>')
@@ -469,7 +471,7 @@ for _, command in ipairs({ 'bunload!', 'bdelete!', 'bwipeout!' }) do
 
             child.cmd(command .. ' ' .. child.lua_get([[(function()
                         for _, b in ipairs(vim.api.nvim_list_bufs()) do
-                            if vim.api.nvim_buf_get_name(b):match('^iter://comment/') then
+                            if vim.api.nvim_buf_get_name(b):match('^iter://annotation/') then
                                 return b
                             end
                         end
@@ -480,8 +482,8 @@ for _, command in ipairs({ 'bunload!', 'bdelete!', 'bwipeout!' }) do
             eq(
                 child
                     .lua_get([[require('iter').statusline()]])
-                    :match('draft comment$'),
-                'draft comment'
+                    :match('draft annotation$'),
+                'draft annotation'
             )
 
             child.type_keys('<C-t>')
@@ -491,7 +493,7 @@ for _, command in ipairs({ 'bunload!', 'bdelete!', 'bwipeout!' }) do
                 'kept text',
             })
             eq(child.lua_get('vim.bo.buftype'), 'acwrite')
-            eq(comment_buffers(), 1)
+            eq(annotation_buffers(), 1)
 
             child.type_keys('<Esc>')
             child.cmd('write')
@@ -503,13 +505,13 @@ for _, command in ipairs({ 'bunload!', 'bdelete!', 'bwipeout!' }) do
 
             child.type_keys('q')
             eq(iter_ctrl_t_maps(), 0)
-            eq(comment_buffers(), 0)
+            eq(annotation_buffers(), 0)
         end
     end
 end
 
 T['lifecycle']['hide and show keep one WinClosed autocmd'] = function()
-    start_comment('cycles')
+    start_annotation('cycles')
 
     local counts = {}
 
@@ -520,7 +522,7 @@ T['lifecycle']['hide and show keep one WinClosed autocmd'] = function()
         table.insert(
             counts,
             child.lua_get(
-                [[#vim.api.nvim_get_autocmds({ group = 'iter.comment', event = 'WinClosed' })]]
+                [[#vim.api.nvim_get_autocmds({ group = 'iter.annotation', event = 'WinClosed' })]]
             )
         )
     end
@@ -532,7 +534,7 @@ T['toggle']['a <C-t> map set while the draft exists stays'] = function()
     child.lua(
         [[vim.keymap.set('n', '<C-t>', function() end, { desc = 'first user map' })]]
     )
-    start_comment('draft')
+    start_annotation('draft')
     child.type_keys('<C-t>')
     child.lua(
         [[vim.keymap.set('n', '<C-t>', function() _G.newer = true end, { desc = 'newer user map' })]]
@@ -544,29 +546,29 @@ T['toggle']['a <C-t> map set while the draft exists stays'] = function()
     eq(global_ctrl_t_desc(), 'newer user map')
 end
 
-T['lifecycle']['a second c shows the open draft'] = function()
-    start_comment('first draft')
+T['lifecycle']['a second a shows the open draft'] = function()
+    start_annotation('first draft')
     child.type_keys('<C-t>')
     diff_cursor('l4')
-    child.type_keys('c')
+    child.type_keys('a')
     wait_editor()
 
     eq(child.lua_get([[vim.api.nvim_buf_get_lines(0, 0, -1, false)]]), {
         'first draft',
     })
-    eq(comment_buffers(), 1)
-    eq(notes(), { '[iter] Finish the open comment first' })
+    eq(annotation_buffers(), 1)
+    eq(notes(), { '[iter] Finish the open annotation first' })
 end
 
-T['lifecycle']['a saved comment gives way to the next one'] = function()
-    start_comment('first')
+T['lifecycle']['a saved annotation gives way to the next one'] = function()
+    start_annotation('first')
     child.type_keys('<C-s>', '<Esc>')
     diff_cursor('l4')
-    child.type_keys('c')
+    child.type_keys('a')
     wait_editor()
     child.type_keys('second', '<C-s>')
 
-    eq(comment_buffers(), 1)
+    eq(annotation_buffers(), 1)
     eq(
         vim.tbl_map(function(c)
             return c.body
@@ -580,13 +582,13 @@ T['anchors'] = new_set()
 T['anchors']['a visual range anchors its lines'] = function()
     open_review()
     diff_cursor('l4')
-    child.type_keys('Vj', 'c')
+    child.type_keys('Vj', 'a')
     wait_editor()
     child.type_keys('range', '<C-s>')
 
-    local comment = stored()[1]
-    eq(comment.scope, 'range')
-    eq(comment.anchor, {
+    local annotation = stored()[1]
+    eq(annotation.scope, 'range')
+    eq(annotation.anchor, {
         path = 'm.txt',
         side = 'new',
         start_line = 4,
@@ -604,7 +606,7 @@ end
 T['anchors']['a deleted line anchors on the old side'] = function()
     open_review()
     diff_cursor('l8', 'del')
-    child.type_keys('c')
+    child.type_keys('a')
     wait_editor()
     child.type_keys('old', '<C-s>')
 
@@ -621,7 +623,7 @@ end
 T['anchors']['a range over deleted and added rows takes the new side'] = function()
     open_review()
     diff_cursor('l3', 'del')
-    child.type_keys('Vj', 'c')
+    child.type_keys('Vj', 'a')
     wait_editor()
     child.type_keys('mixed', '<C-s>')
 
@@ -653,7 +655,7 @@ T['anchors']['a staged line anchors on the worktree line'] = function()
             .. [[.drawer.view.files[1].side == 'staged']]
     )
     diff_cursor('l3 new')
-    child.type_keys('c')
+    child.type_keys('a')
     wait_editor()
     child.type_keys('staged', '<C-s>')
 
@@ -666,7 +668,7 @@ T['anchors']['a staged line anchors on the worktree line'] = function()
     })
 end
 
-T['anchors']['a hunk row takes no line comment'] = function()
+T['anchors']['a hunk row takes no line annotation'] = function()
     open_review()
     child.lua([[
         local review = require('iter').current_review
@@ -678,16 +680,16 @@ T['anchors']['a hunk row takes no line comment'] = function()
             end
         end
     ]])
-    child.type_keys('c')
+    child.type_keys('a')
 
     eq(editor_shown(), false)
     eq(notes(), { '[iter] No line under the cursor' })
 end
 
-T['anchors']['C comments on the file from the diff pane and the drawer'] = function()
+T['anchors']['A annotates the file from the diff pane and the drawer'] = function()
     open_review()
     diff_cursor('l4')
-    child.type_keys('C')
+    child.type_keys('A')
     wait_editor()
     eq(
         child.lua_get(
@@ -698,32 +700,34 @@ T['anchors']['C comments on the file from the diff pane and the drawer'] = funct
     child.type_keys('from diff', '<C-s>', '<C-c>')
 
     child.lua([[vim.api.nvim_set_current_win(]] .. R .. [[.drawer.win)]])
-    child.type_keys('C')
+    child.type_keys('A')
     wait_editor()
     child.type_keys('from drawer', '<C-s>', '<C-c>')
 
-    local comments = stored()
-    eq(#comments, 2)
-    eq(comments[1].scope, 'file')
-    eq(comments[1].anchor, { path = 'm.txt', side = 'new' })
-    eq(comments[2].body, 'from drawer')
-    eq(comments[2].anchor, { path = 'm.txt', side = 'new' })
+    local annotations = stored()
+    eq(#annotations, 2)
+    eq(annotations[1].scope, 'file')
+    eq(annotations[1].anchor, { path = 'm.txt', side = 'new' })
+    eq(annotations[2].body, 'from drawer')
+    eq(annotations[2].anchor, { path = 'm.txt', side = 'new' })
 end
 
 T['edit and delete'] = new_set()
 
 ---@return string id
-local function seed_line_comment()
-    return child.lua_get([[require('iter.store').put_comment(vim.fn.getcwd(), {
+local function seed_line_annotation()
+    return child.lua_get(
+        [[require('iter.store').put_annotation(vim.fn.getcwd(), {
         scope = 'line',
         body = 'old body',
         outdated = false,
         anchor = { path = 'm.txt', side = 'new', start_line = 4, end_line = 4, lines = { 'l4' } },
-    }).id]])
+    }).id]]
+    )
 end
 
-T['edit and delete']['e edits the comment under the cursor'] = function()
-    local id = seed_line_comment()
+T['edit and delete']['e edits the annotation under the cursor'] = function()
+    local id = seed_line_annotation()
     open_review()
     diff_cursor('l4')
     child.type_keys('e')
@@ -736,47 +740,47 @@ T['edit and delete']['e edits the comment under the cursor'] = function()
 
     child.type_keys(' edited', '<C-s>')
 
-    local comments = stored()
-    eq(#comments, 1)
-    eq(comments[1].id, id)
-    eq(comments[1].body, 'old body edited')
+    local annotations = stored()
+    eq(#annotations, 1)
+    eq(annotations[1].id, id)
+    eq(annotations[1].body, 'old body edited')
 end
 
-T['edit and delete']['saving an edit of a comment deleted elsewhere warns'] = function()
-    local id = seed_line_comment()
+T['edit and delete']['saving an edit of an annotation deleted elsewhere warns'] = function()
+    local id = seed_line_annotation()
     open_review()
     diff_cursor('l4')
     child.type_keys('e')
     wait_editor()
     child.lua(
-        [[require('iter.store').remove_comments(vim.fn.getcwd(), { ... })]],
+        [[require('iter.store').remove_annotations(vim.fn.getcwd(), { ... })]],
         { id }
     )
     child.type_keys('!', '<C-s>')
 
     eq(#stored(), 0)
-    eq(notes(), { '[iter] The comment no longer exists' })
+    eq(notes(), { '[iter] The annotation no longer exists' })
     eq(editor_shown(), true)
 end
 
-T['edit and delete']['e without a comment warns'] = function()
+T['edit and delete']['e without an annotation warns'] = function()
     open_review()
     diff_cursor('l4')
     child.type_keys('e')
 
     eq(editor_shown(), false)
-    eq(notes(), { '[iter] No comment on this line' })
+    eq(notes(), { '[iter] No annotation on this line' })
 end
 
 T['edit and delete']['x deletes after the confirm'] = function()
-    seed_line_comment()
+    seed_line_annotation()
     open_review()
     diff_cursor('l4')
 
     child.lua('_G.confirm_answer = 2')
     child.type_keys('x')
     eq(#stored(), 1)
-    eq(child.lua_get('_G.confirms'), { 'Delete the comment?\nold body' })
+    eq(child.lua_get('_G.confirms'), { 'Delete the annotation?\nold body' })
 
     child.lua('_G.confirm_answer = 1')
     child.type_keys('x')
@@ -784,12 +788,12 @@ T['edit and delete']['x deletes after the confirm'] = function()
     helpers.wait_until(child, [[#]] .. R .. [[.drawer.view.marks == 0]])
 end
 
---- Text of the comment lines in the buffer of `m.txt`.
+--- Text of the annotation lines in the buffer of `m.txt`.
 ---@return string[]
 local function buffer_mark_texts()
     return child.lua_get([[(function()
         local buf = vim.fn.bufnr('m.txt')
-        local ns = vim.api.nvim_get_namespaces()['iter.buffer.comments']
+        local ns = vim.api.nvim_get_namespaces()['iter.buffer.annotations']
         local texts = {}
         for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true, type = 'virt_lines' })) do
             for _, line in ipairs(mark[4].virt_lines) do
@@ -805,7 +809,7 @@ local function buffer_mark_texts()
 end
 
 T['edit and delete']['e in the review redraws the file buffer'] = function()
-    seed_line_comment()
+    seed_line_annotation()
     child.cmd('edit m.txt')
     eq(buffer_mark_texts(), { '▎ old body' })
 
@@ -821,7 +825,7 @@ T['edit and delete']['e in the review redraws the file buffer'] = function()
 end
 
 T['edit and delete']['x in the review clears the mark of the file buffer'] = function()
-    seed_line_comment()
+    seed_line_annotation()
     child.cmd('edit m.txt')
     eq(buffer_mark_texts(), { '▎ old body' })
 
@@ -835,10 +839,10 @@ end
 
 T['api'] = new_set()
 
-T['api']['comment() comments on a line of a normal buffer'] = function()
+T['api']['annotate() annotates a line of a normal buffer'] = function()
     child.cmd('edit m.txt')
     child.api.nvim_win_set_cursor(0, { 2, 0 })
-    child.lua([[require('iter').comment()]])
+    child.lua([[require('iter').annotate()]])
     wait_editor()
     child.type_keys('buffer', '<C-s>', '<C-c>')
 
@@ -851,16 +855,16 @@ T['api']['comment() comments on a line of a normal buffer'] = function()
     })
     eq(
         child.lua_get(
-            [[#vim.api.nvim_buf_get_extmarks(0, vim.api.nvim_get_namespaces()['iter.buffer.comments'], 0, -1, { type = 'virt_lines' })]]
+            [[#vim.api.nvim_buf_get_extmarks(0, vim.api.nvim_get_namespaces()['iter.buffer.annotations'], 0, -1, { type = 'virt_lines' })]]
         ),
         1
     )
 end
 
-T['api']['comment() takes a visual range'] = function()
+T['api']['annotate() takes a visual range'] = function()
     child.cmd('edit m.txt')
     child.lua(
-        [[vim.keymap.set('x', '<Space>c', function() require('iter').comment() end)]]
+        [[vim.keymap.set('x', '<Space>c', function() require('iter').annotate() end)]]
     )
     child.api.nvim_win_set_cursor(0, { 5, 0 })
     child.type_keys('Vk', '<Space>c')
@@ -872,16 +876,16 @@ T['api']['comment() takes a visual range'] = function()
     eq(stored()[1].anchor.end_line, 5)
 end
 
-T['api']['comment() outside a repo file warns'] = function()
+T['api']['annotate() outside a repo file warns'] = function()
     child.cmd('enew')
-    child.lua([[require('iter').comment()]])
+    child.lua([[require('iter').annotate()]])
 
     eq(editor_shown(), false)
     eq(notes(), { '[iter] Not a file in a git repository' })
 end
 
-T['api']["comment({ scope = 'review' }) adds a review comment"] = function()
-    child.lua([[require('iter').comment({ scope = 'review' })]])
+T['api']["annotation({ scope = 'review' }) adds a review annotation"] = function()
+    child.lua([[require('iter').annotate({ scope = 'review' })]])
     wait_editor()
     eq(
         child.lua_get(

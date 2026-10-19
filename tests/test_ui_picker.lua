@@ -8,8 +8,8 @@ local child = MiniTest.new_child_neovim()
 local repo
 
 local R = [[require('iter').current_review]]
-local P = [[require('iter.comments.picker')]]
-local E = [[require('iter.comments.editor')]]
+local P = [[require('iter.annotations.picker')]]
+local E = [[require('iter.annotations.editor')]]
 
 ---@param prefix string
 ---@param from integer
@@ -64,7 +64,7 @@ local function anchor(path, start, stop, lines)
 end
 
 -- Stored in this order; the picker sorts them.
-local COMMENTS = {
+local ANNOTATIONS = {
     {
         scope = 'line',
         body = 'Rename the variable',
@@ -118,11 +118,11 @@ local function seed()
     child.lua(
         [[
         local store = require('iter.store')
-        for _, comment in ipairs(...) do
-            assert(store.put_comment(vim.fn.getcwd(), comment))
+        for _, annotation in ipairs(...) do
+            assert(store.put_annotation(vim.fn.getcwd(), annotation))
         end
     ]],
-        { COMMENTS }
+        { ANNOTATIONS }
     )
 end
 
@@ -151,7 +151,7 @@ end
 ---@return table[]
 local function stored()
     return child.lua_get(
-        [[require('iter.store').load(vim.fn.getcwd()).comments]]
+        [[require('iter.store').load(vim.fn.getcwd()).annotations]]
     )
 end
 
@@ -240,13 +240,13 @@ local function picker_augroup()
     )
 end
 
---- The diff row the comment with `body` sits below.
+--- The diff row the annotation with `body` sits below.
 ---@param body string
 ---@return integer?
 local function mark_lnum(body)
     return child.lua_get([[(function(body)
             for _, mark in ipairs(]] .. R .. [[.drawer.view.marks) do
-                if mark.comment.body == body then
+                if mark.annotation.body == body then
                     return mark.lnum
                 end
             end
@@ -322,9 +322,9 @@ T['open']['L in the diff pane opens it'] = function()
     eq(results(), LISTING)
 end
 
-T['open']['comments() lists files alphabetically outside the review'] = function()
+T['open']['annotations() lists files alphabetically outside the review'] = function()
     child.cmd('edit c.txt')
-    child.lua([[require('iter').comments()]])
+    child.lua([[require('iter').annotations()]])
     wait_picker()
 
     eq(results(), {
@@ -343,24 +343,24 @@ T['open']['comments() lists files alphabetically outside the review'] = function
     })
 end
 
-T['open']['without comments it warns and opens nothing'] = function()
+T['open']['without annotations it warns and opens nothing'] = function()
     child.lua([[
         local store = require('iter.store')
         local ids = {}
-        for _, c in ipairs(store.load(vim.fn.getcwd()).comments) do
+        for _, c in ipairs(store.load(vim.fn.getcwd()).annotations) do
             table.insert(ids, c.id)
         end
-        store.remove_comments(vim.fn.getcwd(), ids)
-        require('iter').comments()
+        store.remove_annotations(vim.fn.getcwd(), ids)
+        require('iter').annotations()
     ]])
 
     eq(picker_open(), false)
-    eq(notes(), { '[iter] No comments' })
+    eq(notes(), { '[iter] No annotations' })
 end
 
 T['open']['outside a repository it warns'] = function()
     child.cmd('cd /')
-    child.lua([[require('iter').comments()]])
+    child.lua([[require('iter').annotations()]])
 
     eq(picker_open(), false)
     eq(notes(), { '[iter] Not inside a git repository' })
@@ -403,7 +403,7 @@ T['filter']['matches the whole body and the outdated label'] = function()
 end
 
 T['filter']['folds non-ASCII case'] = function()
-    child.lua([[require('iter.store').put_comment(vim.fn.getcwd(), {
+    child.lua([[require('iter.store').put_annotation(vim.fn.getcwd(), {
         scope = 'review', body = 'Ärger mit Übung', anchor = { side = 'new' },
     })]])
     open_from_drawer()
@@ -418,7 +418,7 @@ T['filter']['backspace widens it again and no match says so'] = function()
     open_from_drawer()
     child.type_keys('zzz')
 
-    eq(results(), { '  No matching comments' })
+    eq(results(), { '  No matching annotations' })
     eq(selected(), vim.NIL)
 
     child.type_keys('<CR>')
@@ -526,7 +526,7 @@ end
 
 T['jump'] = new_set()
 
-T['jump']['<CR> shows a comment of a changed file in the review'] = function()
+T['jump']['<CR> shows an annotation of a changed file in the review'] = function()
     open_from_drawer()
     child.type_keys('helper', '<CR>')
 
@@ -546,7 +546,7 @@ T['jump']['<CR> shows a comment of a changed file in the review'] = function()
     eq(picker_augroup(), false)
 end
 
-T['jump']['<CR> on a file comment lands on the header row'] = function()
+T['jump']['<CR> on a file annotation lands on the header row'] = function()
     open_from_drawer()
     child.type_keys('needs', '<CR>')
 
@@ -554,7 +554,7 @@ T['jump']['<CR> on a file comment lands on the header row'] = function()
     eq(cursor_line(), mark_lnum('Needs a test'))
 end
 
-T['jump']['<CR> on a comment of a file outside the changes opens the buffer'] = function()
+T['jump']['<CR> on an annotation of a file outside the changes opens the buffer'] = function()
     open_from_drawer()
     child.type_keys('not in', '<CR>')
 
@@ -568,9 +568,9 @@ T['jump']['<CR> on a comment of a file outside the changes opens the buffer'] = 
     eq(child.lua_get(R .. [[:is_open()]]), true)
 end
 
-T['jump']['<CR> on an old-side comment shows the review, opening it'] = function()
+T['jump']['<CR> on an old-side annotation shows the review, opening it'] = function()
     child.cmd('edit c.txt')
-    child.lua([[require('iter').comments()]])
+    child.lua([[require('iter').annotations()]])
     wait_picker()
     child.type_keys('remove', '<CR>')
 
@@ -591,7 +591,7 @@ T['jump']['<CR> on an old-side comment shows the review, opening it'] = function
     eq(child.lua_get(R .. [[.drawer.view.rows[]] .. lnum .. [[].kind]]), 'del')
 end
 
-T['jump']['<CR> on an old-side comment switches the open review to its file'] = function()
+T['jump']['<CR> on an old-side annotation switches the open review to its file'] = function()
     open_from_drawer()
     child.type_keys('<Esc>')
     child.lua(R .. [[.drawer:step_file(-1)]])
@@ -605,13 +605,13 @@ T['jump']['<CR> on an old-side comment switches the open review to its file'] = 
     eq(cursor_line(), mark_lnum('Why remove it?'))
 end
 
-T['jump']['<CR> opens the buffer of a new-side comment where the line moved'] = function()
+T['jump']['<CR> opens the buffer of a new-side annotation where the line moved'] = function()
     local lines = { 'x1', 'x2' }
     vim.list_extend(lines, numbered('c', 1, 10))
     helpers.write_file(vim.fs.joinpath(repo, 'c.txt'), lines)
 
     child.cmd('edit n.txt')
-    child.lua([[require('iter').comments()]])
+    child.lua([[require('iter').annotations()]])
     wait_picker()
     child.type_keys('not in', '<CR>')
 
@@ -620,9 +620,9 @@ T['jump']['<CR> opens the buffer of a new-side comment where the line moved'] = 
     eq(child.lua_get(R), vim.NIL)
 end
 
-T['jump']['<CR> clamps an outdated comment to the file'] = function()
+T['jump']['<CR> clamps an outdated annotation to the file'] = function()
     child.lua([[
-        require('iter.store').put_comment(vim.fn.getcwd(), {
+        require('iter.store').put_annotation(vim.fn.getcwd(), {
             scope = 'line',
             body = 'Far away',
             anchor = {
@@ -634,7 +634,7 @@ T['jump']['<CR> clamps an outdated comment to the file'] = function()
             },
         })
         vim.cmd.edit('n.txt')
-        require('iter').comments()
+        require('iter').annotations()
     ]])
     wait_picker()
     child.type_keys('far', '<CR>')
@@ -643,15 +643,15 @@ T['jump']['<CR> clamps an outdated comment to the file'] = function()
     eq(cursor_line(), 10)
 end
 
-T['jump']['<CR> on a file comment outside the changes opens line 1'] = function()
+T['jump']['<CR> on a file annotation outside the changes opens line 1'] = function()
     child.lua([[
-        require('iter.store').put_comment(vim.fn.getcwd(), {
+        require('iter.store').put_annotation(vim.fn.getcwd(), {
             scope = 'file',
             body = 'Whole file',
             anchor = { path = 'c.txt', side = 'new' },
         })
         vim.cmd.edit('n.txt')
-        require('iter').comments()
+        require('iter').annotations()
     ]])
     wait_picker()
     child.type_keys('whole', '<CR>')
@@ -660,9 +660,9 @@ T['jump']['<CR> on a file comment outside the changes opens line 1'] = function(
     eq(cursor_line(), 1)
 end
 
-T['jump']['<CR> on a review comment opens the review'] = function()
+T['jump']['<CR> on a review annotation opens the review'] = function()
     child.cmd('edit c.txt')
-    child.lua([[require('iter').comments()]])
+    child.lua([[require('iter').annotations()]])
     wait_picker()
     child.type_keys('overall', '<CR>')
 
@@ -673,10 +673,10 @@ T['jump']['<CR> on a review comment opens the review'] = function()
     )
 end
 
-T['jump']['<CR> on a review comment focuses the open review'] = function()
+T['jump']['<CR> on a review annotation focuses the open review'] = function()
     open_review()
     child.cmd('tabnew')
-    child.lua([[require('iter').comments()]])
+    child.lua([[require('iter').annotations()]])
     wait_picker()
     child.type_keys('overall', '<CR>')
 
@@ -687,15 +687,15 @@ T['jump']['<CR> on a review comment focuses the open review'] = function()
     eq(child.api.nvim_get_current_win(), child.lua_get(R .. '.drawer.win'))
 end
 
-T['jump']['<CR> on a comment of a deleted file warns'] = function()
+T['jump']['<CR> on an annotation of a deleted file warns'] = function()
     child.lua([[
-        require('iter.store').put_comment(vim.fn.getcwd(), {
+        require('iter.store').put_annotation(vim.fn.getcwd(), {
             scope = 'file',
             body = 'Ghost',
             anchor = { path = 'gone.txt', side = 'new' },
         })
         vim.cmd.edit('n.txt')
-        require('iter').comments()
+        require('iter').annotations()
     ]])
     wait_picker()
     child.type_keys('ghost', '<CR>')
@@ -706,7 +706,7 @@ end
 
 T['edit'] = new_set()
 
-T['edit']['<C-e> edits the selected comment in the float'] = function()
+T['edit']['<C-e> edits the selected annotation in the float'] = function()
     open_from_drawer()
     child.type_keys('why this', '<C-e>')
 
@@ -725,26 +725,26 @@ T['edit']['<C-e> edits the selected comment in the float'] = function()
 
     child.type_keys(' Please explain.', '<C-s>')
 
-    local comments = stored()
-    eq(#comments, 8)
+    local annotations = stored()
+    eq(#annotations, 8)
 
     local edited = vim.tbl_filter(function(c)
         return vim.startswith(c.body, 'Why this')
-    end, comments)
+    end, annotations)
     eq(#edited, 1)
     eq(edited[1].body, 'Why this change? Please explain.')
 end
 
 T['delete'] = new_set()
 
-T['delete']['<C-x> keeps the comment when the confirm is declined'] = function()
+T['delete']['<C-x> keeps the annotation when the confirm is declined'] = function()
     open_from_drawer()
     child.lua([[_G.confirm_answer = 2]])
     child.type_keys('<C-x>')
 
     eq(
         child.lua_get([[_G.confirms]]),
-        { 'Delete the comment?\nRename the variable' }
+        { 'Delete the annotation?\nRename the variable' }
     )
     eq(#stored(), 8)
     eq(picker_open(), true)
@@ -761,7 +761,7 @@ T['delete']['<C-x> deletes after the confirm and keeps the picker open'] = funct
     eq(selected(), 'Needs a test')
     eq(mode(), 'i')
 
-    helpers.wait_until(child, [[#]] .. R .. [[.drawer.comments == 7]])
+    helpers.wait_until(child, [[#]] .. R .. [[.drawer.annotations == 7]])
 end
 
 T['delete']['<C-x> on the last row selects the one before'] = function()
@@ -772,16 +772,16 @@ T['delete']['<C-x> on the last row selects the one before'] = function()
     eq(selected(), 'Not in the changes')
 end
 
-T['delete']['<C-x> on the last comment closes the picker'] = function()
+T['delete']['<C-x> on the last annotation closes the picker'] = function()
     child.lua([[
         local store = require('iter.store')
         local ids = {}
-        for i, c in ipairs(store.load(vim.fn.getcwd()).comments) do
+        for i, c in ipairs(store.load(vim.fn.getcwd()).annotations) do
             if i > 1 then
                 table.insert(ids, c.id)
             end
         end
-        store.remove_comments(vim.fn.getcwd(), ids)
+        store.remove_annotations(vim.fn.getcwd(), ids)
     ]])
     open_from_drawer()
     child.type_keys('<C-x>')
@@ -792,17 +792,17 @@ T['delete']['<C-x> on the last comment closes the picker'] = function()
     eq(picker_augroup(), false)
 end
 
-T['delete']['<C-x> removes the mark from a buffer showing the comment'] = function()
+T['delete']['<C-x> removes the mark from a buffer showing the annotation'] = function()
     child.cmd('edit n.txt')
     local function virt_lines()
         return child.lua_get([[#vim.api.nvim_buf_get_extmarks(0,
-                vim.api.nvim_create_namespace('iter.buffer.comments'), 0, -1,
+                vim.api.nvim_create_namespace('iter.buffer.annotations'), 0, -1,
                 { details = true })]])
     end
     local before = virt_lines()
     eq(before > 0, true)
 
-    child.lua([[require('iter').comments()]])
+    child.lua([[require('iter').annotations()]])
     wait_picker()
     child.type_keys('rename', '<C-x>')
 

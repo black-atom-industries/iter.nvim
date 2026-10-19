@@ -1,4 +1,4 @@
---- The comment float: a real buffer to write a comment in, and the draft
+--- The annotation float: a real buffer to write an annotation in, and the draft
 --- lifecycle around it. One draft exists at a time. While it exists the
 --- toggle key is also mapped globally in normal mode, so the draft can come
 --- back from any buffer; a user mapping on that key returns afterwards.
@@ -8,31 +8,31 @@ local store = require('iter.store')
 local util = require('iter.util')
 
 ---@class IterEditorOpenOptions
----@field root string repository the comment belongs to
----@field comment IterComment|{ scope: string, anchor: IterAnchor, body?: string } with an `id` an edit of a stored comment
+---@field root string repository the annotation belongs to
+---@field annotation IterAnnotation|{ scope: string, anchor: IterAnchor, body?: string } with an `id` an edit of a stored annotation
 ---@field config IterConfig
 ---@field pane? integer window to place the float in, the current one by default
----@field on_save? fun(comment: IterComment) after every successful save
+---@field on_save? fun(annotation: IterAnnotation) after every successful save
 
 ---@class IterEditorDraft
 ---@field buf integer
 ---@field win? integer nil while hidden
 ---@field root string
----@field comment table the stored comment once it has an id
----@field keys table<string, string[]> resolved `keys.comment`
+---@field annotation table the stored annotation once it has an id
+---@field keys table<string, string[]> resolved `keys.annotation`
 ---@field geometry table float config to show the float with again
 ---@field cursor integer[] cursor of the float when it was hidden
 ---@field at_end boolean insert after the end of the cursor line on show
 ---@field unloaded? { lines: string[], modified: boolean } text of an unloaded buffer
 ---@field saved_maps? table<string, table|false> user maps on the toggle keys
 ---@field closing boolean the float is being closed by the editor itself
----@field on_save? fun(comment: IterComment)
+---@field on_save? fun(annotation: IterAnnotation)
 
 local M = {}
 
-local GROUP = 'iter.comment'
+local GROUP = 'iter.annotation'
 local HEIGHT = 6
-local GLOBAL_DESC = 'Show the draft comment'
+local GLOBAL_DESC = 'Show the draft annotation'
 
 ---@type IterEditorDraft?
 local draft = nil
@@ -41,14 +41,14 @@ local buf_count = 0
 
 --- ` path:3 `, ` path:3-5 `, ` path:8 (old side) `, ` path (file) `,
 --- ` Review `.
----@param comment table
+---@param annotation table
 ---@return string
-local function title_of(comment)
-    local a = comment.anchor
+local function title_of(annotation)
+    local a = annotation.anchor
 
-    if comment.scope == 'review' then
+    if annotation.scope == 'review' then
         return ' Review '
-    elseif comment.scope == 'file' then
+    elseif annotation.scope == 'file' then
         return string.format(' %s (file) ', a.path)
     end
 
@@ -246,8 +246,8 @@ local function body()
     return text:match('%S') and text or nil
 end
 
---- Save the comment: a new one the first time, an edit of the stored one
---- after that. A comment deleted elsewhere stays deleted.
+--- Save the annotation: a new one the first time, an edit of the stored one
+--- after that. An annotation deleted elsewhere stays deleted.
 ---@return boolean saved
 local function save()
     if draft == nil then
@@ -257,28 +257,28 @@ local function save()
     local text = body()
 
     if text == nil then
-        util.warn('The comment is empty')
+        util.warn('The annotation is empty')
         return false
     end
 
-    local comment = vim.deepcopy(draft.comment)
-    comment.body = text
+    local annotation = vim.deepcopy(draft.annotation)
+    annotation.body = text
 
     local saved, err
 
-    if comment.id == nil then
-        comment.outdated = false
-        saved, err = store.put_comment(draft.root, comment)
+    if annotation.id == nil then
+        annotation.outdated = false
+        saved, err = store.put_annotation(draft.root, annotation)
     else
-        saved, err = store.edit_comment(draft.root, comment)
+        saved, err = store.edit_annotation(draft.root, annotation)
     end
 
     if saved == nil then
-        util.warn(err or 'Cannot save the comment')
+        util.warn(err or 'Cannot save the annotation')
         return false
     end
 
-    draft.comment = saved
+    draft.annotation = saved
     vim.bo[draft.buf].modified = false
     disarm()
 
@@ -339,7 +339,7 @@ local function open_win()
             end
 
             -- Closed from outside, e.g. `:q`, `:wq` or `:bunload!`: unsaved
-            -- text stays as a hidden draft, a saved comment ends the draft.
+            -- text stays as a hidden draft, a saved annotation ends the draft.
             if has_unsaved() then
                 draft.geometry = vim.api.nvim_win_get_config(draft.win)
                 remember_cursor()
@@ -358,13 +358,15 @@ end
 ---@param buf integer
 ---@param keys table<string, string[]>
 local function attach(buf, keys)
-    keymap.attach(buf, 'comment', keys, {
+    keymap.attach(buf, 'annotation', keys, {
         save = save,
         toggle = hide,
         cancel = finish,
         close = function()
             if has_unsaved() then
-                util.warn('The comment has unsaved changes; save or cancel it')
+                util.warn(
+                    'The annotation has unsaved changes; save or cancel it'
+                )
                 return
             end
 
@@ -396,7 +398,7 @@ local function attach(buf, keys)
     })
 end
 
---- A new comment buffer holding `lines`, with the float's keys.
+--- A new annotation buffer holding `lines`, with the float's keys.
 ---@param lines string[]
 ---@param modified boolean
 ---@param keys table<string, string[]>
@@ -408,7 +410,7 @@ local function new_buf(lines, modified, keys)
     vim.bo[buf].buftype = 'acwrite'
     vim.bo[buf].bufhidden = 'hide'
     vim.bo[buf].swapfile = false
-    vim.api.nvim_buf_set_name(buf, 'iter://comment/' .. buf_count)
+    vim.api.nvim_buf_set_name(buf, 'iter://annotation/' .. buf_count)
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
     vim.bo[buf].modified = modified
     vim.bo[buf].filetype = 'markdown'
@@ -435,21 +437,21 @@ restore_buf = function()
     end
 end
 
---- Open the float on a comment: a new one, or with an `id` an edit of a
+--- Open the float on an annotation: a new one, or with an `id` an edit of a
 --- stored one. A draft that is still open is shown instead, unless all of
 --- it is saved.
 ---@param opts IterEditorOpenOptions
 function M.open(opts)
     vim.validate('opts', opts, 'table')
     vim.validate('opts.root', opts.root, 'string')
-    vim.validate('opts.comment', opts.comment, 'table')
+    vim.validate('opts.annotation', opts.annotation, 'table')
     vim.validate('opts.config', opts.config, 'table')
     vim.validate('opts.pane', opts.pane, 'number', true)
     vim.validate('opts.on_save', opts.on_save, 'function', true)
 
     if draft ~= nil then
         if not is_visible() or has_unsaved() then
-            util.warn('Finish the open comment first')
+            util.warn('Finish the open annotation first')
             M.show()
             return
         end
@@ -457,10 +459,10 @@ function M.open(opts)
         finish()
     end
 
-    local keys = opts.config.keys.comment
+    local keys = opts.config.keys.annotation
     local pane = opts.pane or vim.api.nvim_get_current_win()
-    local body_lines = opts.comment.body ~= nil
-            and vim.split(opts.comment.body, '\n')
+    local body_lines = opts.annotation.body ~= nil
+            and vim.split(opts.annotation.body, '\n')
         or {}
 
     vim.api.nvim_create_augroup(GROUP, { clear = true })
@@ -470,12 +472,12 @@ function M.open(opts)
     draft = {
         buf = buf,
         root = opts.root,
-        comment = vim.deepcopy(opts.comment),
+        annotation = vim.deepcopy(opts.annotation),
         keys = keys,
         geometry = geometry(
             pane,
             opts.config.options.drawer.zindex + 20,
-            title_of(opts.comment),
+            title_of(opts.annotation),
             footer_of(keys)
         ),
         cursor = { vim.api.nvim_buf_line_count(buf), 0 },
@@ -514,11 +516,11 @@ function M.win()
     return is_visible() and draft.win or nil
 end
 
---- `draft comment` while a draft is hidden, else `''`.
+--- `draft annotation` while a draft is hidden, else `''`.
 ---@return string
 function M.statusline()
     if draft ~= nil and not is_visible() then
-        return 'draft comment'
+        return 'draft annotation'
     end
 
     return ''

@@ -1,4 +1,4 @@
-local anchor = require('iter.comments.anchor')
+local anchor = require('iter.annotations.anchor')
 
 local new_set = MiniTest.new_set
 local eq = MiniTest.expect.equality
@@ -18,8 +18,8 @@ end
 
 ---@param scope 'line'|'range'|'file'|'review'
 ---@param a IterAnchor
----@return IterComment
-local function comment(scope, a)
+---@return IterAnnotation
+local function annotation(scope, a)
     return {
         id = 'c1',
         scope = scope,
@@ -157,7 +157,7 @@ end
 T['follow()'] = new_set()
 
 T['follow()']['moves the stored position'] = function()
-    local c = comment('range', new_side(2, { 'b', 'c' }))
+    local c = annotation('range', new_side(2, { 'b', 'c' }))
 
     local followed, changed = anchor.follow(c, { 'new', 'a', 'b', 'c' })
 
@@ -169,7 +169,7 @@ T['follow()']['moves the stored position'] = function()
 end
 
 T['follow()']['reports no change for unchanged text'] = function()
-    local c = comment('line', new_side(1, { 'a' }))
+    local c = annotation('line', new_side(1, { 'a' }))
 
     local followed, changed = anchor.follow(c, { 'a', 'b' })
 
@@ -178,7 +178,7 @@ T['follow()']['reports no change for unchanged text'] = function()
 end
 
 T['follow()']['marks a lost anchor outdated and keeps its position'] = function()
-    local c = comment('line', new_side(2, { 'b' }))
+    local c = annotation('line', new_side(2, { 'b' }))
 
     local followed, changed = anchor.follow(c, { 'a', 'B' })
 
@@ -188,7 +188,7 @@ T['follow()']['marks a lost anchor outdated and keeps its position'] = function(
 end
 
 T['follow()']['clears outdated when the text is found again'] = function()
-    local c = comment('line', new_side(2, { 'b' }))
+    local c = annotation('line', new_side(2, { 'b' }))
     c.outdated = true
 
     local followed, changed = anchor.follow(c, { 'b', 'x' })
@@ -198,9 +198,9 @@ T['follow()']['clears outdated when the text is found again'] = function()
     eq(followed.anchor.start_line, 1)
 end
 
-T['follow()']['never outdates file and review comments'] = function()
-    local file = comment('file', { path = 'f.lua', side = 'new' })
-    local review = comment('review', { side = 'new' })
+T['follow()']['never outdates file and review annotations'] = function()
+    local file = annotation('file', { path = 'f.lua', side = 'new' })
+    local review = annotation('review', { side = 'new' })
 
     eq({ anchor.follow(file, {}) }, { file, false })
     eq({ anchor.follow(review, {}) }, { review, false })

@@ -1230,20 +1230,20 @@ T['hunks']['? in the diff pane lists its keys'] = function()
             {
                 ' ]c    Next hunk',
                 ' [c    Previous hunk',
-                ' ]a    Next comment',
-                ' [a    Previous comment',
+                ' ]a    Next annotation',
+                ' [a    Previous annotation',
                 ' ]f    Next file',
                 ' [f    Previous file',
                 ' S     Stage the hunk',
                 ' u     Unstage the hunk',
-                ' c     Comment on the line or range',
-                ' C     Comment on the file',
-                ' e     Edit the comment',
-                ' x     Delete the comment',
+                ' a     Annotate the line or range',
+                ' A     Annotate the file',
+                ' e     Edit the annotation',
+                ' x     Delete the annotation',
                 ' <CR>  Expand hidden context',
                 ' gf    Go to the line in the file',
                 ' v     Toggle viewed',
-                ' L     List comments',
+                ' L     List annotations',
                 ' y     Copy the review',
                 ' q     Close',
                 ' ?     Show the keys',
@@ -1536,19 +1536,19 @@ T['viewed']['viewed marks survive a restart'] = function()
     eq(drawer_header(), 'HEAD main · viewed 1 of 4')
 end
 
-T['viewed']['the header counts comments and outdated comments'] = function()
+T['viewed']['the header counts annotations and outdated annotations'] = function()
     child.lua([[
         local store = require('iter.store')
         local root = vim.fn.getcwd()
         for _, spec in ipairs({ { 'one', false }, { 'two', true }, { 'three', true } }) do
-            assert(store.put_comment(root, {
+            assert(store.put_annotation(root, {
                 scope = 'line',
                 body = spec[1],
                 outdated = spec[2],
                 anchor = { path = 'c.txt', side = 'new', start_line = 1, end_line = 1, lines = { 'new' } },
             }))
         end
-        assert(store.put_comment(root, {
+        assert(store.put_annotation(root, {
             scope = 'review',
             body = 'whole',
             outdated = false,
@@ -1564,7 +1564,7 @@ T['viewed']['the header counts comments and outdated comments'] = function()
 
     eq(
         drawer_header(),
-        'HEAD main · viewed 1 of 4 · 4 comments · 2 outdated'
+        'HEAD main · viewed 1 of 4 · 4 annotations · 2 outdated'
     )
 end
 
@@ -1675,7 +1675,7 @@ local FLOW_STATE = [[(function()
     for _, name in ipairs(vim.split(vim.fn.execute('augroup'), '%s+')) do
         if
             vim.startswith(name, 'iter.')
-            and name ~= 'iter.buffer_comments'
+            and name ~= 'iter.buffer_annotations'
             and name ~= 'iter.highlight'
         then
             table.insert(groups, name)
@@ -1696,7 +1696,7 @@ local FLOW_STATE = [[(function()
     }
 end)()]]
 
-T['flow']['status, review, comment, picker, yank and close leave nothing behind'] = function()
+T['flow']['status, review, annotation, picker, yank and close leave nothing behind'] = function()
     child.lua([[
         require('iter').setup()
         vim.keymap.set('n', '<C-t>', '<Nop>', { desc = 'user ctrl-t' })
@@ -1712,23 +1712,23 @@ T['flow']['status, review, comment, picker, yank and close leave nothing behind'
     wait_diff('unstaged a.txt')
     eq(child.lua_get([[require('iter').drawer]]), vim.NIL)
 
-    -- Comment, hide the draft, show it again and save.
+    -- Annotate, hide the draft, show it again and save.
     child.type_keys('<CR>')
     cursor_on('a3 changed')
-    child.type_keys('c')
-    helpers.wait_until(child, [[require('iter.comments.editor').is_shown()]])
+    child.type_keys('a')
+    helpers.wait_until(child, [[require('iter.annotations.editor').is_shown()]])
     child.type_keys('flow note', '<C-t>')
-    eq(child.lua_get([[require('iter.comments.editor').is_shown()]]), false)
+    eq(child.lua_get([[require('iter.annotations.editor').is_shown()]]), false)
     child.type_keys('<C-t>')
-    helpers.wait_until(child, [[require('iter.comments.editor').is_shown()]])
+    helpers.wait_until(child, [[require('iter.annotations.editor').is_shown()]])
     child.type_keys('<C-s>', '<Esc>', 'q')
     helpers.wait_until(
         child,
-        [[not require('iter.comments.editor').is_shown()]]
+        [[not require('iter.annotations.editor').is_shown()]]
     )
     eq(
         child.lua_get(
-            [[vim.tbl_map(function(c) return c.body end, require('iter.store').load(vim.fn.getcwd()).comments)]]
+            [[vim.tbl_map(function(c) return c.body end, require('iter.store').load(vim.fn.getcwd()).annotations)]]
         ),
         { 'flow note' }
     )
@@ -1751,7 +1751,7 @@ T['flow']['status, review, comment, picker, yank and close leave nothing behind'
     child.type_keys('y')
     helpers.wait_until(
         child,
-        [[#require('iter.store').load(vim.fn.getcwd()).comments == 0]]
+        [[#require('iter.store').load(vim.fn.getcwd()).annotations == 0]]
     )
     eq(child.fn.getreg('"'):find('flow note', 1, true) ~= nil, true)
 
