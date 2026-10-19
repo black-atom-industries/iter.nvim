@@ -6,15 +6,29 @@
 
 A Git staging and code review tool for Neovim.
 
-iter has two surfaces. The status drawer is a small float at the bottom of the
-current window. It lists Unstaged and Staged files, stages and unstages whole
-files, and shows the diff of the selected file in the window above it. The
-review tab is a tab page for the whole review: one file's diff at a time, hunk
-staging, comments on lines, ranges, files or the whole review, viewed marks,
-and a copy of all comments as a prompt for an agent.
+## Features
 
-Comments also work in normal file buffers. They are saved per repository and
-branch, follow their code when it moves, and turn outdated when it is gone.
+- **Status drawer:** a float at the bottom of the current window with Unstaged
+  and Staged side by side (stacked in narrow windows). The window above shows
+  the diff of the selected file as you move.
+- **Stage, unstage, discard** whole files. New files are listed one by one
+  among the others. Discard asks first, names the paths, and never touches the
+  index or ignored files.
+- **Review tab:** a tab page for the whole review. One file's diff at a time
+  with hunk jumps, file jumps and `gf` to the source line.
+- **Hunk staging** in the review diff, applied exactly like `git add -p`.
+- **Diff rendering** in Lua: treesitter syntax, word emphasis on changed lines,
+  old and new line numbers, hidden context that expands on demand.
+- **Comments** on a line, a range, a deleted line, a file or the whole review,
+  in the review diff and in normal file buffers. Comments follow their code
+  when it moves and turn outdated when it is gone.
+- **Comment picker** grouped by file, to filter, jump, edit and delete.
+- **Viewed marks** per file that drop back when the file changes afterwards.
+- **Export:** copy all comments as a prompt for an agent, then clear them if
+  you like.
+- **Saved per repository and branch**, shared by linked worktrees.
+- **Auto refresh** on index and HEAD changes, focus and writes.
+- **Keys per view**, each one remappable or disabled, with a `?` help float.
 
 iter does not commit, push or pull. Use a Git plugin such as mini.git or
 fugitive for that.
@@ -159,7 +173,6 @@ The status drawer (`drawer`):
 | `s` | `stage` | Stage or unstage the file |
 | `u` | `unstage` | Unstage the file |
 | `d` | `discard` | Discard changes in the file |
-| `<Tab>` | `expand` | Expand or collapse the directory |
 | `r` | `review` | Open the review tab |
 | `q` | `close` | Close |
 | `?` | `help` | Show the keys |
@@ -174,7 +187,6 @@ The drawer of the review tab (`review_drawer`):
 | `s` | `stage` | Stage or unstage the file |
 | `u` | `unstage` | Unstage the file |
 | `d` | `discard` | Discard changes in the file |
-| `<Tab>` | `expand` | Expand or collapse the directory |
 | `v` | `viewed` | Toggle viewed |
 | `C` | `comment_file` | Comment on the file |
 | `L` | `picker` | List comments |

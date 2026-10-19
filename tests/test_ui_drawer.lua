@@ -22,11 +22,12 @@ local PANE_OPTS = {
 }
 
 local FIXTURE_COLUMNS = {
-    ' Unstaged (4)                          │ Staged (1)',
+    ' Unstaged (5)                          │ Staged (1)',
     ' D deleted.txt                         │ M staged.txt',
     ' M modified.txt                        │',
     ' ? untracked.txt                       │',
-    ' ? untracked_dir/                      │',
+    ' ? untracked_dir/a.txt                 │',
+    ' ? untracked_dir/b.txt                 │',
 }
 
 --- Run `:Iter` (or `command`) in the child and wait for the drawer and its
@@ -148,7 +149,10 @@ end
 ---@return table<string, string> porcelain XY per path
 local function status()
     local states = {}
-    local out = helpers.git(repo, { 'status', '--porcelain=v1', '-z' })
+    local out = helpers.git(
+        repo,
+        { 'status', '--porcelain=v1', '-z', '--untracked-files=all' }
+    )
 
     for _, record in ipairs(vim.split(out, '\0', { plain = true })) do
         if record ~= '' then
@@ -227,11 +231,12 @@ T['open']['stacks the columns in a 60-column split'] = function()
 
     eq(child.lua_get('require("iter").drawer.layout'), 'stacked')
     eq(drawer_lines(), {
-        ' Unstaged (4)',
+        ' Unstaged (5)',
         ' D deleted.txt',
         ' M modified.txt',
         ' ? untracked.txt',
-        ' ? untracked_dir/',
+        ' ? untracked_dir/a.txt',
+        ' ? untracked_dir/b.txt',
         '',
         ' Staged (1)',
         ' M staged.txt',
@@ -295,9 +300,9 @@ T['keys']['j and k move and the preview follows'] = function()
     eq(child.lua_get('_G.notes'), {})
 
     child.type_keys('j', 'j', 'j', 'j')
-    eq(selected(), 'unstaged untracked_dir/')
+    eq(selected(), 'unstaged untracked_dir/b.txt')
 
-    child.type_keys('k', 'k')
+    child.type_keys('k', 'k', 'k')
     eq(selected(), 'unstaged modified.txt')
     wait_preview('unstaged modified.txt')
 
@@ -345,10 +350,10 @@ T['keys']['j crosses from Unstaged to Staged when stacked'] = function()
     child.cmd('vertical resize 60')
     open_drawer()
 
-    child.type_keys('j', 'j', 'j', 'j')
+    child.type_keys('j', 'j', 'j', 'j', 'j')
     eq(selected(), 'staged staged.txt')
     child.type_keys('k')
-    eq(selected(), 'unstaged untracked_dir/')
+    eq(selected(), 'unstaged untracked_dir/b.txt')
 end
 
 T['keys']['a remapped key stages and the default key is unbound'] = function()
@@ -387,10 +392,11 @@ T['stage']['s stages a file and keeps the selection on the nearest row'] = funct
 
     eq(status()['modified.txt'], 'M ')
     eq(drawer_lines(), {
-        ' Unstaged (3)                          │ Staged (2)',
+        ' Unstaged (4)                          │ Staged (2)',
         ' D deleted.txt                         │ M modified.txt',
         ' ? untracked.txt                       │ M staged.txt',
-        ' ? untracked_dir/                      │',
+        ' ? untracked_dir/a.txt                 │',
+        ' ? untracked_dir/b.txt                 │',
     })
     eq(selected(), 'unstaged untracked.txt')
     wait_preview('unstaged untracked.txt')
@@ -458,21 +464,38 @@ T['stage']['u on an Unstaged row unstages its staged part'] = function()
     })
 end
 
-T['stage']['s stages an untracked directory without its ignored file'] = function()
+T['stage']['s stages one untracked file of a new directory'] = function()
     helpers.write_file(
         vim.fs.joinpath(repo, '.git', 'info', 'exclude'),
         { '*.log' }
     )
     helpers.write_file(vim.fs.joinpath(repo, 'untracked_dir', 'x.log'), { 'x' })
     open_drawer()
-    select_item('unstaged', 'untracked_dir/')
+    select_item('unstaged', 'untracked_dir/a.txt')
 
     child.type_keys('s')
 
     local states = status()
     eq(states['untracked_dir/a.txt'], 'A ')
-    eq(states['untracked_dir/b.txt'], 'A ')
+    eq(states['untracked_dir/b.txt'], '??')
     eq(states['untracked_dir/x.log'], nil)
+end
+
+T['stage']['s and d skip a nested repository with a warning'] = function()
+    helpers.write_file(vim.fs.joinpath(repo, 'nested', 'a.txt'), { 'a' })
+    helpers.git(vim.fs.joinpath(repo, 'nested'), { 'init', '--quiet' })
+    open_drawer()
+    select_item('unstaged', 'nested/')
+    child.lua('_G.answer = 1')
+
+    child.type_keys('s', 'd')
+
+    eq(child.lua_get('_G.confirms'), {})
+    eq(child.lua_get('_G.notes')[1], {
+        '[iter] Skipped the nested repository nested/',
+        vim.log.levels.WARN,
+    })
+    eq(status()['nested/'], '??')
 end
 
 T['discard'] = new_set()
@@ -506,29 +529,30 @@ T['discard']['keeps the staged part of a file'] = function()
     eq(helpers.git(repo, { 'show', ':staged.txt' }), 'alpha\nbeta\n')
     eq(
         drawer_lines()[1],
-        ' Unstaged (4)                          │ Staged (1)'
+        ' Unstaged (5)                          │ Staged (1)'
     )
 end
 
-T['discard']['an untracked directory leaves its ignored file'] = function()
+T['discard']['an untracked file leaves an ignored file in its directory'] = function()
     helpers.write_file(
         vim.fs.joinpath(repo, '.git', 'info', 'exclude'),
         { '*.log' }
     )
     helpers.write_file(vim.fs.joinpath(repo, 'untracked_dir', 'x.log'), { 'x' })
     open_drawer()
-    select_item('unstaged', 'untracked_dir/')
+    select_item('unstaged', 'untracked_dir/a.txt')
     child.lua('_G.answer = 1')
 
     child.type_keys('d')
 
     eq(child.lua_get('_G.confirms'), {
-        'Delete untracked files:\nuntracked_dir/a.txt\nuntracked_dir/b.txt',
+        'Delete untracked files:\nuntracked_dir/a.txt',
     })
     eq(vim.fn.filereadable(vim.fs.joinpath(repo, 'untracked_dir', 'a.txt')), 0)
-    eq(vim.fn.filereadable(vim.fs.joinpath(repo, 'untracked_dir', 'b.txt')), 0)
+    eq(read('untracked_dir/b.txt'), { 'b' })
     eq(read('untracked_dir/x.log'), { 'x' })
-    eq(status()['untracked_dir/'], nil)
+    eq(status()['untracked_dir/a.txt'], nil)
+    eq(status()['untracked_dir/b.txt'], '??')
 end
 
 T['discard']['deletes a single untracked file'] = function()
@@ -543,7 +567,7 @@ T['discard']['deletes a single untracked file'] = function()
     })
     eq(vim.fn.filereadable(vim.fs.joinpath(repo, 'untracked.txt')), 0)
     eq(status()['untracked.txt'], nil)
-    eq(status()['untracked_dir/'], '??')
+    eq(status()['untracked_dir/b.txt'], '??')
 end
 
 T['discard']['d in Staged warns and changes nothing'] = function()
@@ -558,33 +582,6 @@ T['discard']['d in Staged warns and changes nothing'] = function()
     })
     eq(child.lua_get('_G.confirms'), {})
     eq(status()['staged.txt'], 'M ')
-end
-
-T['expand'] = new_set()
-
-T['expand']['<Tab> expands and collapses an untracked directory'] = function()
-    open_drawer()
-    select_item('unstaged', 'untracked_dir/')
-
-    child.type_keys('<Tab>')
-    eq(drawer_lines(), {
-        ' Unstaged (4)                          │ Staged (1)',
-        ' D deleted.txt                         │ M staged.txt',
-        ' M modified.txt                        │',
-        ' ? untracked.txt                       │',
-        ' ? untracked_dir/                      │',
-        '   ? a.txt                             │',
-        '   ? b.txt                             │',
-    })
-    eq(selected(), 'unstaged untracked_dir/')
-
-    child.type_keys('j')
-    eq(selected(), 'unstaged untracked_dir/a.txt')
-    wait_preview('unstaged untracked_dir/a.txt')
-
-    child.type_keys('<Tab>')
-    eq(drawer_lines(), FIXTURE_COLUMNS)
-    eq(selected(), 'unstaged untracked_dir/')
 end
 
 T['close'] = new_set()
@@ -755,8 +752,8 @@ T['float']['keeps its place after pane resizes'] = function()
 
     eq(child.lua_get(d .. '.layout'), 'stacked')
     eq(last_row(d .. '.win', 2), last_row(d .. '.pane'))
-    -- 8 stacked lines and the 2 chrome rows fit in half of the 29-row pane.
-    eq(child.lua_get('vim.api.nvim_win_get_height(' .. d .. '.win)'), 8)
+    -- 0.3 of the 29-row pane, minus the 2 chrome rows.
+    eq(child.lua_get('vim.api.nvim_win_get_height(' .. d .. '.win)'), 6)
     eq(selected(), 'unstaged deleted.txt')
 
     child.o.columns = 80
@@ -783,7 +780,7 @@ T['float']['sits above a float at zindex 20'] = function()
         [[vim.fn.getwininfo(require('iter').drawer.win)[1].winrow]]
     )
     eq(vim.startswith(rows[first], ' HEAD main'), true)
-    eq(vim.startswith(rows[first + 1], ' Unstaged (4)'), true)
+    eq(vim.startswith(rows[first + 1], ' Unstaged (5)'), true)
     eq(vim.startswith(rows[first + 2], ' D deleted.txt'), true)
     eq(rows[first + 2]:find('X', 1, true), nil)
     eq(rows[first - 1]:find('XXXX', 1, true) ~= nil, true)
@@ -799,7 +796,7 @@ T['float']['ends on the last pane row below a winbar'] = function()
 
     eq(last_row(d .. '.pane') < child.o.lines - 2, true)
     eq(last_row(d .. '.win', 2), last_row(d .. '.pane'))
-    eq(vim.startswith(screen_lines()[first + 1], ' Unstaged (4)'), true)
+    eq(vim.startswith(screen_lines()[first + 1], ' Unstaged (5)'), true)
     eq(screen_lines()[1]:find('PANE WINBAR', 1, true) ~= nil, true)
     eq(child.lua_get('vim.wo[' .. d .. '.win].winbar'), '')
 end
@@ -814,7 +811,7 @@ T['float']['shows no global winbar of its own'] = function()
 
     eq(last_row(d .. '.pane') < child.o.lines - 2, true)
     eq(last_row(d .. '.win', 2), last_row(d .. '.pane'))
-    eq(vim.startswith(screen_lines()[first + 1], ' Unstaged (4)'), true)
+    eq(vim.startswith(screen_lines()[first + 1], ' Unstaged (5)'), true)
 end
 
 --- Text of the drawer float's header (title) and key hint line (footer).
@@ -843,7 +840,7 @@ T['header'] = new_set()
 T['header']['shows the branch, the changes and the key hint'] = function()
     open_drawer()
 
-    eq(chrome(), { header = 'HEAD main · 5 changes', hint = HINT })
+    eq(chrome(), { header = 'HEAD main · 6 changes', hint = HINT })
 end
 
 T['header']['shows the commits ahead of the upstream'] = function()
@@ -852,14 +849,14 @@ T['header']['shows the commits ahead of the upstream'] = function()
     helpers.git(repo, { 'commit', '--quiet', '-m', 'ahead' })
     open_drawer()
 
-    eq(chrome().header, 'HEAD main ↑1 · 4 changes')
+    eq(chrome().header, 'HEAD main ↑1 · 5 changes')
 end
 
 T['header']['names a detached HEAD'] = function()
     helpers.git(repo, { 'checkout', '--quiet', '--detach' })
     open_drawer()
 
-    eq(chrome().header, 'HEAD (detached) · 5 changes')
+    eq(chrome().header, 'HEAD (detached) · 6 changes')
 end
 
 T['header']['the hint follows remapped keys'] = function()
@@ -869,7 +866,7 @@ T['header']['the hint follows remapped keys'] = function()
     eq(chrome().hint, 'S stage  u unstage  <CR> open  r review  ? help')
 end
 
-T['header']['stacked, the header, hint and both titles stay on screen'] = function()
+T['header']['stacked, the header, hint and the selected section stay on screen'] = function()
     child.cmd('vsplit')
     child.cmd('vertical resize 60')
     open_drawer()
@@ -879,8 +876,7 @@ T['header']['stacked, the header, hint and both titles stay on screen'] = functi
     local screen = table.concat(screen_lines(), '\n')
 
     for _, text in ipairs({
-        'HEAD main · 4 unstaged · 1 staged',
-        ' Unstaged (4)',
+        'HEAD main · 5 unstaged · 1 staged',
         ' Staged (1)',
         ' M staged.txt',
         '? help',
@@ -907,7 +903,7 @@ T['header']['stacked with a long list, the header counts both sides'] = function
     eq(
         vim.startswith(
             screen_lines()[first],
-            ' HEAD main · 19 unstaged · 1 staged'
+            ' HEAD main · 20 unstaged · 1 staged'
         ),
         true
     )
@@ -937,7 +933,7 @@ T['header']['a narrow drawer with a long branch opens cleanly'] = function()
     )
     eq(
         chrome().header,
-        'HEAD feat/a-rather-long-branch-name ↑1 · 4 unstaged · 0 staged'
+        'HEAD feat/a-rather-long-branch-name ↑1 · 5 unstaged · 0 staged'
     )
 
     -- Neovim cuts a title wider than the float from the left with `<`.
@@ -947,7 +943,7 @@ T['header']['a narrow drawer with a long branch opens cleanly'] = function()
     local row = child.get_screenshot().text[info.winrow]
     eq(
         table.concat(row, '', info.wincol, info.wincol + info.width - 1),
-        ' <me ↑1 · 4 unstaged · 0 stage'
+        ' <me ↑1 · 5 unstaged · 0 stage'
     )
 end
 
@@ -976,15 +972,14 @@ T['help']['? lists the current keys and closes on q, ? and <Esc>'] = function()
     for _, close in ipairs({ 'q', '?', '<Esc>' }) do
         child.type_keys('?')
         eq(help_lines(), {
-            ' <CR>   Open the file and close the drawer',
-            ' S gs   Stage or unstage the file',
-            ' u      Unstage the file',
-            ' <Tab>  Expand or collapse the directory',
-            ' r      Open the review tab',
-            ' q      Close',
-            ' ?      Show the keys',
-            ' h      Select the Unstaged column',
-            ' l      Select the Staged column',
+            ' <CR>  Open the file and close the drawer',
+            ' S gs  Stage or unstage the file',
+            ' u     Unstage the file',
+            ' r     Open the review tab',
+            ' q     Close',
+            ' ?     Show the keys',
+            ' h     Select the Unstaged column',
+            ' l     Select the Staged column',
         })
         eq(
             child.lua_get(
@@ -1045,7 +1040,7 @@ T['clean']['a clean tree says Working tree clean'] = function()
         false
     )
 
-    child.type_keys('s', 'u', 'd', '<Tab>', '<CR>', 'j', 'l')
+    child.type_keys('s', 'u', 'd', '<CR>', 'j', 'l')
     eq(child.v.errmsg, '')
     eq(child.lua_get('_G.notes'), {})
 
@@ -1254,29 +1249,21 @@ T['odd paths'] = new_set({
     },
 })
 
-T['odd paths']['show, preview and stage'] = function()
+T['odd paths']['show, preview, stage and discard'] = function()
     open_drawer()
-    wait_preview('unstaged sp ace/ü.txt')
+    wait_preview('unstaged ne w/ö ä.txt')
 
     eq(drawer_lines(), {
         ' Unstaged (2)                          │ Staged (0)',
+        ' ? ne w/ö ä.txt                        │',
         ' M sp ace/ü.txt                        │',
-        ' ? ne w/                               │',
     })
-    eq(
-        child.lua_get(
-            [[vim.api.nvim_buf_get_lines(require('iter').drawer.view.buf, 0, 1, false)]]
-        ),
-        { 'sp ace/ü.txt' }
-    )
 
+    select_item('unstaged', 'sp ace/ü.txt')
     child.type_keys('s')
     eq(status()['sp ace/ü.txt'], 'M ')
 
-    select_item('unstaged', 'ne w/')
-    child.type_keys('<Tab>', 'j')
-    eq(selected(), 'unstaged ne w/ö ä.txt')
-    wait_preview('unstaged ne w/ö ä.txt')
+    select_item('unstaged', 'ne w/ö ä.txt')
     child.lua('_G.answer = 1')
     child.type_keys('d')
     eq(

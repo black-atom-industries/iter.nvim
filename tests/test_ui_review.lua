@@ -323,6 +323,16 @@ T['open']['opening twice gives one tab'] = function()
     )
 end
 
+T['open']['the tab opts out of the radar HUD'] = function()
+    open_review()
+
+    eq(child.lua_get('vim.t.radar_disabled'), true)
+
+    child.cmd('tabfirst')
+
+    eq(child.lua_get('vim.t.radar_disabled'), vim.NIL)
+end
+
 T['open']['r in the status drawer opens the review and closes the drawer'] = function()
     child.cmd('Iter')
     helpers.wait_until(child, [[require('iter').drawer ~= nil]])
@@ -416,22 +426,19 @@ T['drawer']['<CR> moves into the diff pane'] = function()
     eq(child.lua_get(R .. '.drawer.view.files[1].path'), 'b.txt')
 end
 
-T['drawer']['s stages and <Tab> expands a directory'] = function()
+T['drawer']['s stages one file of an untracked directory'] = function()
     open_review()
     wait_diff('unstaged a.txt')
+    select_item('unstaged', 'd/x.txt')
     child.type_keys('s')
+
     helpers.wait_until(child, [[(function()
             for _, item in ipairs(]] .. R .. [[.drawer.changes.staged) do
-                if item.path == 'a.txt' then
+                if item.path == 'd/x.txt' then
                     return true
                 end
             end
         end)()]])
-
-    select_item('unstaged', 'd/')
-    child.type_keys('<Tab>')
-
-    eq(child.lua_get(R .. '.drawer.expanded["d/"]'), true)
 end
 
 T['drawer']['q closes the tab and returns to the tab it came from'] = function()
@@ -466,14 +473,14 @@ T['diff'][']c and [c jump between hunks'] = function()
     eq(cursor_row(), 'hunk @@ -1,6 +1,6 @@')
 end
 
-T['diff'][']f and [f follow the drawer order, skipping directories'] = function()
+T['diff'][']f and [f follow the drawer order'] = function()
     open_review()
     wait_diff('unstaged a.txt')
     child.type_keys('<CR>')
 
     local order = {}
 
-    for _ = 1, 4 do
+    for _ = 1, 5 do
         child.type_keys(']f')
         table.insert(order, selected())
         eq(cursor_row():sub(1, 7), 'header ')
@@ -482,6 +489,7 @@ T['diff'][']f and [f follow the drawer order, skipping directories'] = function(
     eq(order, {
         'unstaged b.txt',
         'unstaged c.txt',
+        'unstaged d/x.txt',
         'staged b.txt',
         'staged b.txt',
     })
@@ -489,8 +497,8 @@ T['diff'][']f and [f follow the drawer order, skipping directories'] = function(
     eq(child.lua_get(R .. '.diff_win == vim.api.nvim_get_current_win()'), true)
 
     child.type_keys('[f')
-    eq(selected(), 'unstaged c.txt')
-    eq(child.lua_get(R .. '.drawer.view.files[1].path'), 'c.txt')
+    eq(selected(), 'unstaged d/x.txt')
+    eq(child.lua_get(R .. '.drawer.view.files[1].path'), 'd/x.txt')
 end
 
 T['diff']['<CR> on a gap expands it'] = function()
@@ -826,7 +834,7 @@ T['refresh']['a refresh in the background refits the spacer only'] = function()
         local diff_row = vim.fn.win_screenpos(r.diff_win)[1]
         return {
             spacer = spacer,
-            expected = math.max(3, math.floor(total * 0.3), math.min(#r.drawer.rows + 2, math.floor(total / 2))),
+            expected = math.max(3, math.floor(total * 0.3), math.min(math.min(#r.drawer.rows, 5) + 2, math.floor(total / 2))),
             float = vim.api.nvim_win_get_config(r.drawer.win).height + 2,
             spacer_row = vim.fn.win_screenpos(r.spacer_win)[1],
             below_diff = diff_row + vim.api.nvim_win_get_height(r.diff_win) + 1,
@@ -876,14 +884,14 @@ T['statusline']['names the file and its position inside the tab only'] = functio
     wait_diff('unstaged a.txt')
     eq(
         child.lua_get([[require('iter').statusline()]]),
-        'review · a.txt · 1/4'
+        'review · a.txt · 1/5'
     )
 
     select_item('staged', 'b.txt')
     wait_diff('staged b.txt')
     eq(
         child.lua_get([[require('iter').statusline()]]),
-        'review · b.txt · 4/4'
+        'review · b.txt · 5/5'
     )
 
     child.cmd('tabfirst')
@@ -1370,9 +1378,9 @@ T['viewed']['rows start unviewed and the header counts files'] = function()
         'M ○ a.txt | M ○ b.txt',
         'M ○ b.txt | ',
         '? ○ c.txt | ',
-        '?   d/ | ',
+        '? ○ d/x.txt | ',
     })
-    eq(drawer_header(), 'HEAD main · viewed 0 of 3')
+    eq(drawer_header(), 'HEAD main · viewed 0 of 4')
     eq(diff_header(), '○ not viewed  +2 −2 ')
 end
 
@@ -1384,14 +1392,14 @@ T['viewed']['v in the drawer toggles the selected file'] = function()
     wait_state('a.txt', 'viewed')
 
     eq(drawer_rows()[2], 'M ✓ a.txt | M ○ b.txt')
-    eq(drawer_header(), 'HEAD main · viewed 1 of 3')
+    eq(drawer_header(), 'HEAD main · viewed 1 of 4')
     eq(diff_header(), '✓ viewed  +2 −2 ')
     eq(child.lua_get('_G.notes'), {})
 
     child.type_keys('v')
     wait_state('a.txt', 'unviewed')
 
-    eq(drawer_header(), 'HEAD main · viewed 0 of 3')
+    eq(drawer_header(), 'HEAD main · viewed 0 of 4')
     eq(diff_header(), '○ not viewed  +2 −2 ')
 end
 
@@ -1422,7 +1430,7 @@ T['viewed']['a file on both sides shows the mark on both rows'] = function()
 
     eq(drawer_rows()[2], 'M ○ a.txt | M ✓ b.txt')
     eq(drawer_rows()[3], 'M ✓ b.txt | ')
-    eq(drawer_header(), 'HEAD main · viewed 1 of 3')
+    eq(drawer_header(), 'HEAD main · viewed 1 of 4')
 end
 
 T['viewed']['staging keeps a file viewed'] = function()
@@ -1436,7 +1444,7 @@ T['viewed']['staging keeps a file viewed'] = function()
     wait_state('a.txt', 'viewed')
 
     eq(drawer_rows()[2], 'M ○ b.txt | M ✓ a.txt')
-    eq(drawer_header(), 'HEAD main · viewed 1 of 3')
+    eq(drawer_header(), 'HEAD main · viewed 1 of 4')
 end
 
 T['viewed']['an edit from outside turns viewed into changed'] = function()
@@ -1451,7 +1459,7 @@ T['viewed']['an edit from outside turns viewed into changed'] = function()
     wait_state('b.txt', 'changed')
 
     eq(drawer_rows()[3], 'M ↻ b.txt | ')
-    eq(drawer_header(), 'HEAD main · viewed 0 of 3 · ↻ 1 changed')
+    eq(drawer_header(), 'HEAD main · viewed 0 of 4 · ↻ 1 changed')
 
     select_item('unstaged', 'b.txt')
     wait_diff('unstaged b.txt')
@@ -1460,7 +1468,7 @@ T['viewed']['an edit from outside turns viewed into changed'] = function()
     child.type_keys('v')
     wait_state('b.txt', 'viewed')
     wait_diff_header('✓ viewed')
-    eq(drawer_header(), 'HEAD main · viewed 1 of 3')
+    eq(drawer_header(), 'HEAD main · viewed 1 of 4')
 end
 
 T['viewed']['an edit of the shown file updates the diff header'] = function()
@@ -1499,32 +1507,17 @@ T['viewed']['a deleted file can be viewed and comes back changed'] = function()
     wait_state('a.txt', 'changed')
 end
 
-T['viewed']['files of an expanded directory take marks'] = function()
+T['viewed']['each file of an untracked directory takes its own mark'] = function()
     open_review()
     wait_diff('unstaged a.txt')
-    select_item('unstaged', 'd/')
-    child.type_keys('<Tab>')
-    helpers.wait_until(child, '#' .. R .. '.drawer.rows == 6')
-
-    eq(drawer_rows()[5], '?   d/ | ')
-    eq(drawer_rows()[6], '? ○ x.txt | ')
-    eq(drawer_header(), 'HEAD main · viewed 0 of 4')
-
     select_item('unstaged', 'd/x.txt')
     wait_diff('unstaged d/x.txt')
     child.type_keys('v')
     wait_state('d/x.txt', 'viewed')
 
-    eq(drawer_rows()[6], '? ✓ x.txt | ')
-end
-
-T['viewed']['v on a directory warns'] = function()
-    open_review()
-    wait_diff('unstaged a.txt')
-    select_item('unstaged', 'd/')
-    child.type_keys('v')
-
-    eq(child.lua_get('_G.notes'), { { '[iter] No file selected', 3 } })
+    eq(drawer_rows()[4], '? ○ c.txt | ')
+    eq(drawer_rows()[5], '? ✓ d/x.txt | ')
+    eq(drawer_header(), 'HEAD main · viewed 1 of 4')
 end
 
 T['viewed']['viewed marks survive a restart'] = function()
@@ -1540,7 +1533,7 @@ T['viewed']['viewed marks survive a restart'] = function()
     wait_diff('unstaged a.txt')
 
     eq(drawer_rows()[2], 'M ✓ a.txt | M ○ b.txt')
-    eq(drawer_header(), 'HEAD main · viewed 1 of 3')
+    eq(drawer_header(), 'HEAD main · viewed 1 of 4')
 end
 
 T['viewed']['the header counts comments and outdated comments'] = function()
@@ -1571,7 +1564,7 @@ T['viewed']['the header counts comments and outdated comments'] = function()
 
     eq(
         drawer_header(),
-        'HEAD main · viewed 1 of 3 · 4 comments · 2 outdated'
+        'HEAD main · viewed 1 of 4 · 4 comments · 2 outdated'
     )
 end
 
