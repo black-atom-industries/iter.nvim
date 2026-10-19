@@ -2,6 +2,50 @@
 
 These conventions apply to all project changes.
 
+## Scope
+
+iter is a Neovim-native staging and code review tool. It joins a minimal status menu (from
+[minifugit.nvim](https://github.com/vieitesss/minifugit.nvim)), [tuicr](https://github.com/agavra/tuicr)'s
+one-scroll review with comments, viewed marks and an export for agents, and
+[annotator.nvim](https://github.com/chpeters/annotator.nvim)'s comments in normal buffers.
+
+Out of scope: pull requests, commits and remote sync (commit, push and pull stay with a Git plugin such as mini.git),
+Jujutsu and Mercurial, merge conflict resolution, branch management, stash, a log browser, comment types, and sending
+the review straight to an agent pane.
+
+## Architecture
+
+- Diff flow: git's unified diff → `iter.diff.parser` (hunks) → `iter.diff.model` (rows: header, hunk, context, del,
+  add, gap, each with old and new line numbers) → `iter.diff.view` (buffer lines and extmarks). Hunks always come from
+  git's diff, so staging applies exactly what git produced. The full old and new file contents are fetched for syntax
+  and context; when they don't match the diff text (filters, CRLF), only the hunk text is used.
+- The diff buffer holds plain code. Row kinds show through line highlights and line numbers through a `statuscolumn`
+  that reads the model, so a yank gives clean code.
+- Syntax comes from a treesitter string parser per file version, cached per blob, with captures only for the rows
+  shown. Word emphasis pairs changed lines with `vim.text.diff` and skips lines that mostly changed.
+- Hidden context is gap rows in the model that expand in batches, not folds.
+- The renderer is pure Lua. A binary dependency (such as libvscode-diff) comes in only after Nik decides for it.
+- `Iter*` highlight groups derive from the colorscheme on every `ColorScheme` event.
+- Comments are `virt_lines` extmarks: line and range comments under their last row, deleted-line comments on the del
+  row, file comments on the header row.
+- Anchors resolve with one function: an exact block match at the stored lines first, then the match nearest to them.
+  The new side follows the worktree file, the old side its `base` (HEAD or index). `outdated` is set when the anchor
+  isn't found and cleared when it is found again. A diff view places comments against its own version without
+  persisting.
+- Store: `stdpath('data')/iter/<main worktree basename>-<first 8 hex of sha256 of git-common-dir>/<branch>.json`, so
+  linked worktrees share it. The branch name has `%` and `/` percent-encoded; a detached HEAD uses `HEAD.json`.
+  Writes go through a temp file renamed into place, after re-reading and merging by comment id.
+- Viewed: viewed when the stored `git hash-object` of the worktree file equals the current one, changed when it
+  differs, unviewed without a record. Staging doesn't change it.
+- Discard never touches the index or ignored files: an unstaged row restores from the index, an untracked row deletes
+  only its untracked files, and the confirm names the paths. The Staged column has no discard.
+- The drawer float sits at the bottom of its pane (`relative = 'win'`, `anchor = 'SW'`) at `drawer.zindex`; help and
+  picker floats use `drawer.zindex + 10`, the comment float `+ 20`. In the review tab the drawer covers a spacer split
+  of its own height, so it never hides the diff.
+- In the status drawer the pane above shows the diff view in place of its buffer. The view saves the window-local
+  options it changes and restores them on every exit path.
+- Viewed marks and comment counts show only in the review drawer.
+
 ## Project shape
 
 - Keep the public `iter` entrypoints thin and move behavior into focused modules.

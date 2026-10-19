@@ -1,6 +1,6 @@
 ## About the plugin
 
-This is a Neovim plugin, written in Lua, that provides a lightweight Git status UI inspired by fugitive.nvim.
+This is a Neovim plugin, written in Lua, for Git staging and code review: a status drawer, and a review tab with comments, viewed marks and an export for agents.
 
 ## Working on a new issue
 
@@ -12,10 +12,9 @@ This is a Neovim plugin, written in Lua, that provides a lightweight Git status 
     - Do not over-split code. Long files are okay. Long files that handle more functionalities than what it should, no.
 - Write the code.
 - Format the code.
-- Commit only when indicated, or when `docs/renovation.md` says the run commits per slice. Never push.
+- Commit only when indicated. Never push.
 
-The renovation plan, scope and build decisions live in `docs/renovation.md`. Read it before working on the renovation
-and keep its Phases section current.
+Open work lives in GitHub issues, milestone `v1`. Scope and architecture rules live in `docs/CONVENTIONS.md`.
 
 ## Tests
 
