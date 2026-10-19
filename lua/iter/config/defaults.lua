@@ -11,6 +11,7 @@
 ---@field expand_step? integer Hidden context lines revealed per expand
 ---@field syntax_max_lines? integer Files longer than this get no syntax
 ---@field word_diff? boolean
+---@field args? string[] Extra flags for every `git diff`, see the README for the allowed ones
 
 ---@class IterExportOptions
 ---@field intro? string Text placed before the exported annotations
@@ -57,6 +58,7 @@ M.options = {
         expand_step = 20,
         syntax_max_lines = 20000,
         word_diff = true,
+        args = {},
     },
     export = {
         intro = 'I reviewed your changes and have these annotations.\n'

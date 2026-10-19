@@ -200,6 +200,7 @@ require('iter').setup({
         expand_step = 20,          -- hidden context lines shown per expand
         syntax_max_lines = 20000,  -- longer files get no syntax highlighting
         word_diff = true,          -- highlight the changed words in changed lines
+        args = {},                 -- extra flags for every `git diff`, see below
     },
     export = {
         intro = 'I reviewed your changes and have these annotations.\n'
@@ -223,6 +224,26 @@ require('iter').setup({
 The source of truth is
 [`lua/iter/config/defaults.lua`](lua/iter/config/defaults.lua). Unknown
 options, views or actions raise an error.
+
+### Diff arguments
+
+`diff.args` adds flags to every `git diff` iter runs, for display and for
+staging. Only flags that leave hunks `git apply` can take back are allowed:
+
+- `--diff-algorithm=<myers|minimal|patience|histogram>`, `--patience`,
+  `--histogram`, `--minimal`
+- `--indent-heuristic`, `--no-indent-heuristic`
+- `--inter-hunk-context=<n>`
+- `-U<n>` or `--unified=<n>`, with `n` of 1 or more
+
+Anything else (`-w`, `--ignore-*`, `--word-diff`, `--color*`, `--no-prefix`,
+`-R`, `--text`, `-U0`) raises an error in `setup()`. iter's own flags
+(`--no-color`, `--no-ext-diff`, `--no-textconv`, `a/` and `b/` prefixes) come
+after yours.
+
+```lua
+require('iter').setup({ diff = { args = { '--histogram', '-U5' } } })
+```
 
 ### Keys
 

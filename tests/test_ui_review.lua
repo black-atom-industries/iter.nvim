@@ -1443,6 +1443,40 @@ T['hunks']['visual s stages the selected lines and visual u unstages them'] = fu
     eq(child.lua_get('_G.notes'), {})
 end
 
+T['hunks']['staging works with diff.args -U1 and --histogram'] = function()
+    setup([[{ diff = { args = { '-U1', '--histogram' } } }]])
+    local a = numbered('a', 1, 30)
+    a[3] = 'a3 changed'
+    a[25] = 'a25 changed'
+    table.insert(a, 11, 'n2')
+    table.insert(a, 11, 'n1')
+    helpers.write_file(vim.fs.joinpath(repo, 'a.txt'), a)
+
+    open_review()
+    wait_diff('unstaged a.txt')
+    cursor_on('a3 changed')
+    child.type_keys('s')
+
+    local cached = git_out({ 'diff', '--cached', '--', 'a.txt' })
+    eq(cached:find('+a3 changed', 1, true) ~= nil, true)
+    eq(cached:find('a25 changed', 1, true), nil)
+    eq(cached:find('n1', 1, true), nil)
+
+    helpers.wait_until(child, R .. [[.drawer.view.files[1].side == 'unstaged']])
+    cursor_on('n1')
+    child.type_keys('V', 's')
+
+    local lines = vim.tbl_filter(function(line)
+        return vim.startswith(line, '+n')
+    end, vim.split(git_out({ 'diff', '--cached', '--', 'a.txt' }), '\n'))
+    eq(lines, { '+n1' })
+    eq(
+        git_out({ 'diff', '--', 'a.txt' }):find('+a25 changed', 1, true) ~= nil,
+        true
+    )
+    eq(child.lua_get('_G.notes'), {})
+end
+
 T['hunks']['visual s on a symlink warns and changes nothing'] = function()
     local link = vim.fs.joinpath(repo, 'l')
     vim.uv.fs_symlink('target-one', link)

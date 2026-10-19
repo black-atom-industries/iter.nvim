@@ -1,6 +1,6 @@
 ---@class IterResolvedOptions
 ---@field drawer { height: number, zindex: integer, breakpoint: integer, commits: integer }
----@field diff { expand_step: integer, syntax_max_lines: integer, word_diff: boolean }
+---@field diff { expand_step: integer, syntax_max_lines: integer, word_diff: boolean, args: string[] }
 ---@field export { intro: string }
 ---@field refresh { poll_ms: integer }
 ---@field confirm { discard: boolean, ignore: boolean }
@@ -35,6 +35,7 @@ local SCHEMA = {
         expand_step = 'integer',
         syntax_max_lines = 'integer',
         word_diff = 'boolean',
+        args = 'table',
     },
     export = { intro = 'string' },
     refresh = { poll_ms = 'integer' },
@@ -143,6 +144,73 @@ local function validate_keys(keys)
     end
 end
 
+local DIFF_ARGS_ALLOWED = '--diff-algorithm=<myers|minimal|patience|histogram>, '
+    .. '--patience, --histogram, --minimal, --indent-heuristic, '
+    .. '--no-indent-heuristic, --inter-hunk-context=<n>, -U<n> or '
+    .. '--unified=<n> with n >= 1'
+
+local DIFF_ALGORITHMS = {
+    myers = true,
+    minimal = true,
+    patience = true,
+    histogram = true,
+}
+
+local DIFF_FLAGS = {
+    ['--patience'] = true,
+    ['--histogram'] = true,
+    ['--minimal'] = true,
+    ['--indent-heuristic'] = true,
+    ['--no-indent-heuristic'] = true,
+}
+
+---@param arg any
+---@return boolean
+local function is_diff_arg(arg)
+    if type(arg) ~= 'string' then
+        return false
+    end
+
+    if DIFF_FLAGS[arg] then
+        return true
+    end
+
+    local algorithm = arg:match('^%-%-diff%-algorithm=(.*)$')
+
+    if algorithm ~= nil then
+        return DIFF_ALGORITHMS[algorithm] == true
+    end
+
+    if arg:match('^%-%-inter%-hunk%-context=%d+$') then
+        return true
+    end
+
+    local lines = arg:match('^%-U(%d+)$') or arg:match('^%-%-unified=(%d+)$')
+
+    return lines ~= nil and tonumber(lines) >= 1
+end
+
+---@param args any
+local function validate_diff_args(args)
+    if not vim.islist(args) then
+        error('opts.diff.args must be a list of strings', 0)
+    end
+
+    for index, arg in ipairs(args) do
+        if not is_diff_arg(arg) then
+            error(
+                string.format(
+                    'opts.diff.args[%d] = %s is not allowed (use: %s)',
+                    index,
+                    vim.inspect(arg),
+                    DIFF_ARGS_ALLOWED
+                ),
+                0
+            )
+        end
+    end
+end
+
 ---@param opts IterOptions
 local function validate(opts)
     local keys = opts.keys
@@ -161,6 +229,10 @@ local function validate(opts)
 
     if commits ~= nil and commits < 0 then
         error('opts.drawer.commits must be 0 or more', 0)
+    end
+
+    if opts.diff and opts.diff.args ~= nil then
+        validate_diff_args(opts.diff.args)
     end
 
     if keys ~= nil then

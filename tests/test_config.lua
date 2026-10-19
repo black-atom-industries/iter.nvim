@@ -23,6 +23,7 @@ T['resolve()']['returns the defaults without options'] = function()
         expand_step = 20,
         syntax_max_lines = 20000,
         word_diff = true,
+        args = {},
     })
     eq(
         resolved.options.export.intro,
@@ -50,6 +51,26 @@ T['resolve()']['merges partial options with the defaults'] = function()
     )
     eq(resolved.options.confirm.discard, false)
     eq(resolved.debug, true)
+end
+
+T['resolve()']['accepts the allowed diff.args'] = function()
+    local args = {
+        '--diff-algorithm=patience',
+        '--diff-algorithm=myers',
+        '--patience',
+        '--histogram',
+        '--minimal',
+        '--indent-heuristic',
+        '--no-indent-heuristic',
+        '--inter-hunk-context=0',
+        '--inter-hunk-context=8',
+        '-U1',
+        '-U12',
+        '--unified=5',
+    }
+
+    eq(config.resolve({ diff = { args = args } }).options.diff.args, args)
+    eq(config.resolve({ diff = { args = {} } }).options.diff.args, {})
 end
 
 T['resolve()']['remaps a key to a string or a list'] = function()
@@ -143,6 +164,51 @@ T['resolve() errors']['on a negative or fractional commit count'] = function()
     expect_error(function()
         config.resolve({ drawer = { commits = 1.5 } })
     end, 'opts%.drawer%.commits: expected integer')
+end
+
+T['resolve() errors']['on diff.args that break git apply'] = function()
+    local rejected = {
+        '-w',
+        '--ignore-all-space',
+        '--ignore-space-change',
+        '--word-diff',
+        '--color',
+        '--color-words',
+        '--no-prefix',
+        '--src-prefix=x/',
+        '-R',
+        '--text',
+        '-U0',
+        '--unified=0',
+        '-U',
+        '-U-1',
+        '-U 3',
+        '--diff-algorithm=bogus',
+        '--inter-hunk-context=-1',
+        '--stat',
+        '',
+    }
+
+    for _, arg in ipairs(rejected) do
+        expect_error(
+            function()
+                config.resolve({ diff = { args = { '--histogram', arg } } })
+            end,
+            'opts%.diff%.args%[2%] = .- is not allowed %(use: %-%-diff%-algorithm'
+        )
+    end
+
+    expect_error(function()
+        config.resolve({ diff = { args = { 5 } } })
+    end, 'opts%.diff%.args%[1%] = 5 is not allowed')
+
+    expect_error(function()
+        config.resolve({ diff = { args = '-U3' } })
+    end, 'opts%.diff%.args: expected table')
+
+    expect_error(function()
+        config.resolve({ diff = { args = { a = '-U3' } } })
+    end, 'opts%.diff%.args must be a list of strings')
 end
 
 T['resolve() errors']['on an unknown view'] = function()

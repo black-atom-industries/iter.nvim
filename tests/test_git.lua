@@ -480,6 +480,59 @@ T['ignore()']['escapes glob characters so only the path matches'] = function()
     eq(entry('a1.txt') ~= nil, true)
 end
 
+T['file_diff()'] = new_set()
+
+---@param args string[]
+---@param fn fun()
+local function with_diff_args(args, fn)
+    local iter = require('iter')
+    local before = iter.config
+    iter.config = require('iter.config').resolve({ diff = { args = args } })
+    local ok, err = pcall(fn)
+    iter.config = before
+    assert(ok, err)
+end
+
+---@param args string[]
+---@return string[] hunk headers
+local function hunk_headers(args)
+    local headers = {}
+
+    with_diff_args(args, function()
+        local source = git.file_diff(
+            repo,
+            { path = 'long.txt', side = 'unstaged', code = 'M' }
+        )
+        for _, line in ipairs(source.raw) do
+            if vim.startswith(line, '@@') then
+                table.insert(headers, line:match('^@@ .- @@'))
+            end
+        end
+    end)
+
+    return headers
+end
+
+T['file_diff()']['passes diff.args to git diff'] = function()
+    local lines = {}
+    for i = 1, 30 do
+        lines[i] = 'l' .. i
+    end
+    write('long.txt', lines)
+    helpers.git(repo, { 'add', 'long.txt' })
+    helpers.git(repo, { 'commit', '--quiet', '-m', 'long' })
+    lines[3] = 'l3 changed'
+    lines[12] = 'l12 changed'
+    write('long.txt', lines)
+
+    eq(hunk_headers({}), { '@@ -1,6 +1,6 @@', '@@ -9,7 +9,7 @@' })
+    eq(hunk_headers({ '-U5' }), { '@@ -1,17 +1,17 @@' })
+    eq(hunk_headers({ '--histogram', '-U1' }), {
+        '@@ -2,3 +2,3 @@',
+        '@@ -11,3 +11,3 @@',
+    })
+end
+
 T['run()']['logs the command, not its output'] = function()
     local log_path = require('iter.log').path()
     eq(vim.startswith(log_path, vim.env.ITER_TEST_HOME), true)
