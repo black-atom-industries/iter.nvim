@@ -30,14 +30,20 @@ end
 ---@field footer? [string, string][] hint chunks, with `chrome`
 ---@field min_lines? integer text lines kept when `height` gives fewer
 ---@field strip? IterFloatStrip|false a window pinned under the text, with `chrome`
+---@field side? IterFloatSide|false a window over the right of the text rows
 
 ---@class IterFloatStrip rows pinned at the bottom of the float's footprint, between its text and the footer; never focused
 ---@field buf integer
 ---@field lines integer
 
+---@class IterFloatSide a focusable window over the float's text rows, from `col` to the right edge, above the float
+---@field buf integer
+---@field col integer display column of the text area it starts at
+
 ---@class IterFloat
 ---@field win integer
 ---@field strip_win? integer the strip's window while `opts.strip` has lines
+---@field side_win? integer the side window while `opts.side` is set
 ---@field pane integer
 ---@field opts IterFloatOpts
 ---@field group integer
@@ -172,6 +178,7 @@ function M.open(opts)
     }, Float)
 
     self:place_strip(strip_config)
+    self:place_side()
 
     self.group =
         vim.api.nvim_create_augroup('iter.float.' .. win, { clear = true })
@@ -215,6 +222,7 @@ end
 ---@field footer? [string, string][]
 ---@field min_lines? integer
 ---@field strip? IterFloatStrip|false
+---@field side? IterFloatSide|false
 
 --- Fit the float to its pane again, optionally with new options.
 ---@param overrides? IterFloatOverrides
@@ -247,6 +255,65 @@ function Float:reposition(overrides)
 
     vim.api.nvim_win_set_config(self.win, config)
     self:place_strip(strip_config)
+    self:place_side()
+end
+
+--- Open, move or close the side window to match `opts.side`.
+function Float:place_side()
+    local side = self.opts.side
+    local win = self.side_win or -1
+    local open = util.is_valid_win(win)
+
+    if not side or not self:is_open() then
+        -- Cleared first, so a WinClosed handler sees the close as the
+        -- float's own.
+        self.side_win = nil
+
+        if open then
+            vim.api.nvim_win_close(win, true)
+        end
+
+        return
+    end
+
+    local width = vim.api.nvim_win_get_width(self.win)
+    local config = {
+        relative = 'win',
+        win = self.win,
+        row = 0,
+        col = side.col,
+        width = math.max(1, width - side.col),
+        height = vim.api.nvim_win_get_height(self.win),
+        zindex = self.opts.zindex + 1,
+        style = 'minimal',
+        focusable = true,
+    }
+
+    if open and vim.api.nvim_win_get_buf(win) == side.buf then
+        vim.api.nvim_win_set_config(win, config)
+        return
+    end
+
+    self.side_win = nil
+
+    if open then
+        vim.api.nvim_win_close(win, true)
+    end
+
+    self.side_win = vim.api.nvim_open_win(side.buf, false, config)
+    paint(self.side_win)
+    -- A new window copies the jumplist of the one it opens from.
+    vim.api.nvim_win_call(self.side_win, function()
+        vim.cmd.clearjumps()
+    end)
+
+    for name, value in pairs({ wrap = false, winfixbuf = true }) do
+        vim.api.nvim_set_option_value(
+            name,
+            value,
+            { scope = 'local', win = self.side_win }
+        )
+    end
 end
 
 --- Open, move or close the strip's window to match `config`.
@@ -292,6 +359,8 @@ end
 function Float:close()
     pcall(vim.api.nvim_del_augroup_by_id, self.group)
     self:place_strip(nil)
+    self.opts.side = false
+    self:place_side()
 
     if self:is_open() then
         vim.api.nvim_win_close(self.win, true)

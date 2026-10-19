@@ -17,6 +17,12 @@ local render = require('iter.ui.render')
 ---@field selectable? fun(item: any): boolean false for an item shown but never selected; every item is selectable by default
 ---@field cell fun(line: IterRenderLine, item: any, first: integer, width: integer): string text of one item's cell, `width` cells wide, highlights added at byte column `first`
 
+---@class IterLayoutStack sections one below the other in one column
+---@field sections IterLayoutColumn[] each with its title, a blank line between them
+---@field weight? number share of the width among the columns, 1 by default
+
+---@alias IterLayoutSlot IterLayoutColumn|IterLayoutStack one column side by side
+
 ---@class IterLayoutCell byte columns of one cell on its line
 ---@field first integer
 ---@field last integer
@@ -182,51 +188,105 @@ function M.widths(width, weights)
     return widths
 end
 
---- The columns side by side, a title line on top and one item per line
---- below, separated by `SEPARATOR`.
----@param columns IterLayoutColumn[]
----@param width integer
----@return IterLayout
-function M.columns(columns, width)
-    local widths = M.widths(
-        width,
-        vim.tbl_map(function(column)
-            return column.weight or 1
-        end, columns)
-    )
-    local result = { lines = {}, rows = {}, cells = {} }
-    local height = 0
+---@class IterLayoutEntry one line of a column: a title, an item, or blank without `column`
+---@field column? IterLayoutColumn
+---@field item? any
 
-    for _, column in ipairs(columns) do
-        height = math.max(height, #column.items)
+--- The sections of `slot`: a stack's own, else the column alone.
+---@param slot IterLayoutSlot
+---@return IterLayoutColumn[]
+local function sections(slot)
+    if slot.sections ~= nil then
+        return slot.sections
     end
 
-    for index = 0, height do
+    ---@cast slot IterLayoutColumn
+    return { slot }
+end
+
+--- The lines of `list` top to bottom: per column a title line and its
+--- items, with a blank line before each title after the first.
+---@param list IterLayoutColumn[]
+---@return IterLayoutEntry[]
+local function entries(list)
+    local result = {}
+
+    for i, column in ipairs(list) do
+        if i > 1 then
+            table.insert(result, {})
+        end
+
+        table.insert(result, { column = column })
+
+        for _, item in ipairs(column.items) do
+            table.insert(result, { column = column, item = item })
+        end
+    end
+
+    return result
+end
+
+--- Write `entry` as a cell `width` cells wide starting at byte column
+--- `first` of `line`, its item into `row` and `cells` when selectable.
+---@param line IterRenderLine
+---@param entry IterLayoutEntry?
+---@param first integer
+---@param width integer
+---@param row table<string, any>
+---@param cells table<string, IterLayoutCell>
+---@return string
+local function entry_text(line, entry, first, width, row, cells)
+    local column = entry and entry.column
+
+    if column == nil then
+        return string.rep(' ', width)
+    end
+
+    local item = entry.item
+
+    if item == nil then
+        return title_text(line, column, first, width)
+    end
+
+    local text = column.cell(line, item, first, width)
+
+    if selectable(column, item) then
+        row[column.id] = item
+        cells[column.id] = { first = first, last = first + #text }
+    end
+
+    return text
+end
+
+--- The slots side by side in `widths`, separated by `SEPARATOR`, at least
+--- `height` lines; with `trailing` a separator also ends each line.
+---@param slots IterLayoutSlot[]
+---@param widths integer[]
+---@param height integer
+---@param trailing boolean
+---@return IterLayout
+local function lay(slots, widths, height, trailing)
+    local result = { lines = {}, rows = {}, cells = {} }
+    local lists = {}
+
+    for i, slot in ipairs(slots) do
+        lists[i] = entries(sections(slot))
+        height = math.max(height, #lists[i])
+    end
+
+    for index = 1, height do
         local line = render.line('')
         local row, cells, parts = {}, {}, {}
         local first = 0
 
-        for i, column in ipairs(columns) do
-            local text
-            local item = column.items[index]
-
-            if index == 0 then
-                text = title_text(line, column, first, widths[i])
-            elseif item ~= nil then
-                text = column.cell(line, item, first, widths[i])
-
-                if selectable(column, item) then
-                    row[column.id] = item
-                    cells[column.id] = { first = first, last = first + #text }
-                end
-            else
-                text = string.rep(' ', widths[i])
-            end
+        for i in ipairs(slots) do
+            local text =
+                entry_text(line, lists[i][index], first, widths[i], row, cells)
 
             table.insert(parts, text)
             first = first + #text
 
-            if i < #columns then
+            if i < #slots or trailing then
                 table.insert(parts, M.SEPARATOR)
                 render.add_highlight(
                     line,
@@ -247,43 +307,78 @@ function M.columns(columns, width)
     return result
 end
 
---- The columns one below the other, each the full `width`: a title line,
---- its items, and a blank line before the next title.
----@param columns IterLayoutColumn[]
+---@param slots IterLayoutSlot[]
+---@return number[]
+local function weights(slots)
+    return vim.tbl_map(function(slot)
+        return slot.weight or 1
+    end, slots)
+end
+
+--- The slots side by side, separated by `SEPARATOR`: a column has its
+--- title on the first line and one item per line below; a stack has its
+--- sections one below the other, as `stacked` lays them out, the first
+--- title on the first line.
+---@param slots IterLayoutSlot[]
 ---@param width integer
 ---@return IterLayout
-function M.stacked(columns, width)
+function M.columns(slots, width)
+    return lay(slots, M.widths(width, weights(slots)), 0, false)
+end
+
+---@class IterLayoutSplit the last slot apart from the others
+---@field left IterLayout the other slots, each line ending in a separator
+---@field right IterLayout the last slot, as many lines as `left`
+---@field col integer display column the last slot starts at
+
+--- The slots as `columns` lays them out in `width`, the last one in a
+--- layout of its own, for a window of its own beside the others.
+---@param slots IterLayoutSlot[]
+---@param width integer
+---@return IterLayoutSplit
+function M.split(slots, width)
+    local widths = M.widths(width, weights(slots))
+    local last = #slots
+    local right = lay({ slots[last] }, { widths[last] }, 0, false)
+    local col = (last - 1) * vim.fn.strdisplaywidth(M.SEPARATOR)
+
+    for i = 1, last - 1 do
+        col = col + widths[i]
+    end
+
+    local left =
+        lay(vim.list_slice(slots, 1, last - 1), widths, #right.lines, true)
+
+    return {
+        left = left,
+        right = lay({ slots[last] }, { widths[last] }, #left.lines, false),
+        col = col,
+    }
+end
+
+--- Every section of the slots one below the other, each the full `width`:
+--- a title line, its items, and a blank line before the next title.
+---@param slots IterLayoutSlot[]
+---@param width integer
+---@return IterLayout
+function M.stacked(slots, width)
     local result = { lines = {}, rows = {}, cells = {} }
+    local list = {}
 
-    for i, column in ipairs(columns) do
-        if i > 1 then
-            table.insert(result.lines, render.line(''))
-            table.insert(result.rows, {})
-            table.insert(result.cells, {})
-        end
+    for _, slot in ipairs(slots) do
+        vim.list_extend(list, sections(slot))
+    end
 
-        local title = render.line('')
-        title.text = title_text(title, column, 0, width)
-        table.insert(result.lines, title)
-        table.insert(result.rows, {})
-        table.insert(result.cells, {})
+    for _, entry in ipairs(entries(list)) do
+        local line = render.line('')
+        local row, cells = {}, {}
 
-        for _, item in ipairs(column.items) do
-            local line = render.line('')
-            line.text = column.cell(line, item, 0, width)
-            table.insert(result.lines, line)
-
-            if selectable(column, item) then
-                table.insert(result.rows, { [column.id] = item })
-                table.insert(
-                    result.cells,
-                    { [column.id] = { first = 0, last = #line.text } }
-                )
-            else
-                table.insert(result.rows, {})
-                table.insert(result.cells, {})
-            end
-        end
+        line.text = entry.column
+                and entry_text(line, entry, 0, width, row, cells)
+            or ''
+        table.insert(result.lines, line)
+        table.insert(result.rows, row)
+        table.insert(result.cells, cells)
     end
 
     return result

@@ -194,23 +194,25 @@ local function open_review()
     )
 end
 
---- Open the review and press l twice: Unstaged, Staged, Annotations.
+--- Open the review and press l into the Annotations window.
 local function open_column()
     open_review()
-    child.type_keys('l', 'l')
+    child.type_keys('l')
     eq(child.lua_get(R .. '.drawer.column'), 'annotations')
 end
 
---- The Annotations column, one trimmed cell per line.
+--- The Annotations column in its own window, one trimmed cell per line.
 ---@return string[]
 local function column()
     local lines = child.lua_get(
-        [[vim.api.nvim_buf_get_lines(]] .. R .. [[.drawer.buf, 0, -1, false)]]
+        [[vim.api.nvim_buf_get_lines(]]
+            .. R
+            .. [[.drawer.side_buf, 0, -1, false)]]
     )
     local cells = {}
 
     for _, line in ipairs(lines) do
-        local cell = vim.trim(vim.split(line, '│')[3] or '')
+        local cell = vim.trim(line)
 
         if cell ~= '' then
             table.insert(cells, cell)
@@ -358,7 +360,7 @@ T['column']['dims outdated rows and titles with the outdated count'] = function(
     open_review()
 
     local groups = child.lua_get([[(function()
-        local buf = require('iter').current_review.drawer.buf
+        local buf = require('iter').current_review.drawer.side_buf
         local ns = vim.api.nvim_get_namespaces()['iter.ui.render']
         local result = {}
         for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
@@ -415,8 +417,26 @@ T['column']['l reaches the column, the progress row is skipped'] = function()
     eq(selected(), 'Rename the variable')
 
     child.type_keys('h')
-    eq(child.lua_get(R .. '.drawer.column'), 'staged')
+    eq(child.lua_get(R .. '.drawer.column'), 'unstaged')
     eq(footer(), 's stage  u unstage  d discard  <CR> open  ? help')
+end
+
+T['column']['h and l select again the file and the annotation they left'] = function()
+    open_column()
+    down(2)
+    eq(selected(), 'Why this change?')
+
+    child.type_keys('h')
+    eq(child.lua_get(R .. '.drawer:selected().path'), 'n.txt')
+
+    child.type_keys('j')
+    eq(child.lua_get(R .. '.drawer:selected().side'), 'staged')
+
+    child.type_keys('l')
+    eq(selected(), 'Why this change?')
+
+    child.type_keys('h')
+    eq(child.lua_get(R .. '.drawer:selected().side'), 'staged')
 end
 
 T['column']['without annotations the column shows the progress only'] = function()
@@ -428,7 +448,7 @@ T['column']['without annotations the column shows the progress only'] = function
         { 'Annotations (0)', 'viewed □□□□□□□□ 0 of 2' }
     )
 
-    child.type_keys('l', 'l')
+    child.type_keys('l')
     eq(child.lua_get(R .. '.drawer.column'), 'annotations')
     eq(selected(), vim.NIL)
 
@@ -471,6 +491,32 @@ T['column']['screenshot'] = function()
     helpers.expect_screenshot(child, 'review-annotations')
 end
 
+T['column']['a long file list scrolls under the Annotations window'] = function()
+    for i = 1, 20 do
+        helpers.write_file(
+            vim.fs.joinpath(repo, string.format('f%02d.txt', i)),
+            { 'f' }
+        )
+    end
+
+    open_review()
+    helpers.wait_until(child, '#' .. R .. '.drawer.changes.unstaged == 21')
+    child.type_keys('G')
+    wait_diff('staged m.txt')
+
+    local tops = child.lua_get([[(function()
+        local d = ]] .. R .. [[.drawer
+        return {
+            files = vim.fn.getwininfo(d.win)[1].topline,
+            annotations = vim.fn.getwininfo(d.float.side_win)[1].topline,
+        }
+    end)()]])
+
+    eq(tops.files > 1, true)
+    eq(tops.annotations, 1)
+    helpers.expect_screenshot(child, 'review-long-files')
+end
+
 T['preview'] = new_set()
 
 T['preview']['moving onto a row shows its file with the annotation focused'] = function()
@@ -492,7 +538,9 @@ T['preview']['moving onto a row shows its file with the annotation focused'] = f
     eq(groups['outdated · Stale remark'], 'IterDiffAnnotationOutdated')
     eq(
         child.lua_get(
-            [[vim.api.nvim_get_current_win() == ]] .. R .. [[.drawer.win]]
+            [[vim.api.nvim_get_current_win() == ]]
+                .. R
+                .. [[.drawer.float.side_win]]
         ),
         true
     )
@@ -685,7 +733,7 @@ T['keys']['e edits the annotation in the float'] = function()
             .. [[.drawer:item().annotation.body == 'Why this change? Please explain.']]
     )
 
-    eq(column()[5], 'm.txt:3     Why this change? Please explain.')
+    eq(column()[5], 'm.txt:3     Why this change? Please ex…')
 end
 
 T['keys']['x keeps the annotation when the confirm is declined'] = function()
@@ -780,7 +828,9 @@ T['api']['annotations() opens the review on the column from a buffer'] = functio
     eq(child.lua_get(R .. '.drawer.column'), 'annotations')
     eq(
         child.lua_get(
-            [[vim.api.nvim_get_current_win() == ]] .. R .. [[.drawer.win]]
+            [[vim.api.nvim_get_current_win() == ]]
+                .. R
+                .. [[.drawer.float.side_win]]
         ),
         true
     )

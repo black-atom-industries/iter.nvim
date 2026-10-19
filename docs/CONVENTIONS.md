@@ -47,7 +47,14 @@ the review straight to an agent pane.
 - In the status drawer the pane above shows the diff view in place of its buffer. The view saves the window-local
   options it changes and restores them on every exit path.
 - The drawer's lines come from `iter.ui.layout`: pure functions from a list of column specs and the width to render
-  lines, side by side at `drawer.breakpoint` and wider, stacked below it. The drawer holds what the status and review
+  lines, side by side at `drawer.breakpoint` and wider, stacked below it. A stack (`IterLayoutStack`) puts several
+  specs as titled sections in one column; the review drawer's columns layout stacks Unstaged above Staged beside the
+  Annotations column, and `h` and `l` step between those columns, each keeping its last selection. There
+  `layout.split` gives the Annotations column a layout of its own, shown in the float's side window (`IterFloatSide`):
+  a focusable window over the right of the float's text rows at `drawer.zindex + 1`, with its own buffer, so the file
+  list scrolls alone. The float opens, moves and closes it; the drawer closes when it is closed from outside, and
+  focus moves into it only through `h` and `l`, opening the review on the Annotations column, and a resize that splits
+  it off while an annotation is selected in the drawer. The drawer holds what the status and review
   drawers share; the review tab plugs in its viewed marks, annotation counts, header, Annotations column, its preview
   and spacer sizing as the drawer's extras (`IterDrawerExtras`). Columns the extras add come after the file columns;
   their items carry a `key`, and `Drawer:selected()` returns files only.

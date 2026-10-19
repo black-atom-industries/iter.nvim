@@ -879,7 +879,7 @@ T['refresh']['a refresh in the background refits the spacer only'] = function()
         helpers.write_file(vim.fs.joinpath(repo, 'n' .. i .. '.txt'), { 'n' })
     end
 
-    helpers.wait_until(child, '#' .. R .. '.drawer.rows == 11')
+    helpers.wait_until(child, '#' .. R .. '.drawer.rows == 14')
 
     eq(child.lua_get(layout), before)
 
@@ -1035,6 +1035,26 @@ end
 T['close'][':q in the drawer closes the tab'] = function()
     expect_clean_exit(function()
         child.cmd('quit')
+    end)
+end
+
+T['close'][':q in the Annotations window closes the tab'] = function()
+    expect_clean_exit(function()
+        child.type_keys('l')
+        child.cmd('quit')
+    end)
+end
+
+T['close']['closing the spacer pane closes the tab'] = function()
+    expect_clean_exit(function()
+        child.type_keys('l')
+        child.lua('vim.api.nvim_win_close(' .. R .. '.spacer_win, true)')
+    end)
+end
+
+T['close']['q in the Annotations window closes the tab'] = function()
+    expect_clean_exit(function()
+        child.type_keys('l', 'q')
     end)
 end
 
@@ -1440,7 +1460,7 @@ T['viewed'] = new_set({
     },
 })
 
---- The drawer's rows as `<unstaged cell> | <staged cell>`, trimmed.
+--- The drawer's file column, one trimmed cell per line.
 ---@return string[]
 local function drawer_rows()
     local lines = child.lua_get(
@@ -1448,9 +1468,7 @@ local function drawer_rows()
     )
 
     return vim.tbl_map(function(line)
-        local cells = vim.split(line, '│')
-
-        return vim.trim(cells[1]) .. ' | ' .. vim.trim(cells[2])
+        return vim.trim(vim.split(line, '│')[1])
     end, lines)
 end
 
@@ -1474,10 +1492,10 @@ local function progress()
     local line = child.lua_get(
         [[vim.api.nvim_buf_get_lines(]]
             .. R
-            .. [[.drawer.buf, 1, 2, false)[1] ]]
+            .. [[.drawer.side_buf, 1, 2, false)[1] ]]
     )
 
-    return vim.trim(vim.split(line, '│')[3])
+    return vim.trim(line)
 end
 
 --- The text of the diff header's right-aligned virtual text.
@@ -1554,11 +1572,14 @@ T['viewed']['rows start unviewed, the header counts files, the column shows prog
     wait_diff('unstaged a.txt')
 
     eq(drawer_rows(), {
-        'Unstaged (4) | Staged (1)',
-        'M ○ a.txt | M ○ b.txt',
-        'M ○ b.txt | ',
-        '? ○ c.txt | ',
-        '? ○ d/x.txt | ',
+        'Unstaged (4)',
+        'M ○ a.txt',
+        'M ○ b.txt',
+        '? ○ c.txt',
+        '? ○ d/x.txt',
+        '',
+        'Staged (1)',
+        'M ○ b.txt',
     })
     eq(drawer_header(), 'HEAD main 4 files')
     eq(progress(), 'viewed □□□□□□□□ 0 of 4')
@@ -1572,7 +1593,8 @@ T['viewed']['v in the drawer toggles the selected file'] = function()
     child.type_keys('v')
     wait_state('a.txt', 'viewed')
 
-    eq(drawer_rows()[2], 'M ✓ a.txt | M ○ b.txt')
+    eq(drawer_rows()[2], 'M ✓ a.txt')
+    eq(drawer_rows()[8], 'M ○ b.txt')
     eq(progress(), 'viewed ■■□□□□□□ 1 of 4')
     eq(diff_header(), '✓ viewed  +2 −2 ')
     eq(child.lua_get('_G.notes'), {})
@@ -1596,7 +1618,8 @@ T['viewed']['v in the diff pane toggles the shown file'] = function()
         true
     )
     eq(diff_header(), '✓ viewed  +2 −2 ')
-    eq(drawer_rows()[2], 'M ✓ a.txt | M ○ b.txt')
+    eq(drawer_rows()[2], 'M ✓ a.txt')
+    eq(drawer_rows()[8], 'M ○ b.txt')
 
     child.type_keys('v')
     wait_state('a.txt', 'unviewed')
@@ -1609,8 +1632,9 @@ T['viewed']['a file on both sides shows the mark on both rows'] = function()
     view_file('b.txt')
     wait_state('b.txt', 'viewed')
 
-    eq(drawer_rows()[2], 'M ○ a.txt | M ✓ b.txt')
-    eq(drawer_rows()[3], 'M ✓ b.txt | ')
+    eq(drawer_rows()[2], 'M ○ a.txt')
+    eq(drawer_rows()[8], 'M ✓ b.txt')
+    eq(drawer_rows()[3], 'M ✓ b.txt')
     eq(progress(), 'viewed ■■□□□□□□ 1 of 4')
 end
 
@@ -1624,7 +1648,8 @@ T['viewed']['staging keeps a file viewed'] = function()
     helpers.wait_until(child, '#' .. R .. '.drawer.changes.staged == 2')
     wait_state('a.txt', 'viewed')
 
-    eq(drawer_rows()[2], 'M ○ b.txt | M ✓ a.txt')
+    eq(drawer_rows()[2], 'M ○ b.txt')
+    eq(drawer_rows()[7], 'M ✓ a.txt')
     eq(progress(), 'viewed ■■□□□□□□ 1 of 4')
 end
 
@@ -1639,8 +1664,8 @@ T['viewed']['an edit from outside turns viewed into changed'] = function()
     edit_b_from_outside()
     wait_state('b.txt', 'changed')
 
-    eq(drawer_rows()[3], 'M ↻ b.txt | ')
-    eq(progress(), 'viewed □□□□□□□□ 0 of 4 · ↻ 1')
+    eq(drawer_rows()[3], 'M ↻ b.txt')
+    eq(progress(), '□□□□□□□□ 0 of 4 · ↻ 1')
 
     select_item('unstaged', 'b.txt')
     wait_diff('unstaged b.txt')
@@ -1673,7 +1698,8 @@ T['viewed']['a deleted file can be viewed and comes back changed'] = function()
     vim.fn.delete(vim.fs.joinpath(repo, 'a.txt'))
     open_review()
     wait_diff('unstaged a.txt')
-    eq(drawer_rows()[2], 'D ○ a.txt | M ○ b.txt')
+    eq(drawer_rows()[2], 'D ○ a.txt')
+    eq(drawer_rows()[8], 'M ○ b.txt')
 
     child.type_keys('v')
     wait_state('a.txt', 'viewed')
@@ -1696,8 +1722,8 @@ T['viewed']['each file of an untracked directory takes its own mark'] = function
     child.type_keys('v')
     wait_state('d/x.txt', 'viewed')
 
-    eq(drawer_rows()[4], '? ○ c.txt | ')
-    eq(drawer_rows()[5], '? ✓ d/x.txt | ')
+    eq(drawer_rows()[4], '? ○ c.txt')
+    eq(drawer_rows()[5], '? ✓ d/x.txt')
     eq(progress(), 'viewed ■■□□□□□□ 1 of 4')
 end
 
@@ -1713,7 +1739,8 @@ T['viewed']['viewed marks survive a restart'] = function()
     open_review()
     wait_diff('unstaged a.txt')
 
-    eq(drawer_rows()[2], 'M ✓ a.txt | M ○ b.txt')
+    eq(drawer_rows()[2], 'M ✓ a.txt')
+    eq(drawer_rows()[8], 'M ○ b.txt')
     eq(progress(), 'viewed ■■□□□□□□ 1 of 4')
 end
 
@@ -1806,6 +1833,218 @@ T['viewed']['screenshot of viewed, changed and unviewed rows'] = function()
     wait_diff_header('✓ viewed')
 
     helpers.expect_screenshot(child, 'review-viewed')
+end
+
+T['files'] = new_set()
+
+T['files']['Unstaged and Staged share the left column, Annotations the right'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+
+    local first = child.lua_get(
+        [[vim.api.nvim_buf_get_lines(]]
+            .. R
+            .. [[.drawer.side_buf, 0, 1, false)[1] ]]
+    )
+
+    eq(child.lua_get(R .. '.drawer.layout'), 'columns')
+    eq(vim.trim(first), 'Annotations (0)')
+    eq(
+        child.lua_get(
+            [[vim.api.nvim_win_get_buf(]]
+                .. R
+                .. [[.drawer.float.side_win) == ]]
+                .. R
+                .. [[.drawer.side_buf]]
+        ),
+        true
+    )
+    eq(drawer_rows()[7], 'Staged (1)')
+end
+
+T['files']['j crosses from the last Unstaged row into Staged, k goes back'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    select_item('unstaged', 'd/x.txt')
+    wait_diff('unstaged d/x.txt')
+
+    child.type_keys('j')
+    wait_diff('staged b.txt')
+    eq(selected(), 'staged b.txt')
+
+    child.type_keys('j')
+    eq(selected(), 'staged b.txt')
+
+    child.type_keys('k')
+    wait_diff('unstaged d/x.txt')
+    eq(selected(), 'unstaged d/x.txt')
+end
+
+T['files']['h and l switch columns and select again what was left'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    select_item('staged', 'b.txt')
+    wait_diff('staged b.txt')
+
+    child.type_keys('l')
+    eq(child.lua_get(R .. '.drawer.column'), 'annotations')
+
+    child.type_keys('h')
+    eq(selected(), 'staged b.txt')
+
+    child.type_keys('h')
+    eq(selected(), 'staged b.txt')
+end
+
+T['files']['u in the Staged section unstages and keeps a file selected'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    select_item('staged', 'b.txt')
+    wait_diff('staged b.txt')
+
+    child.type_keys('u')
+    helpers.wait_until(child, '#' .. R .. '.drawer.changes.staged == 0')
+
+    eq(drawer_rows()[7], 'Staged (0)')
+    eq(child.lua_get(R .. '.drawer.column'), 'unstaged')
+    eq(child.lua_get('_G.notes'), {})
+
+    select_item('unstaged', 'a.txt')
+    child.type_keys('s')
+    helpers.wait_until(child, '#' .. R .. '.drawer.changes.staged == 1')
+    select_item('staged', 'a.txt')
+    child.type_keys('s')
+    helpers.wait_until(child, '#' .. R .. '.drawer.changes.staged == 0')
+end
+
+T['files']['below the breakpoint Unstaged, Staged and Annotations stack'] = function()
+    child.o.columns = 60
+    open_review()
+    wait_diff('unstaged a.txt')
+
+    local titles = child.lua_get(
+        [[vim.tbl_filter(function(line)
+        return line:find('%(%d+%)') ~= nil
+    end, vim.tbl_map(vim.trim, vim.api.nvim_buf_get_lines(]]
+            .. R
+            .. [[.drawer.buf, 0, -1, false)))]]
+    )
+
+    eq(child.lua_get(R .. '.drawer.layout'), 'stacked')
+    eq(titles, { 'Unstaged (4)', 'Staged (1)', 'Annotations (0)' })
+end
+
+T['files']['l and h move the focus between the windows and back'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    select_item('unstaged', 'c.txt')
+    wait_diff('unstaged c.txt')
+
+    local focus = [[(function()
+        local d = ]] .. R .. [[.drawer
+        local win = vim.api.nvim_get_current_win()
+        return win == d.win and 'files'
+            or win == d.float.side_win and 'annotations'
+            or 'other'
+    end)()]]
+
+    child.type_keys('l')
+    eq(child.lua_get(focus), 'annotations')
+    eq(child.lua_get(R .. '.drawer.column'), 'annotations')
+
+    child.type_keys('h')
+    eq(child.lua_get(focus), 'files')
+    eq(selected(), 'unstaged c.txt')
+
+    child.type_keys('l', 'h')
+    eq(child.lua_get(focus), 'files')
+    eq(selected(), 'unstaged c.txt')
+end
+
+T['files']['entering either window selects there and a resize keeps the focus'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+
+    local state = [[(function()
+        local d = ]] .. R .. [[.drawer
+        local win = vim.api.nvim_get_current_win()
+        return (win == d.win and 'files'
+            or win == d.float.side_win and 'annotations'
+            or 'other') .. ' ' .. d.column
+    end)()]]
+
+    child.type_keys(
+        '<Cmd>lua vim.api.nvim_set_current_win('
+            .. R
+            .. '.drawer.float.side_win)<CR>'
+    )
+    eq(child.lua_get(state), 'annotations annotations')
+
+    child.type_keys(
+        '<Cmd>lua vim.api.nvim_set_current_win(' .. R .. '.drawer.win)<CR>'
+    )
+    eq(child.lua_get(state), 'files unstaged')
+
+    child.type_keys('<C-w>w', '<C-w>w')
+    eq(child.lua_get(state), 'files unstaged')
+
+    child.o.columns = 81
+    helpers.wait_until(
+        child,
+        [[vim.api.nvim_win_get_width(]] .. R .. [[.drawer.pane) == 81]]
+    )
+    child.lua('vim.wait(50)')
+    eq(child.lua_get(state), 'files unstaged')
+end
+
+T['files']['crossing the breakpoint opens and closes the Annotations window'] = function()
+    child.o.columns = 120
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.type_keys('l')
+
+    local state = [[(function()
+        local d = ]] .. R .. [[.drawer
+        local side = d.float.side_win
+        return {
+            layout = d.layout,
+            side = side ~= nil and vim.api.nvim_win_is_valid(side),
+            focus = vim.api.nvim_get_current_win() == d.win and 'files'
+                or vim.api.nvim_get_current_win() == side and 'annotations'
+                or 'other',
+            column = d.column,
+            wins = #vim.api.nvim_tabpage_list_wins(0),
+        }
+    end)()]]
+
+    eq(child.lua_get(state), {
+        layout = 'columns',
+        side = true,
+        focus = 'annotations',
+        column = 'annotations',
+        wins = 4,
+    })
+
+    child.o.columns = 60
+    helpers.wait_until(child, R .. [[.drawer.layout == 'stacked']])
+    eq(child.lua_get(state), {
+        layout = 'stacked',
+        side = false,
+        focus = 'files',
+        column = 'annotations',
+        wins = 3,
+    })
+
+    child.o.columns = 120
+    helpers.wait_until(child, R .. [[.drawer.layout == 'columns']])
+    eq(child.lua_get(state), {
+        layout = 'columns',
+        side = true,
+        focus = 'annotations',
+        column = 'annotations',
+        wins = 4,
+    })
+    eq(child.v.errmsg, '')
 end
 
 T['flow'] = new_set()

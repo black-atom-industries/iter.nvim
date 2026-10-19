@@ -490,11 +490,11 @@ T['counts']['the review drawer shows counts on rows and files in the header'] = 
     -- The count sits at the right end of the cell, which keeps its width.
     eq(
         vim.split(lines[2], '│')[1],
-        ' M ○ m.txt' .. string.rep(' ', 8) .. '[6] '
+        ' M ○ m.txt' .. string.rep(' ', 38) .. '[6] '
     )
     eq(
         vim.split(lines[3], '│')[1],
-        ' M ○ n.txt' .. string.rep(' ', 8) .. '[1] '
+        ' M ○ n.txt' .. string.rep(' ', 38) .. '[1] '
     )
 
     local title = child.lua_get([[(function()

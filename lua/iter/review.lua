@@ -777,12 +777,12 @@ function Review:focus_annotations()
 
     vim.api.nvim_set_current_tabpage(self.tab)
 
-    if util.is_valid_win(drawer.win) then
-        vim.api.nvim_set_current_win(drawer.win)
-    end
-
     if #lines > 0 then
         drawer:select(lines[1], ANNOTATIONS)
+    end
+
+    if util.is_valid_win(drawer.win) then
+        vim.api.nvim_set_current_win(drawer:selection_win())
     end
 end
 
@@ -947,7 +947,7 @@ function Review:attach()
                 vim.api.nvim_get_current_win() == self.spacer_win
                 and util.is_valid_win(self.drawer.win)
             then
-                vim.api.nvim_set_current_win(self.drawer.win)
+                vim.api.nvim_set_current_win(self.drawer:selection_win())
             end
         end,
     })
