@@ -809,7 +809,7 @@ end
 T['edit and delete']['e in the review redraws the file buffer'] = function()
     seed_line_annotation()
     child.cmd('edit m.txt')
-    eq(buffer_mark_texts(), { '▎ old body' })
+    eq(buffer_mark_texts(), { '▎ 󰆉 old body' })
 
     open_review()
     diff_cursor('l4')
@@ -819,13 +819,13 @@ T['edit and delete']['e in the review redraws the file buffer'] = function()
     child.type_keys('<C-u>', 'new body', '<C-s>')
 
     eq(stored()[1].body, 'new body')
-    eq(buffer_mark_texts(), { '▎ new body' })
+    eq(buffer_mark_texts(), { '▎ 󰆉 new body' })
 end
 
 T['edit and delete']['x in the review clears the mark of the file buffer'] = function()
     seed_line_annotation()
     child.cmd('edit m.txt')
-    eq(buffer_mark_texts(), { '▎ old body' })
+    eq(buffer_mark_texts(), { '▎ 󰆉 old body' })
 
     open_review()
     diff_cursor('l4')

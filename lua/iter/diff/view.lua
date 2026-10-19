@@ -445,7 +445,8 @@ function View:render_marks()
         NS_ANNOTATIONS,
         self.marks,
         self.marks_width,
-        self.focus
+        self.focus,
+        require('iter').config.options.icons.annotation
     )
 end
 

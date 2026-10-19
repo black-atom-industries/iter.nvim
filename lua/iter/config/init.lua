@@ -4,6 +4,7 @@
 ---@field export { intro: string }
 ---@field refresh { poll_ms: integer }
 ---@field confirm { discard: boolean }
+---@field icons { annotation: string }
 ---@field debug boolean
 
 ---@class IterConfig
@@ -38,6 +39,7 @@ local SCHEMA = {
     export = { intro = 'string' },
     refresh = { poll_ms = 'integer' },
     confirm = { discard = 'boolean' },
+    icons = { annotation = 'string' },
 }
 
 ---@param tbl table

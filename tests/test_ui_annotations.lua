@@ -289,9 +289,10 @@ local function mark_groups()
         local result = {}
         for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(view.buf, ns, 0, -1, { details = true })) do
             for _, line in ipairs(mark[4].virt_lines) do
-                local text = vim.trim(line[2][1])
+                local last = line[#line]
+                local text = vim.trim(last[1])
                 if not vim.startswith(text, 'for these') then
-                    result[text] = line[2][2]
+                    result[text] = last[2]
                 end
             end
         end
