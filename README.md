@@ -22,7 +22,9 @@ A Git staging and code review tool for Neovim.
 - **Annotations** on a line, a range, a deleted line, a file or the whole review,
   in the review diff and in normal file buffers. Annotations follow their code
   when it moves and turn outdated when it is gone.
-- **Annotation picker** grouped by file, to filter, jump, edit and delete.
+- **Annotations column** in the review drawer: every annotation in drawer
+  order with the viewed progress on top. Moving onto one shows it in the diff;
+  jump, edit and delete from there.
 - **Viewed marks** per file that drop back when the file changes afterwards.
 - **Export:** copy all annotations as a prompt for an agent, then clear them if
   you like.
@@ -78,8 +80,8 @@ so a plugin manager must not delay it until the first `:Iter`.
 ```
 
 Outside a git repository iter warns and opens nothing. On a clean tree the
-drawer says "Working tree clean"; the review tab still opens for review
-annotations.
+status drawer says "Working tree clean"; the review tab still opens, with its
+Annotations column.
 
 In the drawer, `j` and `k` move through the files and the window above shows
 the diff. `<CR>` opens the file there and closes the drawer. `r` opens the
@@ -95,7 +97,7 @@ iter.status()                        -- same as :Iter status
 iter.review()                        -- same as :Iter review
 iter.annotate()                      -- annotate the cursor line or the visual range
 iter.annotate({ scope = 'review' })  -- annotate the whole review
-iter.annotations()                   -- open the annotation picker
+iter.annotations()                   -- open the review on its Annotations column
 iter.yank()                          -- copy the review as a prompt
 iter.statusline()                    -- text for your statusline
 ```
@@ -124,7 +126,7 @@ and the annotation. It then asks once whether to clear the annotations.
 require('iter').setup({
     drawer = {
         height = 0.3,     -- fraction of the window height
-        zindex = 40,      -- float stacking order; help, picker and annotation floats sit above it
+        zindex = 40,      -- float stacking order; help and annotation floats sit above it
         breakpoint = 80,  -- drawer width below which the columns stack
     },
     diff = {
@@ -189,13 +191,14 @@ The drawer of the review tab (`review_drawer`):
 
 | Key | Action | Does |
 | --- | ------ | ---- |
-| `<CR>` | `open` | Open the file |
+| `<CR>` | `open` | Open the diff, or jump to the annotation |
 | `s` | `stage` | Stage or unstage the file |
 | `u` | `unstage` | Unstage the file |
 | `d` | `discard` | Discard changes in the file |
 | `v` | `viewed` | Toggle viewed |
 | `A` | `annotate_file` | Annotate the file |
-| `L` | `picker` | List annotations |
+| `e` | `edit` | Edit the annotation |
+| `x` | `delete` | Delete the annotation |
 | `y` | `yank` | Copy the review |
 | `q` | `close` | Close |
 | `?` | `help` | Show the keys |
@@ -223,12 +226,21 @@ The diff pane of the review tab (`diff`):
 | `<CR>` | `expand` | Expand hidden context |
 | `gf` | `goto_file` | Go to the line in the file |
 | `v` | `viewed` | Toggle viewed |
-| `L` | `picker` | List annotations |
 | `y` | `yank` | Copy the review |
 | `q` | `close` | Close |
 | `?` | `help` | Show the keys |
 
-`h` and `l` skip a column without files.
+The review drawer has three columns: Unstaged, Staged and Annotations. `h`
+and `l` move between them and skip a file column without files. The
+Annotations column starts with the viewed progress (`viewed ■■■□□□□□ 3 of 8`,
+then `· ↻ n` for files changed since they were viewed) and lists every
+annotation in drawer file order, review annotations last: the file name with
+`:line`, `:first–last` or ` old` for a deleted line, then the start of the
+text. Outdated ones are dimmed. Moving onto an annotation shows its file in
+the diff pane, scrolled to it and highlighted. `<CR>` moves into the diff
+there, opens a file without changes in the tab the review came from, and
+opens a review annotation in the editor. `e`
+and `x` work only on an annotation row.
 
 In visual mode, `s` and `u` take only the added and deleted lines of the
 selection, which may span several hunks, as `git add -p` does when you edit a
@@ -249,18 +261,6 @@ The annotation float (`annotation`). `:w` saves and keeps the float open; `:wq` 
 
 While a draft is hidden, `<C-t>` in normal mode shows it again from any
 buffer. A `<C-t>` mapping of your own comes back once the draft is gone.
-
-The annotation picker (`picker`). Type to filter. All keys work in normal and
-insert mode.
-
-| Key | Action | Does |
-| --- | ------ | ---- |
-| `<C-n>` | `next` | Next annotation |
-| `<C-p>` | `prev` | Previous annotation |
-| `<CR>` | `jump` | Jump to the annotation |
-| `<C-e>` | `edit` | Edit the annotation |
-| `<C-x>` | `delete` | Delete the annotation |
-| `<Esc>` | `close` | Close |
 
 The help float (`help`): `close` on `q`, `?` and `<Esc>`.
 

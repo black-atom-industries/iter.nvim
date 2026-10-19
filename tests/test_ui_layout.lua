@@ -115,6 +115,38 @@ T['columns()']['takes any number of columns'] = function()
     eq(vim.fn.strdisplaywidth(result.lines[2].text), 20)
 end
 
+T['columns()']['a title shows the count and a note, cut to the width'] = function()
+    local spec = column('a', 'Notes', { 'x', 'y' })
+    spec.count, spec.note = 1, '2 outdated'
+
+    local result = layout.columns({ spec }, 22)
+
+    eq(result.lines[1].text, ' Notes (1) · 2 outdat…')
+    eq(spans(result.lines[1], 'IterDrawerTitle'), { { 0, 10 } })
+    eq(
+        spans(result.lines[1], 'IterDrawerHint'),
+        { { 10, #result.lines[1].text } }
+    )
+end
+
+T['columns()']['an item that is not selectable has no row entry'] = function()
+    local spec = column('a', 'A', { 'head', 'x' })
+    spec.selectable = function(item)
+        return item ~= 'head'
+    end
+
+    local result = layout.columns({ spec }, 10)
+
+    eq(result.lines[2].text, 'head      ')
+    eq(result.rows, { {}, {}, { a = 'x' } })
+    eq(result.cells[2], {})
+
+    local stacked = layout.stacked({ spec }, 10)
+
+    eq(stacked.rows, { {}, {}, { a = 'x' } })
+    eq(stacked.cells[2], {})
+end
+
 T['stacked()'] = function()
     local result = layout.stacked({
         column('left', 'Left', { 'a' }),
@@ -200,6 +232,122 @@ T['file_cell()']['a decor without a mark keeps a blank slot'] = function()
     local line = { text = '', highlights = {} }
 
     eq(layout.file_cell(line, change('a.txt'), 0, 12, {}), ' M   a.txt  ')
+end
+
+---@param scope string
+---@param a table
+---@param body? string
+---@return IterAnnotation
+local function annotation(scope, a, body)
+    return { id = 'x', scope = scope, anchor = a, body = body or 'body' }
+end
+
+T['annotation_label()'] = function()
+    local line =
+        { path = 'lua/a.lua', side = 'new', start_line = 4, end_line = 4 }
+    local range = { path = 'a.lua', side = 'new', start_line = 4, end_line = 6 }
+    local old = { path = 'a.lua', side = 'old', start_line = 8, end_line = 8 }
+
+    eq(layout.annotation_label(annotation('line', line)), 'a.lua:4')
+    eq(layout.annotation_label(annotation('line', line), 10), 'a.lua:10')
+    eq(layout.annotation_label(annotation('range', range)), 'a.lua:4–6')
+    eq(layout.annotation_label(annotation('range', range), 7), 'a.lua:7–9')
+    eq(layout.annotation_label(annotation('line', old)), 'a.lua:8 old')
+    eq(
+        layout.annotation_label(annotation('file', { path = 'd/README.md' })),
+        'README.md'
+    )
+    eq(
+        layout.annotation_label(annotation('review', { side = 'new' })),
+        'review'
+    )
+end
+
+T['annotation_cell()'] = new_set()
+
+T['annotation_cell()']['label padded, then the first line of the body'] = function()
+    local line = { text = '', highlights = {} }
+    local text = layout.annotation_cell(line, {
+        annotation = annotation('file', { path = 'a.lua' }, 'Why\tthis\nmore'),
+        outdated = false,
+        label = 'a.lua',
+    }, 4, 20, 8)
+
+    eq(text, ' a.lua    Why this  ')
+    eq(spans(line, 'IterDrawerKey'), { { 5, 10 } })
+end
+
+T['annotation_cell()']['cuts the body and a long label with …'] = function()
+    local line = { text = '', highlights = {} }
+    local text = layout.annotation_cell(line, {
+        annotation = annotation('review', {}, 'A long remark here'),
+        outdated = false,
+        label = 'a_long_name.lua:12',
+    }, 0, 16, 6)
+
+    eq(text, ' a_lon… A long …')
+    eq(vim.fn.strdisplaywidth(text), 16)
+end
+
+T['annotation_cell()']['dims an outdated row'] = function()
+    local line = { text = '', highlights = {} }
+    local text = layout.annotation_cell(line, {
+        annotation = annotation('review', {}, 'gone'),
+        outdated = true,
+        label = 'a:1',
+    }, 0, 12, 3)
+
+    eq(spans(line, 'IterDiffAnnotationOutdated'), { { 0, #text } })
+    eq(spans(line, 'IterDrawerKey'), {})
+end
+
+T['progress_cell()'] = new_set()
+
+T['progress_cell()']['bar, counts and the changed files'] = function()
+    local line = { text = '', highlights = {} }
+    local text = layout.progress_cell(
+        line,
+        { viewed = 3, changed = 1, total = 8 },
+        0,
+        32
+    )
+
+    eq(text, ' viewed ■■■□□□□□ 3 of 8 · ↻ 1   ')
+    eq(spans(line, 'IterViewed'), { { 8, 17 } })
+    eq(
+        spans(line, 'IterViewedChanged'),
+        { { #' viewed ■■■□□□□□ 3 of 8', #text - 3 } }
+    )
+end
+
+T['progress_cell()']['fills by share, full only when all are viewed'] = function()
+    local function bar(viewed, total)
+        local text = layout.progress_cell(
+            { text = '', highlights = {} },
+            { viewed = viewed, changed = 0, total = total },
+            0,
+            40
+        )
+
+        return vim.trim(text):match('[■□]+')
+    end
+
+    eq(bar(0, 0), '□□□□□□□□')
+    eq(bar(0, 5), '□□□□□□□□')
+    eq(bar(1, 20), '■□□□□□□□')
+    eq(bar(19, 20), '■■■■■■■□')
+    eq(bar(4, 4), '■■■■■■■■')
+end
+
+T['progress_cell()']['drops the word when narrow'] = function()
+    local text = layout.progress_cell(
+        { text = '', highlights = {} },
+        { viewed = 1, changed = 1, total = 4 },
+        0,
+        24
+    )
+
+    eq(text, ' ■■□□□□□□ 1 of 4 · ↻ 1  ')
 end
 
 T['hints()'] = new_set()

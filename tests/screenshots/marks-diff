@@ -25,14 +25,14 @@
 24|~                                                                               
 25|~                                                                               
 26|iter://review-diff [-]                                                          
-27| HEAD main · viewed 0 of 2 · 8 annotations                                      
-28| Unstaged (2)                          │ Staged (0)                             
-29| M ○ m.txt                         [6] │                                        
-30| M ○ n.txt                         [1] │                                        
-31|                                                                                
-32|                                                                                
-33|                                                                                
-34|                                                                                
+27| HEAD main                                                               2 files
+28| Unstaged (2)         │ Staged (0)           │ Annotations (8) · 1 outdated     
+29| M ○ m.txt        [6] │                      │ viewed □□□□□□□□ 0 of 2           
+30| M ○ n.txt        [1] │                      │ m.txt       File annotation      
+31|                      │                      │ m.txt:1     Line annotation      
+32|                      │                      │ m.txt:4–6   A range annotation t…
+33|                      │                      │ m.txt:8 old Deleted line annotat…
+34|                      │                      │ m.txt:9     Outdated annotation  
 35| s stage  u unstage  d discard  <CR> open  ? help                               
 36|                                                                                
 
@@ -63,13 +63,13 @@
 24|33333333333333333333333333333333333333333333333333333333333333333333333333333333
 25|33333333333333333333333333333333333333333333333333333333333333333333333333333333
 26|00000000000000000000000000000000000000000000000000000000000000000000000000000000
-27|544444====4444444444444444>>>>>>>>>>>>>>>>55555555555555555555555555555555555555
-28|?????????????55555555555555555555555555@???????????55555555555555555555555555555
-29|ABACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADDDDD@5555555555555555555555555555555555555555
-30|5E5<555555555555555555555555555555FFFFF@5555555555555555555555555555555555555555
-31|GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
-32|GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
-33|GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
-34|GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
-35|5>44444444>4444444444>4444444444>>>>4444444>444445555555555555555555555555555555
-36|HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+27|544444====4444444444444444444444444444444444444444444444444444444444444444444444
+28|>>>>>>>>>>>>>555555555?>>>>>>>>>>>55555555555?>>>>>>>>>>>>>>>><<<<<<<<<<<<<55555
+29|@A@B@@@@@@@@@@@@@CCCCC?5555555555555555555555?<<<<<<<<<<<<<<<<<<<<<<<55555555555
+30|5D5<5555555555555EEEEE?5555555555555555555555?5EEEEE5555555555555555555555555555
+31|5555555555555555555555?5555555555555555555555?5EEEEEEE55555555555555555555555555
+32|5555555555555555555555?5555555555555555555555?5EEEEEEEEE555555555555555555555555
+33|5555555555555555555555?5555555555555555555555?5EEEEEEEEEEE5555555555555555555555
+34|5555555555555555555555?5555555555555555555555?<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+35|5F44444444F4444444444F4444444444FFFF4444444F444445555555555555555555555555555555
+36|GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG

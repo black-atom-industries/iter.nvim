@@ -1409,7 +1409,6 @@ T['hunks']['? in the diff pane lists its keys'] = function()
                 ' <CR>  Expand hidden context',
                 ' gf    Go to the line in the file',
                 ' v     Toggle viewed',
-                ' L     List annotations',
                 ' y     Copy the review',
                 ' q     Close',
                 ' ?     Show the keys',
@@ -1455,15 +1454,30 @@ local function drawer_rows()
     end, lines)
 end
 
+--- The drawer header with its runs of blanks squeezed to one.
 ---@return string
 local function drawer_header()
-    return child.lua_get([[(function()
+    local text = child.lua_get([[(function()
         local text = ''
         for _, chunk in ipairs(vim.api.nvim_win_get_config(]] .. R .. [[.drawer.win).title) do
             text = text .. chunk[1]
         end
         return text
     end)()]])
+
+    return vim.trim((text:gsub('%s+', ' ')))
+end
+
+--- The viewed progress row of the Annotations column, trimmed.
+---@return string
+local function progress()
+    local line = child.lua_get(
+        [[vim.api.nvim_buf_get_lines(]]
+            .. R
+            .. [[.drawer.buf, 1, 2, false)[1] ]]
+    )
+
+    return vim.trim(vim.split(line, '│')[3])
 end
 
 --- The text of the diff header's right-aligned virtual text.
@@ -1535,7 +1549,7 @@ local function edit_b_from_outside()
     helpers.write_file(vim.fs.joinpath(repo, 'b.txt'), b)
 end
 
-T['viewed']['rows start unviewed and the header counts files'] = function()
+T['viewed']['rows start unviewed, the header counts files, the column shows progress'] = function()
     open_review()
     wait_diff('unstaged a.txt')
 
@@ -1546,7 +1560,8 @@ T['viewed']['rows start unviewed and the header counts files'] = function()
         '? ○ c.txt | ',
         '? ○ d/x.txt | ',
     })
-    eq(drawer_header(), 'HEAD main · viewed 0 of 4')
+    eq(drawer_header(), 'HEAD main 4 files')
+    eq(progress(), 'viewed □□□□□□□□ 0 of 4')
     eq(diff_header(), '○ not viewed  +2 −2 ')
 end
 
@@ -1558,14 +1573,14 @@ T['viewed']['v in the drawer toggles the selected file'] = function()
     wait_state('a.txt', 'viewed')
 
     eq(drawer_rows()[2], 'M ✓ a.txt | M ○ b.txt')
-    eq(drawer_header(), 'HEAD main · viewed 1 of 4')
+    eq(progress(), 'viewed ■■□□□□□□ 1 of 4')
     eq(diff_header(), '✓ viewed  +2 −2 ')
     eq(child.lua_get('_G.notes'), {})
 
     child.type_keys('v')
     wait_state('a.txt', 'unviewed')
 
-    eq(drawer_header(), 'HEAD main · viewed 0 of 4')
+    eq(progress(), 'viewed □□□□□□□□ 0 of 4')
     eq(diff_header(), '○ not viewed  +2 −2 ')
 end
 
@@ -1596,7 +1611,7 @@ T['viewed']['a file on both sides shows the mark on both rows'] = function()
 
     eq(drawer_rows()[2], 'M ○ a.txt | M ✓ b.txt')
     eq(drawer_rows()[3], 'M ✓ b.txt | ')
-    eq(drawer_header(), 'HEAD main · viewed 1 of 4')
+    eq(progress(), 'viewed ■■□□□□□□ 1 of 4')
 end
 
 T['viewed']['staging keeps a file viewed'] = function()
@@ -1610,7 +1625,7 @@ T['viewed']['staging keeps a file viewed'] = function()
     wait_state('a.txt', 'viewed')
 
     eq(drawer_rows()[2], 'M ○ b.txt | M ✓ a.txt')
-    eq(drawer_header(), 'HEAD main · viewed 1 of 4')
+    eq(progress(), 'viewed ■■□□□□□□ 1 of 4')
 end
 
 T['viewed']['an edit from outside turns viewed into changed'] = function()
@@ -1625,7 +1640,7 @@ T['viewed']['an edit from outside turns viewed into changed'] = function()
     wait_state('b.txt', 'changed')
 
     eq(drawer_rows()[3], 'M ↻ b.txt | ')
-    eq(drawer_header(), 'HEAD main · viewed 0 of 4 · ↻ 1 changed')
+    eq(progress(), 'viewed □□□□□□□□ 0 of 4 · ↻ 1')
 
     select_item('unstaged', 'b.txt')
     wait_diff('unstaged b.txt')
@@ -1634,7 +1649,7 @@ T['viewed']['an edit from outside turns viewed into changed'] = function()
     child.type_keys('v')
     wait_state('b.txt', 'viewed')
     wait_diff_header('✓ viewed')
-    eq(drawer_header(), 'HEAD main · viewed 1 of 4')
+    eq(progress(), 'viewed ■■□□□□□□ 1 of 4')
 end
 
 T['viewed']['an edit of the shown file updates the diff header'] = function()
@@ -1683,7 +1698,7 @@ T['viewed']['each file of an untracked directory takes its own mark'] = function
 
     eq(drawer_rows()[4], '? ○ c.txt | ')
     eq(drawer_rows()[5], '? ✓ d/x.txt | ')
-    eq(drawer_header(), 'HEAD main · viewed 1 of 4')
+    eq(progress(), 'viewed ■■□□□□□□ 1 of 4')
 end
 
 T['viewed']['viewed marks survive a restart'] = function()
@@ -1699,39 +1714,7 @@ T['viewed']['viewed marks survive a restart'] = function()
     wait_diff('unstaged a.txt')
 
     eq(drawer_rows()[2], 'M ✓ a.txt | M ○ b.txt')
-    eq(drawer_header(), 'HEAD main · viewed 1 of 4')
-end
-
-T['viewed']['the header counts annotations and outdated annotations'] = function()
-    child.lua([[
-        local store = require('iter.store')
-        local root = vim.fn.getcwd()
-        for _, spec in ipairs({ { 'one', false }, { 'two', true }, { 'three', true } }) do
-            assert(store.put_annotation(root, {
-                scope = 'line',
-                body = spec[1],
-                outdated = spec[2],
-                anchor = { path = 'c.txt', side = 'new', start_line = 1, end_line = 1, lines = { 'new' } },
-            }))
-        end
-        assert(store.put_annotation(root, {
-            scope = 'review',
-            body = 'whole',
-            outdated = false,
-            anchor = { side = 'new' },
-        }))
-    ]])
-    open_review()
-    wait_diff('unstaged a.txt')
-    child.type_keys('v')
-    wait_state('a.txt', 'viewed')
-    edit_b_from_outside()
-    wait_state('b.txt', 'unviewed')
-
-    eq(
-        drawer_header(),
-        'HEAD main · viewed 1 of 4 · 4 annotations · 2 outdated'
-    )
+    eq(progress(), 'viewed ■■□□□□□□ 1 of 4')
 end
 
 T['viewed']['the status drawer shows no viewed marks and has no v map'] = function()
@@ -1862,7 +1845,7 @@ local FLOW_STATE = [[(function()
     }
 end)()]]
 
-T['flow']['status, review, annotation, picker, yank and close leave nothing behind'] = function()
+T['flow']['status, review, annotation, annotations column, yank and close leave nothing behind'] = function()
     child.lua([[
         require('iter').setup()
         vim.keymap.set('n', '<C-t>', '<Nop>', { desc = 'user ctrl-t' })
@@ -1899,17 +1882,15 @@ T['flow']['status, review, annotation, picker, yank and close leave nothing behi
         { 'flow note' }
     )
 
-    -- Jump back to it through the picker, from another file.
+    -- Jump back to it through the Annotations column, from another file.
     child.lua('vim.api.nvim_set_current_win(' .. R .. '.diff_win)')
     child.type_keys(']f')
     wait_diff('unstaged b.txt')
-    child.type_keys('L')
-    helpers.wait_until(
-        child,
-        [[vim.bo[vim.api.nvim_get_current_buf()].filetype == 'iterpicker']]
-    )
+    child.lua([[require('iter').annotations()]])
+    eq(child.lua_get(R .. '.drawer.column'), 'annotations')
     child.type_keys('<CR>')
     wait_diff('unstaged a.txt')
+    eq(child.api.nvim_get_current_win(), child.lua_get(R .. '.diff_win'))
     eq(cursor_row(), 'add a3 changed')
 
     -- Yank and clear.

@@ -12,6 +12,9 @@ local render = require('iter.ui.render')
 ---@field title string
 ---@field items any[]
 ---@field weight? number share of the width among the columns, 1 by default
+---@field count? integer number in the title, `#items` by default
+---@field note? string dimmed text after the title, such as `1 outdated`
+---@field selectable? fun(item: any): boolean false for an item shown but never selected; every item is selectable by default
 ---@field cell fun(line: IterRenderLine, item: any, first: integer, width: integer): string text of one item's cell, `width` cells wide, highlights added at byte column `first`
 
 ---@class IterLayoutCell byte columns of one cell on its line
@@ -27,6 +30,11 @@ local render = require('iter.ui.render')
 ---@field mark? [string, string] glyph and group after the code letter
 ---@field count? integer shown as `[n]` at the end of the cell above 0
 
+---@class IterLayoutProgress the viewed progress of the review
+---@field viewed integer
+---@field changed integer files changed since they were viewed
+---@field total integer
+
 local M = {}
 
 M.SEPARATOR = '│'
@@ -36,6 +44,50 @@ M.SEPARATOR = '│'
 ---@return string
 local function pad(text, width)
     return text .. string.rep(' ', width - vim.fn.strdisplaywidth(text))
+end
+
+--- `text` padded to `width` cells, or cut to fit with `…` at the end.
+---@param text string
+---@param width integer
+---@return string
+local function fit(text, width)
+    if vim.fn.strdisplaywidth(text) <= width then
+        return pad(text, width)
+    end
+
+    if width <= 0 then
+        return ''
+    end
+
+    local kept = ''
+
+    for i = 0, vim.fn.strchars(text) - 1 do
+        local next = kept .. vim.fn.strcharpart(text, i, 1)
+
+        if vim.fn.strdisplaywidth(next) > width - 1 then
+            break
+        end
+
+        kept = next
+    end
+
+    return pad(kept .. '…', width)
+end
+
+--- Highlight bytes `start` to `stop` of a cell that starts at byte column
+--- `first` and ends at `last`, cut to the cell.
+---@param line IterRenderLine
+---@param group string
+---@param first integer
+---@param last integer
+---@param start integer
+---@param stop integer
+local function highlight_in(line, group, first, last, start, stop)
+    start, stop = first + start, math.min(first + stop, last)
+
+    if start < stop then
+        render.add_highlight(line, group, start, stop)
+    end
 end
 
 ---@param item IterChange
@@ -68,10 +120,30 @@ end
 ---@param width integer
 ---@return string
 local function title_text(line, column, first, width)
-    local text = string.format(' %s (%d)', column.title, #column.items)
-    render.add_highlight(line, 'IterDrawerTitle', first, first + #text)
+    local title =
+        string.format(' %s (%d)', column.title, column.count or #column.items)
+    local note = column.note and (' · ' .. column.note) or ''
+    local cut = vim.fn.strdisplaywidth(title .. note) > width
+    local text = fit(title .. note, width)
+    local last = first + #text
 
-    return pad(text, width)
+    highlight_in(line, 'IterDrawerTitle', first, last, 0, #title)
+
+    if note ~= '' then
+        local stop = cut and #text or #title + #note
+
+        highlight_in(line, 'IterDrawerHint', first, last, #title, stop)
+    end
+
+    return text
+end
+
+--- Whether `column` lets the selection rest on `item`.
+---@param column IterLayoutColumn
+---@param item any
+---@return boolean
+local function selectable(column, item)
+    return column.selectable == nil or column.selectable(item)
 end
 
 --- Columns side by side at `width` and wider, stacked below it.
@@ -142,8 +214,11 @@ function M.columns(columns, width)
                 text = title_text(line, column, first, widths[i])
             elseif item ~= nil then
                 text = column.cell(line, item, first, widths[i])
-                row[column.id] = item
-                cells[column.id] = { first = first, last = first + #text }
+
+                if selectable(column, item) then
+                    row[column.id] = item
+                    cells[column.id] = { first = first, last = first + #text }
+                end
             else
                 text = string.rep(' ', widths[i])
             end
@@ -197,11 +272,17 @@ function M.stacked(columns, width)
             local line = render.line('')
             line.text = column.cell(line, item, 0, width)
             table.insert(result.lines, line)
-            table.insert(result.rows, { [column.id] = item })
-            table.insert(
-                result.cells,
-                { [column.id] = { first = 0, last = #line.text } }
-            )
+
+            if selectable(column, item) then
+                table.insert(result.rows, { [column.id] = item })
+                table.insert(
+                    result.cells,
+                    { [column.id] = { first = 0, last = #line.text } }
+                )
+            else
+                table.insert(result.rows, {})
+                table.insert(result.cells, {})
+            end
         end
     end
 
@@ -267,6 +348,132 @@ function M.file_cell(line, item, first, width, decor)
     )
 
     return text .. suffix
+end
+
+---@class IterLayoutAnnotation an annotation row
+---@field annotation IterAnnotation
+---@field outdated boolean
+---@field label string location, from `annotation_label`
+
+-- Cells of the viewed progress bar.
+M.PROGRESS_CELLS = 8
+
+--- The location an annotation row shows: `review` for the whole review,
+--- the file's name for a file annotation, else `name:line` or
+--- `name:first–last`, with ` old` for deleted lines. `start` is the line the
+--- annotation's text starts on now; without it the stored line shows.
+---@param annotation IterAnnotation
+---@param start? integer
+---@return string
+function M.annotation_label(annotation, start)
+    local a = annotation.anchor
+
+    if annotation.scope == 'review' then
+        return 'review'
+    end
+
+    local name = vim.fs.basename(a.path or '')
+
+    if annotation.scope == 'file' or a.start_line == nil then
+        return name
+    end
+
+    local first = start or a.start_line
+    local last = first + (a.end_line or a.start_line) - a.start_line
+    local loc = first == last and tostring(first) or (first .. '–' .. last)
+
+    return name .. ':' .. loc .. (a.side == 'old' and ' old' or '')
+end
+
+--- The cell of an annotation row: the label padded to `label_width`, then
+--- the first line of the body, cut with `…` to fit. An outdated row is
+--- dimmed.
+---@param line IterRenderLine
+---@param item IterLayoutAnnotation
+---@param first integer byte column the cell starts at
+---@param width integer
+---@param label_width integer
+---@return string
+function M.annotation_cell(line, item, first, width, label_width)
+    local label = fit(item.label, label_width)
+    local body = vim.split(item.annotation.body, '\n', { plain = true })[1]
+    local text = fit(' ' .. label .. ' ' .. body:gsub('\t', ' '), width)
+    local last = first + #text
+
+    if item.outdated then
+        highlight_in(line, 'IterDiffAnnotationOutdated', first, last, 0, #text)
+    else
+        local shown = #(label:gsub(' +$', ''))
+
+        highlight_in(line, 'IterDrawerKey', first, last, 1, 1 + shown)
+    end
+
+    return text
+end
+
+--- The cell of the viewed progress: `viewed`, a bar whose filled share is
+--- the viewed share, `<viewed> of <total>`, and `· ↻ <changed>` when files
+--- changed since they were viewed. Too narrow for all of it, the word
+--- `viewed` goes first.
+---@param line IterRenderLine
+---@param progress IterLayoutProgress
+---@param first integer byte column the cell starts at
+---@param width integer
+---@return string
+function M.progress_cell(line, progress, first, width)
+    local cells = M.PROGRESS_CELLS
+    local filled = 0
+
+    if progress.total > 0 then
+        filled = math.floor(progress.viewed * cells / progress.total + 0.5)
+
+        if progress.viewed > 0 then
+            filled = math.max(filled, 1)
+        end
+
+        if progress.viewed < progress.total then
+            filled = math.min(filled, cells - 1)
+        end
+    end
+
+    local parts = {
+        { ' viewed ', 'IterDrawerHint' },
+        { string.rep('■', filled), 'IterViewed' },
+        { string.rep('□', cells - filled), 'IterDrawerHint' },
+        {
+            string.format(' %d of %d', progress.viewed, progress.total),
+            'IterDrawerHint',
+        },
+    }
+
+    if progress.changed > 0 then
+        table.insert(parts, {
+            string.format(' · ↻ %d', progress.changed),
+            'IterViewedChanged',
+        })
+    end
+
+    local function joined()
+        return table.concat(vim.tbl_map(function(part)
+            return part[1]
+        end, parts))
+    end
+
+    -- A narrow cell keeps the numbers rather than the word.
+    if vim.fn.strdisplaywidth(joined()) > width then
+        parts[1][1] = ' '
+    end
+
+    local text = fit(joined(), width)
+    local last = first + #text
+    local at = 0
+
+    for _, part in ipairs(parts) do
+        highlight_in(line, part[2], first, last, at, at + #part[1])
+        at = at + #part[1]
+    end
+
+    return text
 end
 
 --- Key hints `<lhs> <label>` for `actions`, in order, those without a bound

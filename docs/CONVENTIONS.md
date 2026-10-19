@@ -41,16 +41,20 @@ the review straight to an agent pane.
   differs, unviewed without a record. Staging doesn't change it.
 - Discard never touches the index or ignored files: an unstaged row restores from the index, an untracked row deletes
   only its untracked files, and the confirm names the paths. The Staged column has no discard.
-- The drawer float sits at the bottom of its pane (`relative = 'win'`, `anchor = 'SW'`) at `drawer.zindex`; help and
-  picker floats use `drawer.zindex + 10`, the annotation float `+ 20`. In the review tab the drawer covers a spacer split
+- The drawer float sits at the bottom of its pane (`relative = 'win'`, `anchor = 'SW'`) at `drawer.zindex`; the help
+  float uses `drawer.zindex + 10`, the annotation float `+ 20`. In the review tab the drawer covers a spacer split
   of its own height, so it never hides the diff.
 - In the status drawer the pane above shows the diff view in place of its buffer. The view saves the window-local
   options it changes and restores them on every exit path.
 - The drawer's lines come from `iter.ui.layout`: pure functions from a list of column specs and the width to render
   lines, side by side at `drawer.breakpoint` and wider, stacked below it. The drawer holds what the status and review
-  drawers share; the review tab plugs in its viewed marks, annotation counts, header summary and spacer sizing as the
-  drawer's extras (`IterDrawerExtras`).
-- Viewed marks and annotation counts show only in the review drawer.
+  drawers share; the review tab plugs in its viewed marks, annotation counts, header, Annotations column, its preview
+  and spacer sizing as the drawer's extras (`IterDrawerExtras`). Columns the extras add come after the file columns;
+  their items carry a `key`, and `Drawer:selected()` returns files only.
+- Viewed marks, annotation counts and the Annotations column show only in the review drawer.
+- The export and the Annotations column list annotations through `iter.annotations.list`: files in drawer order,
+  then other files by name, the review last; by line within a file. An annotation that follows the worktree is outdated
+  when its text isn't in the file's lines (the loaded buffer's, else the file's).
 
 ## Project shape
 

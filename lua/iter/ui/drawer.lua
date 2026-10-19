@@ -11,12 +11,17 @@ local util = require('iter.util')
 local View = require('iter.diff.view')
 local watch = require('iter.watch')
 
----@alias IterDrawerRow table<string, IterChange> buffer line → item per column id
+---@alias IterDrawerRow table<string, any> buffer line → item per column id: an IterChange in a file column, the extras' items in their columns
+
+---@class IterDrawerColumnSpec: IterLayoutColumn a column the extras add after the file columns
+---@field hints [string, string][] key hints while the column is selected: action and label
 
 ---@class IterDrawerExtras what a context such as the review tab adds to the drawer
 ---@field drawer_load fun(self, drawer: IterDrawer): boolean after a status read, before the first render with the view in place; true when what it shows changed
 ---@field drawer_decorator fun(self, drawer: IterDrawer): fun(item: IterChange): IterLayoutDecor per render, the decor of each file row
----@field drawer_header fun(self, drawer: IterDrawer, summary: [string, string]): [string, string][] header chunks after the branch, in place of `summary`
+---@field drawer_columns fun(self, drawer: IterDrawer): IterDrawerColumnSpec[] per render, columns right of the file columns; their items carry a unique `key`
+---@field drawer_preview fun(self, drawer: IterDrawer, item: any, force: boolean) shows an item of those columns in the view
+---@field drawer_header fun(self, drawer: IterDrawer, summary: [string, string], room: integer): [string, string][] header chunks after the branch, in place of `summary`, in `room` cells
 ---@field drawer_rendered fun(self, drawer: IterDrawer, lines: integer) after the layout, before the buffer is written
 ---@field drawer_shown fun(self, drawer: IterDrawer) after the view showed the selection or the drawer rendered
 ---@field drawer_handlers fun(self, drawer: IterDrawer, handlers: table<string, fun()>) changes the drawer actions in place
@@ -50,10 +55,11 @@ local watch = require('iter.watch')
 ---@field changes IterChanges
 ---@field rows IterDrawerRow[]
 ---@field cells table<string, IterLayoutCell>[]
+---@field extra IterDrawerColumnSpec[] the extras' columns of the last render
 ---@field column string id of the selected column
 ---@field lnum integer selected line
 ---@field layout IterLayoutMode
----@field previewed? string key of the item the view shows
+---@field previewed? string key of the item the view shows, or of the extras' item that showed it
 ---@field previewed_stat? string worktree stat of that item when it was read
 ---@field preview_tick integer bumped per scheduled preview; only the last one runs
 ---@field group integer
@@ -69,7 +75,8 @@ local SELECTED_NS = vim.api.nvim_create_namespace('iter.drawer.selected')
 local PREVIEW_DELAY_MS = 50
 -- Diff rows that stand for a line of the file.
 local CODE_ROWS = { context = true, del = true, add = true }
--- Actions the key hint line shows, in order, with their short labels.
+-- Actions the key hint line shows in a file column, in order, with their
+-- short labels.
 local HINTS = {
     { 'stage', 'stage' },
     { 'unstage', 'unstage' },
@@ -79,10 +86,17 @@ local HINTS = {
     { 'help', 'help' },
 }
 
----@param item IterChange
+---@param item IterChange|IterFileDiff
 ---@return string
 local function key(item)
     return item.side .. '\0' .. item.path
+end
+
+--- The key of an item of any column: an extras' item carries its own.
+---@param item any
+---@return string
+local function item_key(item)
+    return item.key or key(item)
 end
 
 ---@class IterDrawerColumn
@@ -101,19 +115,39 @@ function Drawer:columns()
     }
 end
 
---- Column ids left to right, `first` moved to the front when given.
+--- Column ids left to right, `first` moved to the front when given. With
+--- `all`, the extras' columns follow the file columns.
 ---@param first? string
+---@param all? boolean
 ---@return string[]
-function Drawer:column_ids(first)
+function Drawer:column_ids(first, all)
     local ids = first and { first } or {}
+    local columns = self:columns()
 
-    for _, column in ipairs(self:columns()) do
+    if all then
+        vim.list_extend(columns, self.extra)
+    end
+
+    for _, column in ipairs(columns) do
         if column.id ~= first then
             table.insert(ids, column.id)
         end
     end
 
     return ids
+end
+
+--- The extras' column `id`, nil for a file column.
+---@param id string
+---@return IterDrawerColumnSpec?
+function Drawer:extra_column(id)
+    for _, column in ipairs(self.extra) do
+        if column.id == id then
+            return column
+        end
+    end
+
+    return nil
 end
 
 --- Every item in drawer order: column by column, left to right.
@@ -178,7 +212,20 @@ local function header_chunks(drawer)
     local tail = { summary, 'IterDrawerHint' }
 
     if drawer.extras ~= nil then
-        vim.list_extend(chunks, drawer.extras:drawer_header(drawer, tail))
+        local used = 0
+
+        for _, chunk in ipairs(chunks) do
+            used = used + vim.fn.strdisplaywidth(chunk[1])
+        end
+
+        vim.list_extend(
+            chunks,
+            drawer.extras:drawer_header(
+                drawer,
+                tail,
+                vim.api.nvim_win_get_width(drawer.pane) - used
+            )
+        )
     else
         table.insert(chunks, tail)
     end
@@ -231,6 +278,7 @@ function Drawer.open(opts)
         config = opts.config,
         rows = {},
         cells = {},
+        extra = {},
         column = 'unstaged',
         lnum = 1,
         layout = 'columns',
@@ -442,11 +490,13 @@ function Drawer:render()
         }
     end, self:columns())
 
+    self.extra = self.extras and self.extras:drawer_columns(self) or {}
+    vim.list_extend(columns, self.extra)
     self.layout = layout.mode(width, self.config.options.drawer.breakpoint)
 
     local built
 
-    if #self:ordered() == 0 then
+    if #self:ordered() == 0 and #self.extra == 0 then
         built = layout.message('Working tree clean')
     elseif self.layout == 'columns' then
         built = layout.columns(columns, width)
@@ -475,14 +525,22 @@ function Drawer:render()
     self.float:reposition({
         min_lines = math.min(#built.lines, Drawer.MIN_LINES),
         title = header_chunks(self),
-        footer = layout.hints(
-            keymap.list(self.keys_view, self.keys, self.handlers),
-            HINTS,
-            width
-        ),
+        footer = self:footer(),
     })
 
     self:shown()
+end
+
+--- The key hint line of the selected column.
+---@return [string, string][]
+function Drawer:footer()
+    local column = self:extra_column(self.column)
+
+    return layout.hints(
+        keymap.list(self.keys_view, self.keys, self.handlers),
+        column and column.hints or HINTS,
+        vim.api.nvim_win_get_width(self.pane)
+    )
 end
 
 --- Let the extras follow what the view shows.
@@ -492,11 +550,22 @@ function Drawer:shown()
     end
 end
 
----@return IterChange?
-function Drawer:selected()
+--- The selected item of any column.
+---@return any
+function Drawer:item()
     local row = self.rows[self.lnum]
 
     return row and row[self.column]
+end
+
+--- The selected file; nil when the selection is in an extras' column.
+---@return IterChange?
+function Drawer:selected()
+    if self:extra_column(self.column) ~= nil then
+        return nil
+    end
+
+    return self:item()
 end
 
 --- The line nearest to `lnum` that holds an item of one of the columns
@@ -561,7 +630,13 @@ function Drawer:select(lnum, column)
         return
     end
 
+    local switched = column ~= self.column
+
     self.lnum, self.column = lnum, column
+
+    if switched and self.float ~= nil then
+        self.float:reposition({ footer = self:footer() })
+    end
 
     vim.api.nvim_buf_clear_namespace(self.buf, SELECTED_NS, 0, -1)
     vim.api.nvim_buf_set_extmark(self.buf, SELECTED_NS, lnum - 1, cell.first, {
@@ -578,9 +653,9 @@ function Drawer:select(lnum, column)
         end
     end
 
-    local item = self:selected()
+    local item = self:item()
 
-    if item ~= nil and key(item) ~= self.previewed then
+    if item ~= nil and item_key(item) ~= self.previewed then
         self:schedule_preview()
     end
 end
@@ -592,7 +667,7 @@ function Drawer:follow_cursor()
 
     local lnum = vim.api.nvim_win_get_cursor(self.win)[1]
     local dir = lnum < self.lnum and -1 or 1
-    local ids = self.layout == 'stacked' and self:column_ids()
+    local ids = self.layout == 'stacked' and self:column_ids(nil, true)
         or { self.column }
     local target, side = self:find(lnum, ids, dir)
 
@@ -617,6 +692,8 @@ end
 function Drawer:step_column(dir)
     local columns = self:columns()
     local index = 1
+
+    vim.list_extend(columns, self.extra)
 
     for i, column in ipairs(columns) do
         if column.id == self.column then
@@ -653,12 +730,12 @@ end
 
 ---@class IterDrawerMark selection to restore after a render
 ---@field column string
----@field path? string
+---@field key? string path of a file, `key` of an extras' item
 ---@field index integer position among the column's items
 
 ---@return IterDrawerMark
 function Drawer:mark()
-    local item = self:selected()
+    local item = self:item()
     local index = 1
 
     for i, lnum in ipairs(self:item_lines(self.column)) do
@@ -667,7 +744,11 @@ function Drawer:mark()
         end
     end
 
-    return { column = self.column, path = item and item.path, index = index }
+    return {
+        column = self.column,
+        key = item and (item.key or item.path),
+        index = index,
+    }
 end
 
 --- Select the marked item again, else the item now at its position in the
@@ -681,9 +762,11 @@ function Drawer:restore_selection(target)
     local column = target and target.column or self.column
     local lines = self:item_lines(column)
 
-    if target ~= nil and target.path ~= nil then
+    if target ~= nil and target.key ~= nil then
         for _, lnum in ipairs(lines) do
-            if self.rows[lnum][column].path == target.path then
+            local item = self.rows[lnum][column]
+
+            if (item.key or item.path) == target.key then
                 return self:select(lnum, column)
             end
         end
@@ -694,7 +777,7 @@ function Drawer:restore_selection(target)
         return self:select(lines[index], column)
     end
 
-    local lnum, side = self:find(self.lnum, self:column_ids(), 1)
+    local lnum, side = self:find(self.lnum, self:column_ids(nil, true), 1)
 
     if lnum ~= nil and side ~= nil then
         self:select(lnum, side)
@@ -783,13 +866,23 @@ function Drawer:schedule_preview()
     end, PREVIEW_DELAY_MS)
 end
 
---- Show the selected file's diff in the pane. Directories leave the pane as
---- it is; without a selection the pane gets its own buffer back.
+--- Show the selected file's diff in the pane, or let the extras show an
+--- item of their columns. Directories leave the pane as it is; without a
+--- selection the pane gets its own buffer back.
 ---@param force boolean also when the view already shows the item
 function Drawer:preview(force)
-    local item = self:selected()
+    local item = self:item()
 
     if not self:is_open() then
+        return
+    end
+
+    if item ~= nil and self:extra_column(self.column) ~= nil then
+        if force or item.key ~= self.previewed then
+            self.extras:drawer_preview(self, item, force)
+            self.previewed = item.key
+        end
+
         return
     end
 
@@ -799,6 +892,15 @@ function Drawer:preview(force)
         return
     end
 
+    self.view:set_focus(nil)
+    self:show(item, force)
+end
+
+--- Show the diff of `item`, a file of the changes, in the pane, whether it
+--- is selected or not.
+---@param item IterChange
+---@param force boolean also when the view already shows the item
+function Drawer:show(item, force)
     if item.dir then
         return
     end
@@ -824,12 +926,14 @@ function Drawer:preview(force)
     local shown = self.view.files[1]
 
     if
-        key(item) == self.previewed
-        and self.view:is_shown()
+        self.view:is_shown()
         and shown ~= nil
+        and shown.side == item.side
+        and shown.path == item.path
         and shown.code == item.code
         and vim.deep_equal(shown.raw, source.raw)
     then
+        self.previewed = key(item)
         self:shown()
         return
     end
@@ -1082,11 +1186,13 @@ function Drawer:files()
 end
 
 --- Select the next (`dir` 1) or previous (-1) file in drawer order and show
---- its diff now. At the last or first file nothing changes.
+--- its diff now, counting from the selected file, else the shown one. At
+--- the last or first file nothing changes.
 ---@param dir 1|-1
 function Drawer:step_file(dir)
     local items = self:ordered()
     local current = self:selected()
+        or (self.view:is_shown() and self.view.files[1] or nil)
     local index = dir == 1 and 0 or #items + 1
 
     for i, item in ipairs(items) do
