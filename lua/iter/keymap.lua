@@ -63,7 +63,7 @@ local ACTIONS = {
         { 'help', 'Show the keys' },
     },
     annotation = {
-        { 'save', 'Save the annotation', { 'n', 'i' } },
+        { 'save', 'Save the annotation and close the float', { 'n', 'i' } },
         { 'toggle', 'Toggle the draft', { 'n', 'i' } },
         { 'cancel', 'Cancel', { 'n', 'i' } },
         { 'close', 'Close' },

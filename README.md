@@ -255,11 +255,11 @@ example, opens in the tab the review came from, and the pane keeps its diff. A
 mode change shows in the diff header as `mode 100644 → 100755`; `s` on the file
 in the drawer stages it.
 
-The annotation float (`annotation`). `:w` also saves and `:wq` saves and closes.
+The annotation float (`annotation`). `:w` saves and keeps the float open; `:wq` and `<C-s>` save and close it.
 
 | Key | Action | Does |
 | --- | ------ | ---- |
-| `<C-s>` | `save` | Save the annotation (normal and insert mode) |
+| `<C-s>` | `save` | Save the annotation and close the float (normal and insert mode) |
 | `<C-t>` | `toggle` | Hide or show the draft (normal and insert mode) |
 | `<C-c>` | `cancel` | Drop the draft (normal and insert mode) |
 | `q` | `close` | Close a saved annotation |

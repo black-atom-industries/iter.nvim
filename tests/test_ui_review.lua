@@ -1925,7 +1925,7 @@ T['flow']['status, review, annotation, picker, yank and close leave nothing behi
     eq(child.lua_get([[require('iter.annotations.editor').is_shown()]]), false)
     child.type_keys('<C-t>')
     helpers.wait_until(child, [[require('iter.annotations.editor').is_shown()]])
-    child.type_keys('<C-s>', '<Esc>', 'q')
+    child.type_keys('<C-s>')
     helpers.wait_until(
         child,
         [[not require('iter.annotations.editor').is_shown()]]
@@ -2015,7 +2015,7 @@ local function annotate_row(text, body)
     cursor_on(text)
     child.type_keys('a')
     helpers.wait_until(child, [[require('iter.annotations.editor').is_shown()]])
-    child.type_keys(body, '<C-s>', '<Esc>', 'q')
+    child.type_keys(body, '<C-s>')
     helpers.wait_until(
         child,
         [[not require('iter.annotations.editor').is_shown()]]
