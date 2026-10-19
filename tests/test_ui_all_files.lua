@@ -637,7 +637,7 @@ T['viewed']['v toggles the file under the cursor'] = function()
     helpers.wait_until(child, R .. [[.viewed['c.txt'] == 'viewed']])
     eq(child.lua_get(R .. ".viewed['a.txt']"), 'unviewed')
     eq(child.lua_get(R .. [[.drawer.all_files]]), true)
-    eq(cursor_row(), 'add cx')
+    eq(cursor_row(), 'header c.txt')
 end
 
 T['goto'] = new_set()
@@ -728,6 +728,325 @@ T['viewport']['a large review decorates only around the lines in view'] = functi
     eq(after.first < 10, true)
     eq(after.count > before.count, true)
     eq(selected(), 'unstaged f40.txt')
+end
+
+T['collapse'] = new_set()
+
+--- Mark `path` viewed in the store, before the review reads it.
+---@param path string
+local function mark_viewed(path)
+    child.lua([[require('iter.viewed').toggle(vim.fn.getcwd(), ...)]], { path })
+end
+
+--- Whether section `index` of the diff pane is collapsed.
+---@param index integer
+---@return string
+local function collapsed(index)
+    return R .. '.drawer.view.document.sections[' .. index .. '].collapsed'
+end
+
+--- The text at the right of the header row of section `index`.
+---@param index integer
+---@return string
+local function header_right(index)
+    return child.lua_get(
+        [[(function(index)
+        local view = require('iter').current_review.drawer.view
+        local ns = vim.api.nvim_get_namespaces()['iter.diff']
+        local lnum = view.document.sections[index].first - 1
+        local text = ''
+        for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(view.buf, ns, { lnum, 0 }, { lnum, -1 }, { details = true })) do
+            if mark[4].virt_text_pos == 'right_align' then
+                for _, chunk in ipairs(mark[4].virt_text) do
+                    text = text .. chunk[1]
+                end
+            end
+        end
+        return text
+    end)(...)]],
+        { index }
+    )
+end
+
+T['collapse']['v collapses the file to its header, v again expands it'] = function()
+    open_all()
+    cursor_on('b20x')
+    child.type_keys('v')
+    helpers.wait_until(child, collapsed(2))
+
+    eq(pane_lines(), {
+        'a.txt',
+        '@@ -1 +1 @@',
+        'a',
+        'ax',
+        '',
+        'b.txt',
+        '',
+        'c.txt',
+        '@@ -1 +1 @@',
+        'c',
+        'cx',
+    })
+    eq(cursor_row(), 'header b.txt')
+    eq(selected(), 'unstaged b.txt')
+    eq(header_right(2):find('✓ viewed', 1, true) ~= nil, true)
+
+    child.type_keys('v')
+    helpers.wait_until(child, 'not ' .. collapsed(2))
+
+    eq(vim.list_contains(pane_lines(), 'b20x'), true)
+    eq(cursor_row(), 'header b.txt')
+    eq(child.lua_get(R .. ".viewed['b.txt']"), 'unviewed')
+end
+
+T['collapse']['v in the drawer collapses and expands the selected file'] = function()
+    open_all()
+    select_item('unstaged', 'c.txt')
+    child.type_keys('v')
+    helpers.wait_until(child, collapsed(3))
+
+    eq(vim.list_slice(pane_lines(), #pane_lines() - 1), { '', 'c.txt' })
+    eq(
+        child.lua_get(
+            'vim.api.nvim_get_current_win() == ' .. R .. '.drawer.win'
+        ),
+        true
+    )
+
+    child.type_keys('v')
+    helpers.wait_until(child, 'not ' .. collapsed(3))
+    eq(
+        vim.list_slice(pane_lines(), #pane_lines() - 3),
+        { 'c.txt', '@@ -1 +1 @@', 'c', 'cx' }
+    )
+end
+
+T['collapse']['entering all files collapses viewed files, not changed ones'] = function()
+    mark_viewed('a.txt')
+    mark_viewed('b.txt')
+    local b = numbered('b', 1, 20)
+    b[1], b[20] = 'b1x', 'b20x changed again'
+    helpers.write_file(vim.fs.joinpath(repo, 'b.txt'), b)
+
+    child.cmd('Iter review')
+    helpers.wait_until(
+        child,
+        R .. [[ ~= nil and ]] .. R .. [[.drawer.view:is_shown()]]
+    )
+    -- One file alone stays whole.
+    eq(pane_lines(), { 'a.txt', '@@ -1 +1 @@', 'a', 'ax' })
+
+    child.type_keys('m')
+    helpers.wait_until(child, R .. [[.drawer.view.document.sections[3] ~= nil]])
+
+    eq(child.lua_get(R .. ".viewed['b.txt']"), 'changed')
+    eq(child.lua_get(collapsed(1)), true)
+    eq(child.lua_get(collapsed(2)), vim.NIL)
+    eq(child.lua_get(collapsed(3)), vim.NIL)
+    eq(vim.list_slice(pane_lines(), 1, 3), { 'a.txt', '', 'b.txt' })
+    eq(vim.list_contains(pane_lines(), 'b20x changed again'), true)
+end
+
+T['collapse'][']f and [f stop on collapsed headers'] = function()
+    mark_viewed('b.txt')
+    open_all()
+    cursor_on('ax')
+
+    child.type_keys(']f')
+    eq(cursor_row(), 'header b.txt')
+    eq(selected(), 'unstaged b.txt')
+    eq(child.lua_get(collapsed(2)), true)
+    child.type_keys(']f')
+    eq(cursor_row(), 'header c.txt')
+    child.type_keys('[f')
+    eq(cursor_row(), 'header b.txt')
+    eq(selected(), 'unstaged b.txt')
+    eq(child.lua_get(collapsed(2)), true)
+end
+
+T['collapse']['<CR> on a collapsed header expands it and keeps it viewed'] = function()
+    mark_viewed('b.txt')
+    open_all()
+    cursor_on('b.txt', 'header')
+    child.type_keys('<CR>')
+    helpers.wait_until(child, 'not ' .. collapsed(2))
+
+    eq(vim.list_contains(pane_lines(), 'b20x'), true)
+    eq(cursor_row(), 'header b.txt')
+    eq(child.lua_get(R .. ".viewed['b.txt']"), 'viewed')
+
+    -- v twice: unviewed, then viewed and collapsed again.
+    child.type_keys('v')
+    helpers.wait_until(child, R .. [[.viewed['b.txt'] == 'unviewed']])
+    eq(child.lua_get(collapsed(2)), vim.NIL)
+    child.type_keys('v')
+    helpers.wait_until(child, collapsed(2))
+    eq(cursor_row(), 'header b.txt')
+end
+
+T['collapse']['<CR> expands a file on both sides at once'] = function()
+    local b = numbered('b', 1, 20)
+    b[1] = 'b1x'
+    helpers.write_file(vim.fs.joinpath(repo, 'b.txt'), b)
+    git_out({ 'add', 'b.txt' })
+    b[20] = 'b20x'
+    helpers.write_file(vim.fs.joinpath(repo, 'b.txt'), b)
+    mark_viewed('b.txt')
+
+    child.cmd('Iter review')
+    helpers.wait_until(
+        child,
+        R .. [[ ~= nil and ]] .. R .. [[.drawer.view:is_shown()]]
+    )
+    child.type_keys('m')
+    helpers.wait_until(child, R .. [[.drawer.view.document.sections[4] ~= nil]])
+    eq(child.lua_get(collapsed(2)), true)
+    eq(child.lua_get(collapsed(4)), true)
+
+    cursor_on('b.txt', 'header')
+    eq(cursor_section(), 'unstaged b.txt')
+    child.type_keys('<CR>')
+
+    eq(child.lua_get(collapsed(2)), vim.NIL)
+    eq(child.lua_get(collapsed(4)), vim.NIL)
+    eq(cursor_row(), 'header b.txt')
+    eq(cursor_section(), 'unstaged b.txt')
+end
+
+T['collapse']['an expanded file stays whole when its last hunk is staged'] = function()
+    mark_viewed('a.txt')
+    open_all()
+    cursor_on('a.txt', 'header')
+    child.type_keys('<CR>')
+    helpers.wait_until(child, 'not ' .. collapsed(1))
+    cursor_on('ax')
+    child.type_keys('s')
+    helpers.wait_until(child, [[(function()
+        local section = ]] .. R .. [[.drawer.view:at()
+        return section ~= nil and section.file.side == 'staged'
+    end)()]])
+
+    eq(cursor_section(), 'staged a.txt')
+    eq(cursor_row(), 'add ax')
+end
+
+T['collapse']['m into all files collapses an expanded viewed file again'] = function()
+    mark_viewed('b.txt')
+    open_all()
+    cursor_on('b.txt', 'header')
+    child.type_keys('<CR>')
+    helpers.wait_until(child, 'not ' .. collapsed(2))
+
+    child.type_keys('m')
+    helpers.wait_until(child, R .. [[.drawer.view.document.sections[2] == nil]])
+    child.type_keys('m')
+    helpers.wait_until(child, R .. [[.drawer.view.document.sections[3] ~= nil]])
+
+    eq(child.lua_get(collapsed(2)), true)
+    eq(cursor_row(), 'header b.txt')
+end
+
+T['collapse']['the Annotations column shows a collapsed file, <CR> expands it'] = function()
+    child.lua([[require('iter').setup()]])
+    open_all()
+    cursor_on('cx')
+    child.type_keys('a')
+    helpers.wait_until(child, [[require('iter.annotations.editor').is_shown()]])
+    child.type_keys('Check c', '<C-s>')
+    helpers.wait_until(child, '#' .. R .. '.drawer.view.marks == 1')
+    child.type_keys('v')
+    helpers.wait_until(child, collapsed(3))
+
+    eq(child.lua_get(R .. '.drawer.view.marks[1].hidden'), true)
+    eq(header_right(3):find('1 annotation', 1, true) ~= nil, true)
+
+    -- ]a skips the hidden annotation.
+    cursor_on('ax')
+    child.type_keys(']a')
+    eq(cursor_row(), 'add ax')
+
+    child.lua('vim.api.nvim_set_current_win(' .. R .. '.drawer.win)')
+    child.type_keys('l')
+    helpers.wait_until(
+        child,
+        string.format(
+            [[(function()
+        local r = %s
+        local lnum = vim.api.nvim_win_get_cursor(r.diff_win)[1]
+        return r.drawer.view.rows[lnum].text == 'c.txt'
+    end)()]],
+            R
+        )
+    )
+    eq(child.lua_get(collapsed(3)), true)
+
+    child.type_keys('<CR>')
+
+    eq(
+        child.lua_get('vim.api.nvim_get_current_win() == ' .. R .. '.diff_win'),
+        true
+    )
+    eq(child.lua_get(collapsed(3)), vim.NIL)
+    eq(cursor_row(), 'add cx')
+    eq(child.lua_get(R .. ".viewed['c.txt']"), 'viewed')
+end
+
+T['collapse']['works side by side'] = function()
+    mark_viewed('b.txt')
+    open_all()
+    child.type_keys('|')
+    helpers.wait_until(child, R .. '.drawer.view.old ~= nil')
+
+    local old = function()
+        return child.lua_get(
+            [[vim.api.nvim_buf_get_lines(]]
+                .. R
+                .. [[.drawer.view.old.buf, 0, -1, false)]]
+        )
+    end
+
+    eq(child.lua_get(collapsed(2)), true)
+    eq(vim.list_slice(pane_lines(), 4, 6), { '', 'b.txt', '' })
+    eq(vim.list_slice(old(), 4, 6), { '', 'b.txt', '' })
+    eq(#old(), #pane_lines())
+
+    cursor_on('b.txt', 'header')
+    child.type_keys('<CR>')
+    helpers.wait_until(child, 'not ' .. collapsed(2))
+    eq(vim.list_contains(old(), 'b20'), true)
+    eq(#old(), #pane_lines())
+
+    cursor_on('cx')
+    child.type_keys('v')
+    helpers.wait_until(child, collapsed(3))
+    eq(vim.list_slice(old(), #old() - 1), { '', 'c.txt' })
+    eq(vim.list_slice(pane_lines(), #pane_lines() - 1), { '', 'c.txt' })
+    eq(cursor_row(), 'header c.txt')
+end
+
+T['collapse']['screenshot of a collapsed file'] = function()
+    child.stop()
+    helpers.cleanup(repo)
+    repo = helpers.create_repo({
+        ['a.txt'] = { 'a' },
+        ['b.txt'] = { 'b' },
+        ['c.txt'] = { 'c' },
+    })
+
+    for _, name in ipairs({ 'a', 'b', 'c' }) do
+        helpers.write_file(
+            vim.fs.joinpath(repo, name .. '.txt'),
+            { name .. 'x' }
+        )
+    end
+
+    helpers.start_child(child, repo)
+    mark_viewed('b.txt')
+    open_all()
+    child.lua([[vim.api.nvim_set_current_win(]] .. R .. [[.diff_win)]])
+    child.type_keys('gg')
+
+    helpers.expect_screenshot(child, 'review-all-files-collapsed')
 end
 
 return T

@@ -1010,7 +1010,8 @@ function View:text_width(pane)
     return math.max(1, vim.api.nvim_win_get_width(pane.win) - rail)
 end
 
---- Place the annotations on the rows of every section, by buffer line.
+--- Place the annotations on the rows of every section, by buffer line; in
+--- a collapsed section hidden, on its header row.
 function View:place_marks()
     local doc = self.document
 
@@ -1033,7 +1034,10 @@ function View:place_marks()
                 )
             )
         do
-            mark.lnum = assert(document.line_of(doc, index, mark.lnum))
+            local lnum = document.line_of(doc, index, mark.lnum)
+
+            mark.lnum = lnum or section.first
+            mark.hidden = lnum == nil or section.collapsed or nil
             mark.section = index
             table.insert(self.marks, mark)
         end
@@ -1058,7 +1062,12 @@ function View:draw_marks(first, last)
     for _, mark in ipairs(self.marks) do
         local lnum = mark.lnum
 
-        if lnum >= first and lnum <= last and not self.marks_drawn[lnum] then
+        if
+            not mark.hidden
+            and lnum >= first
+            and lnum <= last
+            and not self.marks_drawn[lnum]
+        then
             if by_row[lnum] == nil then
                 by_row[lnum] = {}
                 table.insert(order, lnum)
@@ -1291,13 +1300,13 @@ local function restored_line(doc, before, row, position)
         return nil
     end
 
-    local rows = doc.sections[index].file.rows
+    local section = doc.sections[index]
 
     return document.line_of(
         doc,
         index,
-        nearest_row(rows, before.file.rows[row], row)
-    )
+        nearest_row(section.file.rows, before.file.rows[row], row)
+    ) or section.first
 end
 
 --- Show `doc` in the borrowed window, built again in the view's layout
@@ -1539,6 +1548,24 @@ function View:expand(lnum)
     end
 end
 
+--- Show every row of the collapsed sections of `path`, on both sides; the
+--- cursor stays on the row it is on.
+---@param path string
+function View:expand_path(path)
+    local found = false
+
+    for _, section in ipairs(self.document.sections) do
+        if section.collapsed and section.file.path == path then
+            section.collapsed = nil
+            found = true
+        end
+    end
+
+    if found then
+        self:show_document(document.build(self.document.sections, self.layout))
+    end
+end
+
 --- Move the cursor to the next (`dir` 1) or previous (-1) hunk row. At the
 --- last or first hunk the cursor stays.
 ---@param dir 1|-1
@@ -1574,7 +1601,7 @@ function View:jump_annotation(dir)
     for i = first, last, dir do
         local target = self.marks[i].lnum
 
-        if (target - lnum) * dir > 0 then
+        if not self.marks[i].hidden and (target - lnum) * dir > 0 then
             self:reveal(target)
             return
         end

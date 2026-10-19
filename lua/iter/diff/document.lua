@@ -7,7 +7,7 @@
 --- a deleted line and the added line it pairs with (`model.pairs`) share a
 --- line, a deleted or added line without a pair faces a filler row, and
 --- every other row shows on both sides. Both put one blank line between two
---- files.
+--- files. A collapsed section shows its header row alone.
 
 local model = require('iter.diff.model')
 
@@ -18,6 +18,7 @@ local M = {}
 ---@class IterDocEntry
 ---@field file IterFileDiff
 ---@field new_follows? boolean a staged file's index is its worktree version
+---@field collapsed? boolean only the header row shows
 
 ---@class IterDocSection: IterDocEntry
 ---@field key string `side \0 path` of the file
@@ -136,7 +137,8 @@ function M.build(entries, layout)
             end
         end
 
-        local rows = entry.file.rows
+        local rows = entry.collapsed and { entry.file.rows[1] }
+            or entry.file.rows
         local first = #doc.rows + 1
         local lnums = {}
 
@@ -168,6 +170,7 @@ function M.build(entries, layout)
         table.insert(doc.sections, {
             file = entry.file,
             new_follows = entry.new_follows,
+            collapsed = entry.collapsed,
             key = M.key(entry.file),
             first = first,
             last = #doc.rows,
@@ -200,7 +203,8 @@ function M.at(doc, lnum, side)
     return doc.sections[line.section], row, line.section
 end
 
---- The line of model row `row` of section `index`.
+--- The line of model row `row` of section `index`, nil for a row a
+--- collapsed section hides.
 ---@param doc IterDocument
 ---@param index integer
 ---@param row integer

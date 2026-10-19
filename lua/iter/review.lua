@@ -29,6 +29,7 @@ local viewed = require('iter.viewed')
 ---@field annotations IterAnnotation[] stored annotations
 ---@field records table<string, IterViewed> stored viewed records
 ---@field viewed table<string, IterViewedState> state per file path in the drawer
+---@field expanded table<string, true> per path, viewed files shown whole in all-files mode
 ---@field fresh? boolean read the store on the next load whatever its stat says
 ---@field help? IterHelp help float of the diff pane
 ---@field preview_target? { id: string, file: IterChange } the annotation the Annotations column showed last and the file it showed it in
@@ -158,6 +159,7 @@ function Review.open(opts)
         annotations = {},
         records = {},
         viewed = {},
+        expanded = {},
         closed = false,
         on_annotations = opts.on_annotations,
         on_close = opts.on_close,
@@ -245,6 +247,9 @@ function Review:view_handlers()
         delete = function()
             self:delete_annotation()
         end,
+        expand = function()
+            self:expand()
+        end,
         viewed = function()
             local file = self:shown_file()
 
@@ -271,6 +276,21 @@ function Review:view_handlers()
             self:toggle_help()
         end,
     }
+end
+
+--- On the header of a collapsed file, show the whole file until the next
+--- `m` into all-files mode or `v` marks it viewed again; elsewhere expand
+--- hidden context.
+function Review:expand()
+    local view = self.drawer.view
+    local section, row = view:at()
+
+    if section ~= nil and section.collapsed and row == 1 then
+        self.expanded[section.file.path] = true
+        view:expand_path(section.file.path)
+    else
+        view:expand()
+    end
 end
 
 --- The file under the cursor of the diff pane.
@@ -324,9 +344,12 @@ local function cursor_to_hunk(view, key, index)
 
     for row, model_row in ipairs(section.file.rows) do
         if model_row.kind == 'hunk' and model_row.hunk == target then
-            view:reveal(
-                assert(document.line_of(view.document, section_index, row))
-            )
+            local lnum = document.line_of(view.document, section_index, row)
+
+            if lnum then
+                view:reveal(lnum)
+            end
+
             return
         end
     end
@@ -694,11 +717,13 @@ local function annotation_files(drawer, annotation)
 end
 
 --- The line of the diff pane `annotation` sits below, in `file` when
---- given, nil when it isn't placed there.
+--- given, nil when it isn't placed there; in a collapsed file its header
+--- row, with the file's section index.
 ---@param drawer IterDrawer
 ---@param annotation IterAnnotation
 ---@param file? IterChange
 ---@return integer?
+---@return integer? collapsed section index of the file, when collapsed
 local function annotation_row(drawer, annotation, file)
     local view = drawer.view
 
@@ -716,7 +741,7 @@ local function annotation_row(drawer, annotation, file)
                 or sections[mark.section].key == document.key(file)
             )
         then
-            return mark.lnum
+            return mark.lnum, mark.hidden and mark.section or nil
         end
     end
 
@@ -788,8 +813,8 @@ function Review:drawer_preview(drawer, item, force)
     view:reveal(lnum, 'center')
 end
 
---- Move into the diff pane at the selected annotation. One on a file
---- outside the changes opens in the tab the review came from, a review
+--- Move into the diff pane at the selected annotation, showing a
+--- collapsed file whole. One on a file outside the changes opens in the tab the review came from, a review
 --- annotation in the editor.
 ---@param item IterReviewRow
 function Review:jump_to(item)
@@ -822,11 +847,19 @@ function Review:jump_to(item)
     drawer:preview(false)
 
     local target = self.preview_target
-    local lnum = annotation_row(
-        drawer,
-        annotation,
-        target ~= nil and target.id == annotation.id and target.file or nil
-    )
+    local file = target ~= nil and target.id == annotation.id and target.file
+        or nil
+    local lnum, collapsed = annotation_row(drawer, annotation, file)
+
+    if collapsed ~= nil then
+        local view = drawer.view
+
+        local path = view.document.sections[collapsed].file.path
+
+        self.expanded[path] = true
+        view:expand_path(path)
+        lnum = annotation_row(drawer, annotation, file)
+    end
 
     if lnum ~= nil then
         drawer.view:reveal(lnum)
@@ -873,6 +906,15 @@ function Review:drawer_rendered(drawer, count)
     if height ~= current then
         vim.api.nvim_win_set_height(drawer.pane, height)
     end
+end
+
+--- A viewed file shows its header row alone, unless `<CR>` or a jump to
+--- one of its annotations expanded it.
+---@param _ IterDrawer
+---@param item IterChange
+---@return boolean
+function Review:drawer_collapsed(_, item)
+    return self.viewed[item.path] == 'viewed' and not self.expanded[item.path]
 end
 
 --- Show the viewed state of the shown files in their diff headers.
@@ -964,7 +1006,8 @@ function Review:refresh_annotations()
     self.drawer:refresh()
 end
 
---- Toggle the viewed mark of `path` and refresh.
+--- Toggle the viewed mark of `path` and refresh. In all-files mode a file
+--- marked viewed collapses.
 ---@param path string
 function Review:toggle_viewed(path)
     local _, err = viewed.toggle(self.drawer.changes.root, path)
@@ -973,6 +1016,8 @@ function Review:toggle_viewed(path)
         util.warn('Cannot toggle viewed: ' .. err)
         return
     end
+
+    self.expanded[path] = nil
 
     self:refresh_annotations()
 end
@@ -1238,6 +1283,10 @@ end
 
 --- Show every file in the diff pane, or the selected one alone.
 function Review:toggle_mode()
+    if not self.drawer.all_files then
+        self.expanded = {}
+    end
+
     self.drawer:set_all_files(not self.drawer.all_files)
 end
 
@@ -1456,7 +1505,7 @@ function Review:annotation_under_cursor()
     local found
 
     for _, mark in ipairs(view.marks) do
-        if mark.lnum == lnum then
+        if mark.lnum == lnum and not mark.hidden then
             local mark_side = mark.annotation.anchor.side == 'old' and 'old'
                 or 'new'
 

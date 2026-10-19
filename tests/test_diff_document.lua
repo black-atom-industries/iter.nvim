@@ -383,4 +383,80 @@ T['rows_in()']['takes the rows of each line in the unified layout'] = function()
     eq(document.rows_in(doc, 4, 4), {})
 end
 
+T['collapsed'] = new_set()
+
+--- `three()` with `b.txt` collapsed, in `layout`.
+---@param layout? IterDocLayout
+---@return IterDocument
+local function collapsed_b(layout)
+    return document.build({
+        { file = file('a.txt', 'unstaged', 2) },
+        { file = file('b.txt', 'unstaged', 1), collapsed = true },
+        { file = file('a.txt', 'staged', 3) },
+    }, layout)
+end
+
+T['collapsed']['a collapsed section takes its header row alone'] = function()
+    local doc = collapsed_b()
+
+    eq(
+        vim.tbl_map(function(row)
+            return row.text
+        end, doc.rows),
+        {
+            'a.txt',
+            'a.txt1',
+            'a.txt2',
+            '',
+            'b.txt',
+            '',
+            'a.txt',
+            'a.txt1',
+            'a.txt2',
+            'a.txt3',
+        }
+    )
+    eq(doc.sections[2].collapsed, true)
+    eq({ doc.sections[2].first, doc.sections[2].last }, { 5, 5 })
+    eq({ doc.sections[3].first, doc.sections[3].last }, { 7, 10 })
+    eq(doc.sections[1].collapsed, nil)
+end
+
+T['collapsed']['at() and line_of() map the header only'] = function()
+    local doc = collapsed_b()
+    local section, row, index = document.at(doc, 5)
+
+    eq({ section.key, row, index }, { 'unstaged\0b.txt', 1, 2 })
+    eq(document.line_of(doc, 2, 1), 5)
+    eq(document.line_of(doc, 2, 2), nil)
+    eq(document.line_of(doc, 3, 2), 8)
+
+    local _, _, sep = document.at(doc, 6)
+    eq(sep, 2)
+    eq(document.sections_in(doc, 5, 6), { 2 })
+end
+
+T['collapsed']['the split layout shows the header on both sides'] = function()
+    local doc = collapsed_b('split')
+
+    eq(#doc.old_rows, #doc.rows)
+    eq(doc.rows[5].kind, 'header')
+    eq(doc.old_rows[5].kind, 'header')
+    eq(doc.lines[5], { section = 2, row = 1, old = 1, new = 1 })
+    eq(document.line_of(doc, 2, 2), nil)
+    eq(document.rows_in(doc, 5, 5), { 1 })
+    eq(doc.sections[3].first, 7)
+end
+
+T['collapsed']['a document built from sections keeps them collapsed'] = function()
+    local doc = collapsed_b()
+    local split = document.build(doc.sections, 'split')
+    local back = document.build(split.sections)
+
+    eq(split.sections[2].collapsed, true)
+    eq(#split.rows, 10)
+    eq(back.sections[2].collapsed, true)
+    eq(#back.rows, 10)
+end
+
 return T

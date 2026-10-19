@@ -251,7 +251,7 @@ The diff pane of the review tab (`diff`):
 | `A` | `annotate_file` | Annotate the file |
 | `e` | `edit` | Edit the annotation |
 | `x` | `delete` | Delete the annotation |
-| `<CR>` | `expand` | Expand hidden context |
+| `<CR>` | `expand` | Expand the collapsed file or hidden context |
 | `gf` | `goto_file` | Go to the line in the file |
 | `v` | `viewed` | Toggle viewed |
 | `m` | `mode` | Toggle one file or all files |
@@ -298,6 +298,16 @@ under the cursor. A visual selection over two files stages and annotates
 nothing. `m` again shows the selected file alone; the key hint line names
 the mode it switches to. The mode lasts until the
 review tab closes.
+
+In all-files mode a viewed file shows its header row alone (`✓ viewed`),
+with its stat and annotation count. `v` on a file collapses it, `v` on a
+collapsed header unviews and expands it, from the diff pane or the drawer.
+`<CR>` on a collapsed header shows the whole file and keeps it viewed, until
+`v` marks it viewed again or `m` enters the mode again. Entering the mode
+shows viewed files collapsed and files changed since they were viewed (`↻`)
+whole. `]f` and `[f` stop on collapsed headers; moving the drawer selection
+or an annotation preview leaves a collapsed file as it is, and `<CR>` on an
+annotation in one expands it.
 
 `|`, in the diff pane or the review drawer, shows the diff side by side: the
 old version in a window on the left (`HEAD` for a staged file, `index` for an
