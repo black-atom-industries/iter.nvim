@@ -67,12 +67,12 @@ local ACTIONS = {
         { 'close', 'Close' },
     },
     picker = {
-        { 'next', 'Next comment' },
-        { 'prev', 'Previous comment' },
-        { 'jump', 'Jump to the comment' },
-        { 'edit', 'Edit the comment' },
-        { 'delete', 'Delete the comment' },
-        { 'close', 'Close' },
+        { 'next', 'Next comment', { 'n', 'i' } },
+        { 'prev', 'Previous comment', { 'n', 'i' } },
+        { 'jump', 'Jump to the comment', { 'n', 'i' } },
+        { 'edit', 'Edit the comment', { 'n', 'i' } },
+        { 'delete', 'Delete the comment', { 'n', 'i' } },
+        { 'close', 'Close', { 'n', 'i' } },
     },
     help = {
         { 'close', 'Close' },

@@ -604,6 +604,9 @@ function Drawer:make_handlers()
         handlers.open = act('enter_view')
         handlers.review = nil
         handlers.comment_file = act('comment_file')
+        handlers.picker = function()
+            require('iter').comments()
+        end
     end
 
     return handlers
@@ -1066,6 +1069,60 @@ function Drawer:comment_file()
             self:refresh_comments()
         end,
     })
+end
+
+--- Select the file `comment` belongs to, show its diff and put the diff
+--- cursor on the comment's row. A comment is found in the staged diff or
+--- the unstaged one, the side of its old version first. False when the file
+--- isn't among the changes.
+---@param comment IterComment
+---@return boolean
+function Drawer:show_comment(comment)
+    local a = comment.anchor
+
+    if a.path == nil then
+        return false
+    end
+
+    local first = a.side == 'old' and a.base == 'HEAD' and 'staged'
+        or 'unstaged'
+    local sides = first == 'staged' and { 'staged', 'unstaged' } or SIDES
+    local found = {}
+
+    for _, side in ipairs(sides) do
+        for lnum, row in ipairs(self.rows) do
+            local item = row[side]
+
+            if
+                item ~= nil
+                and not item.dir
+                and (item.path == a.path or item.orig_path == a.path)
+            then
+                table.insert(found, { lnum = lnum, side = side })
+            end
+        end
+    end
+
+    for _, target in ipairs(found) do
+        self:select(target.lnum, target.side)
+        self:preview(false)
+
+        for _, mark in ipairs(self.view.marks) do
+            if mark.comment.id == comment.id then
+                vim.api.nvim_win_set_cursor(self.view.win, { mark.lnum, 0 })
+                return true
+            end
+        end
+    end
+
+    if found[1] == nil then
+        return false
+    end
+
+    self:select(found[1].lnum, found[1].side)
+    self:preview(false)
+
+    return true
 end
 
 --- Reload after a git action and show the selection's new diff.

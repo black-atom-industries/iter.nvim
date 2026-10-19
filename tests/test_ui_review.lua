@@ -1090,6 +1090,7 @@ T['hunks']['? in the diff pane lists its keys'] = function()
                 ' x     Delete the comment',
                 ' <CR>  Expand hidden context',
                 ' gf    Go to the line in the file',
+                ' L     List comments',
                 ' q     Close',
                 ' ?     Show the keys',
             }

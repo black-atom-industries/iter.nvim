@@ -548,7 +548,7 @@ Each slice leaves `just checks` green and the plugin usable.
   save and after cancel, `q` refusal, visual range anchor, normal-buffer comment.
 - Removes: nothing.
 
-#### S11 · Comment picker
+#### S11 · Comment picker — done
 
 - Goal: `L` and `require('iter').comments()` open a picker grouped by file that filters as you type.
 - Files: new `iter/comments/picker.lua`; `iter/review.lua`, `iter/ui/drawer.lua`, `iter/init.lua`,

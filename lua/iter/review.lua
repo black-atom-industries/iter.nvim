@@ -194,6 +194,9 @@ function Review:view_handlers()
         delete = function()
             self:delete_comment()
         end,
+        picker = function()
+            require('iter').comments()
+        end,
         close = function()
             self:close()
         end,
@@ -489,9 +492,17 @@ function Review:goto_file()
         return
     end
 
-    local line =
+    self:open_file(
+        path,
         worktree_line(changes, file, vim.api.nvim_win_get_cursor(view.win)[1])
+    )
+end
 
+--- Edit `path`, an absolute file path, at `line` in the tab the review
+--- came from. The review stays open.
+---@param path string
+---@param line integer
+function Review:open_file(path, line)
     if not vim.api.nvim_tabpage_is_valid(self.origin_tab) then
         vim.cmd.tabnew({ range = { 0 } })
         self.origin_tab = vim.api.nvim_get_current_tabpage()
@@ -523,7 +534,7 @@ function Review:goto_file()
     local ok, err = pcall(vim.cmd.edit, vim.fn.fnameescape(path))
 
     if not ok then
-        util.error(tostring(err), 'Cannot open ' .. file.path)
+        util.error(tostring(err), 'Cannot open ' .. vim.fs.basename(path))
         return
     end
 
@@ -531,6 +542,27 @@ function Review:goto_file()
         win,
         { math.min(line, vim.api.nvim_buf_line_count(0)), 0 }
     )
+end
+
+--- Show the diff that places `comment` and put the cursor on its row,
+--- switching to the review tab. False, and nothing switched, when the
+--- comment's file isn't among the changes.
+---@param comment IterComment
+---@return boolean
+function Review:show_comment(comment)
+    self.drawer:refresh_comments()
+
+    if not self.drawer:show_comment(comment) then
+        return false
+    end
+
+    vim.api.nvim_set_current_tabpage(self.tab)
+
+    if self.drawer.view:is_shown() then
+        vim.api.nvim_set_current_win(self.diff_win)
+    end
+
+    return true
 end
 
 ---@param comment table
