@@ -63,6 +63,7 @@ local ACTIONS = {
         { 'split', 'Show the diff side by side' },
         { 'unified', 'Show the diff unified' },
         { 'yank', 'Copy the review' },
+        { 'focus_drawer', 'Focus the drawer' },
         { 'close', 'Close' },
         { 'help', 'Show the keys' },
     },

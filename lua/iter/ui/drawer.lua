@@ -438,14 +438,18 @@ function Drawer.open(opts)
         util.name_buf(self.side_buf, 'iter://review-annotations')
     end
 
-    local view_handlers = opts.view_handlers
+    local view_handlers = vim.tbl_extend('force', opts.view_handlers or {}, {
+        focus_drawer = function()
+            if util.is_valid_win(self.win) then
+                vim.api.nvim_set_current_win(self:selection_win())
+            end
+        end,
+    })
 
     if not review then
-        view_handlers = vim.tbl_extend('force', view_handlers or {}, {
-            expand = function()
-                self:open_row()
-            end,
-        })
+        view_handlers.expand = function()
+            self:open_row()
+        end
     end
 
     -- The review's diff pane belongs to the view, so a buffer that takes its

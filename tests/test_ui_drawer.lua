@@ -477,6 +477,39 @@ T['keys']['<C-d> and <C-u> scroll the preview, the drawer keeps focus'] = functi
     eq(child.lua_get(drawer_focused), true)
 end
 
+T['keys']['<C-j> in the preview focuses the drawer; the map leaves with it'] = function()
+    child.cmd('edit modified.txt')
+    local buf = child.api.nvim_get_current_buf()
+    open_drawer()
+    wait_preview('unstaged modified.txt')
+
+    local view_buf = child.lua_get([[require('iter').drawer.view.buf]])
+    child.lua([[vim.api.nvim_set_current_win(require('iter').drawer.pane)]])
+    eq(
+        child.lua_get(
+            [[vim.api.nvim_get_current_win() == require('iter').drawer.pane]]
+        ),
+        true
+    )
+
+    child.type_keys('<C-j>')
+    eq(
+        child.lua_get(
+            [[vim.api.nvim_get_current_win() == require('iter').drawer.win]]
+        ),
+        true
+    )
+
+    child.type_keys('q')
+    eq(child.lua_get([[require('iter').drawer]]), vim.NIL)
+    eq(child.api.nvim_get_current_buf(), buf)
+    eq(
+        child.lua_get([[vim.fn.maparg('<C-j>', 'n', false, true).desc]]),
+        vim.NIL
+    )
+    eq(child.api.nvim_buf_is_valid(view_buf), false)
+end
+
 T['stage'] = new_set()
 
 T['stage']['s stages a file and keeps the selection on the nearest row'] = function()

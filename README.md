@@ -258,6 +258,7 @@ The diff pane of the review tab (`diff`):
 | `\|` | `split` | Show the diff side by side |
 | `-` | `unified` | Show the diff unified |
 | `y` | `yank` | Copy the review |
+| `<C-j>` | `focus_drawer` | Focus the drawer |
 | `q` | `close` | Close |
 | `?` | `help` | Show the keys |
 
