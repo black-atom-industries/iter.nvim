@@ -1430,6 +1430,8 @@ T['hunks']['? in the diff pane lists its keys'] = function()
                 ' gf    Go to the line in the file',
                 ' v     Toggle viewed',
                 ' m     Toggle one file or all files',
+                ' |     Show the diff side by side',
+                ' -     Show the diff unified',
                 ' y     Copy the review',
                 ' q     Close',
                 ' ?     Show the keys',

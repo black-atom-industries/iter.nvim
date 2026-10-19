@@ -613,4 +613,72 @@ T['new_line()']['a gap maps to its first hidden line'] = function()
     eq(model.new_line(file, indexes_of(file, 'gap')[1]), 5)
 end
 
+T['pairs()'] = new_set()
+
+--- Rows of one hunk: the del texts, then the add texts.
+---@param dels string[]
+---@param adds string[]
+---@return IterDiffRow[]
+local function change(dels, adds)
+    local rows = { { kind = 'hunk', text = '@@', hunk = 1 } }
+
+    for i, text in ipairs(dels) do
+        table.insert(rows, { kind = 'del', text = text, old = i, hunk = 1 })
+    end
+
+    for i, text in ipairs(adds) do
+        table.insert(rows, { kind = 'add', text = text, new = i, hunk = 1 })
+    end
+
+    return rows
+end
+
+T['pairs()']['pairs similar lines of a change group'] = function()
+    local rows = change(
+        { 'print("start")', 'local b = 2' },
+        { 'local b = 3', 'return b' }
+    )
+
+    eq(model.pairs(rows), { { del = 3, add = 4, similar = true } })
+end
+
+T['pairs()']['pairs within each group, never across context'] = function()
+    local rows = {
+        { kind = 'del', text = 'one', old = 1 },
+        { kind = 'add', text = 'one!', new = 1 },
+        { kind = 'context', text = 'two', old = 2, new = 2 },
+        { kind = 'del', text = 'three', old = 3 },
+        { kind = 'add', text = 'three!', new = 3 },
+        { kind = 'add', text = 'four', new = 4 },
+    }
+
+    eq(model.pairs(rows), {
+        { del = 1, add = 2, similar = true },
+        { del = 4, add = 5, similar = true },
+    })
+end
+
+T['pairs()']['a group of only deleted or added lines has no pairs'] = function()
+    eq(model.pairs(change({ 'a', 'b' }, {})), {})
+    eq(model.pairs(change({}, { 'a', 'b' })), {})
+end
+
+T['pairs()']['pairs a group above 60 lines one by one'] = function()
+    local dels, adds = {}, {}
+
+    for i = 1, 31 do
+        table.insert(dels, 'value ' .. i)
+    end
+
+    for i = 1, 33 do
+        table.insert(adds, 'other ' .. i)
+    end
+
+    local pairs = model.pairs(change(dels, adds))
+
+    eq(#pairs, 31)
+    eq(pairs[1], { del = 2, add = 33, similar = false })
+    eq(pairs[31], { del = 32, add = 63, similar = false })
+end
+
 return T

@@ -255,6 +255,12 @@ function Review:view_handlers()
         mode = function()
             self:toggle_mode()
         end,
+        split = function()
+            self.drawer.view:set_layout('split')
+        end,
+        unified = function()
+            self.drawer.view:set_layout('unified')
+        end,
         yank = function()
             require('iter').yank()
         end,
@@ -276,31 +282,28 @@ function Review:shown_file()
 end
 
 --- The section of the diff pane between buffer lines `first` and `last`,
---- with the model rows they span; nil and a warning when they span two
---- files.
+--- with the model rows on those lines, in the split layout of `side` or of
+--- both sides; nil and a warning when they span two files.
 ---@param first integer
 ---@param last integer
+---@param side? 'old'|'new'
 ---@return IterDocSection?
----@return integer first_row
----@return integer last_row
-function Review:selected_section(first, last)
+---@return integer[] rows
+function Review:selected_section(first, last, side)
     local view = self.drawer.view
-    local section, first_row, index = view:at(first)
-    local last_section, last_row, last_index = view:at(last)
+    local section, _, index = view:at(first)
+    local last_section, _, last_index = view:at(last)
 
     if section == nil or last_section == nil then
-        return nil, 0, 0
+        return nil, {}
     end
 
     if index ~= last_index then
         util.warn('The selection spans two files')
-        return nil, 0, 0
+        return nil, {}
     end
 
-    -- A separator closes its section, after its last row.
-    return section,
-        first_row or #section.file.rows + 1,
-        last_row or #section.file.rows
+    return section, document.rows_in(view.document, first, last, side)
 end
 
 --- Put the cursor on the `@@` row of hunk `index` of the file with `key`,
@@ -310,34 +313,35 @@ end
 ---@param index integer
 local function cursor_to_hunk(view, key, index)
     local section_index = document.find(view.document, key)
-    local section = view.document.sections[section_index]
 
-    if section == nil then
+    if section_index == nil then
         return
     end
+
+    local section = view.document.sections[section_index]
 
     local target = math.min(index, #section.file.hunks)
 
     for row, model_row in ipairs(section.file.rows) do
         if model_row.kind == 'hunk' and model_row.hunk == target then
-            view:reveal(section.first + row - 1)
+            view:reveal(
+                assert(document.line_of(view.document, section_index, row))
+            )
             return
         end
     end
 end
 
---- The selected del and add rows of `file` between rows `first` and `last`;
---- nil when there are none.
+--- The del and add rows of `file` among `rows`; nil when there are none.
 ---@param file IterFileDiff
----@param first integer
----@param last integer
+---@param rows integer[]
 ---@return IterLineSelection?
-local function line_selection(file, first, last)
+local function line_selection(file, rows)
     local selection = { old = {}, new = {} }
     local any = false
 
-    for lnum = first, last do
-        local row = file.rows[lnum]
+    for _, index in ipairs(rows) do
+        local row = file.rows[index]
 
         if row.kind == 'del' then
             selection.old[row.old], any = true, true
@@ -374,7 +378,8 @@ local function is_link(raw)
 end
 
 --- Stage (`stage`) or unstage (`unstage`) the hunk under the cursor of the
---- diff pane, or in visual mode the selected del and add rows. The patch
+--- diff pane, or in visual mode the selected del and add rows, in the split
+--- layout those on both sides of the selected lines. The patch
 --- comes from git's diff text of this moment, byte for byte, and only when
 --- that text is still the one on screen; `git apply --check` runs before
 --- the apply. After a hunk the cursor goes to the hunk that took its place,
@@ -389,7 +394,7 @@ function Review:apply_change(kind)
         return
     end
 
-    local section, first_row, last_row = self:selected_section(first, last)
+    local section, rows = self:selected_section(first, last)
 
     if section == nil then
         return
@@ -412,14 +417,14 @@ function Review:apply_change(kind)
         return
     end
 
-    local row = file.rows[first_row]
+    local row = file.rows[rows[1]]
     local selection
 
     if visual and is_link(file.raw) then
         util.warn('Lines of a symlink or submodule cannot be staged one by one')
         return
     elseif visual then
-        selection = line_selection(file, first_row, last_row)
+        selection = line_selection(file, rows)
 
         if selection == nil then
             util.warn('No added or deleted lines selected')
@@ -943,6 +948,12 @@ function Review:drawer_handlers(drawer, handlers)
     handlers.mode = function()
         self:toggle_mode()
     end
+    handlers.split = function()
+        drawer.view:set_layout('split')
+    end
+    handlers.unified = function()
+        drawer.view:set_layout('unified')
+    end
 end
 
 --- Read the stored annotations again whatever the store file's stat says,
@@ -990,6 +1001,18 @@ function Review:attach()
         'iter.review.' .. self.buf,
         { clear = true }
     )
+
+    -- A file opened in the left pane of the split layout opens in the tab
+    -- the review came from, as one opened in the diff pane does.
+    self.drawer.view.on_pane_replaced = function(buf, line)
+        local path = vim.bo[buf].buftype == ''
+                and vim.api.nvim_buf_get_name(buf)
+            or ''
+
+        if not self.closed and path ~= '' then
+            self:open_file(path, line)
+        end
+    end
 
     vim.api.nvim_create_autocmd('WinClosed', {
         group = self.group,
@@ -1171,7 +1194,8 @@ end
 
 --- `review · <file> · <i>/<n>` for windows of the tab, `''` elsewhere,
 --- with `all files` after `review` in all-files mode, where the file is the
---- one under the cursor. The position counts files in drawer order.
+--- one under the cursor, and then `split` in the split layout. The position
+--- counts files in drawer order.
 ---@return string
 function Review:statusline()
     local win = vim.g.statusline_winid or vim.api.nvim_get_current_win()
@@ -1186,6 +1210,10 @@ function Review:statusline()
 
     local file = self:shown_file()
     local mode = self.drawer.all_files and 'review · all files' or 'review'
+
+    if self.drawer.view.layout == 'split' then
+        mode = mode .. ' · split'
+    end
 
     if file == nil then
         return mode
@@ -1285,25 +1313,37 @@ function Review:annotations_changed()
     end
 end
 
---- The anchor of rows `first` to `last` of `file`. Rows with a new
---- line number anchor on the new side, which follows the worktree, so a
---- staged line goes through the unstaged diff; only deleted rows anchor on
---- the old side, against the version they were deleted from.
+--- The anchor of model rows `rows` of `file`. Rows with a new line number
+--- anchor on the new side, which follows the worktree, so a staged line
+--- goes through the unstaged diff; only deleted rows anchor on the old
+--- side, against the version they were deleted from. On the old side of
+--- the split layout (`side` 'old') rows with a deleted line anchor on the
+--- old side over all of them, context included.
 ---@param file IterFileDiff
----@param first integer model row
----@param last integer model row
+---@param rows integer[]
+---@param side? 'old'|'new'
 ---@return IterAnchor?
 ---@return string? error
-function Review:anchor_rows(file, first, last)
+function Review:anchor_rows(file, rows, side)
     local new_rows, old = {}, {}
+    local old_side = false
 
-    for lnum = first, last do
-        local row = file.rows[lnum]
+    for _, index in ipairs(rows) do
+        old_side = old_side
+            or (side == 'old' and file.rows[index].kind == 'del')
+    end
+
+    for _, index in ipairs(rows) do
+        local row = file.rows[index]
 
         if row.kind == 'gap' then
             return nil, 'Expand the hidden lines first'
+        elseif old_side then
+            if row.old ~= nil then
+                table.insert(old, row.old)
+            end
         elseif row.new ~= nil then
-            table.insert(new_rows, lnum)
+            table.insert(new_rows, index)
         elseif row.kind == 'del' then
             table.insert(old, row.old)
         end
@@ -1355,13 +1395,18 @@ function Review:anchor_rows(file, first, last)
 end
 
 --- Annotate the line under the cursor of the diff pane, or on the
---- visual range.
+--- visual range; in the split layout the rows of the side in the current
+--- window.
 function Review:annotate()
-    if not self.drawer.view:is_shown() then
+    local view = self.drawer.view
+
+    if not view:is_shown() then
         return
     end
 
-    local section, first, last = self:selected_section(editor.selection())
+    local side = view:active_side()
+    local first, last = editor.selection()
+    local section, rows = self:selected_section(first, last, side)
 
     if section == nil then
         return
@@ -1374,7 +1419,7 @@ function Review:annotate()
         return
     end
 
-    local a, err = self:anchor_rows(file, first, last)
+    local a, err = self:anchor_rows(file, rows, side)
 
     if a == nil then
         util.warn(err or 'No line under the cursor')
@@ -1396,7 +1441,8 @@ function Review:annotate_file(path)
     })
 end
 
---- The first annotation placed below the cursor row of the diff pane.
+--- The first annotation placed below the cursor row of the diff pane, in
+--- the split layout one shown on the side of the current window first.
 ---@return IterAnnotation?
 function Review:annotation_under_cursor()
     local view = self.drawer.view
@@ -1405,12 +1451,25 @@ function Review:annotation_under_cursor()
         return nil
     end
 
-    local lnum = vim.api.nvim_win_get_cursor(view.win)[1]
+    local lnum = view:cursor_line()
+    local side = view:active_side()
+    local found
 
     for _, mark in ipairs(view.marks) do
         if mark.lnum == lnum then
-            return mark.annotation
+            local mark_side = mark.annotation.anchor.side == 'old' and 'old'
+                or 'new'
+
+            if side == nil or mark_side == side then
+                return mark.annotation
+            end
+
+            found = found or mark.annotation
         end
+    end
+
+    if found ~= nil then
+        return found
     end
 
     util.warn('No annotation on this line')

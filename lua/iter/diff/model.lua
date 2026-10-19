@@ -350,6 +350,100 @@ function M.old_line_to_new_line(file, old_line)
     return old_line + delta
 end
 
+-- Change groups with more del and add lines than this pair their lines one
+-- by one instead of by similarity.
+local MAX_MATCHED = 60
+
+---@class IterRowPair
+---@field del integer row index of the deleted line
+---@field add integer row index of the added line
+---@field similar boolean paired by similarity, not only by position
+
+--- `lines` as one text for `vim.text.diff`, each line ended.
+---@param lines string[]
+---@return string
+function M.as_text(lines)
+    return #lines > 0 and table.concat(lines, '\n') .. '\n' or ''
+end
+
+--- Pairs of the del rows `dels` and the add rows `adds` of one change
+--- group, in order.
+---@param rows IterDiffRow[]
+---@param dels integer[]
+---@param adds integer[]
+---@return IterRowPair[]
+local function pair_group(rows, dels, adds)
+    local result = {}
+
+    if #dels + #adds > MAX_MATCHED then
+        for i = 1, math.min(#dels, #adds) do
+            table.insert(
+                result,
+                { del = dels[i], add = adds[i], similar = false }
+            )
+        end
+
+        return result
+    end
+
+    local function texts(indexes)
+        return vim.tbl_map(function(index)
+            return rows[index].text
+        end, indexes)
+    end
+
+    local hunks =
+        vim.text.diff(M.as_text(texts(dels)), M.as_text(texts(adds)), {
+            result_type = 'indices',
+            linematch = MAX_MATCHED,
+        }) --[[@as integer[][] ]]
+
+    for _, hunk in ipairs(hunks) do
+        for offset = 0, math.min(hunk[2], hunk[4]) - 1 do
+            table.insert(result, {
+                del = dels[hunk[1] + offset],
+                add = adds[hunk[3] + offset],
+                similar = true,
+            })
+        end
+    end
+
+    return result
+end
+
+--- The del and add rows of `rows` that face each other. A change group is
+--- a run of del rows and the add rows right after it; its lines pair by
+--- similarity (linematch), or one by one in a group of more than 60 lines.
+--- Pairs come in row order.
+---@param rows IterDiffRow[]
+---@return IterRowPair[]
+function M.pairs(rows)
+    local result = {}
+    local index = 1
+
+    while index <= #rows do
+        local dels, adds = {}, {}
+
+        while rows[index] ~= nil and rows[index].kind == 'del' do
+            table.insert(dels, index)
+            index = index + 1
+        end
+
+        while rows[index] ~= nil and rows[index].kind == 'add' do
+            table.insert(adds, index)
+            index = index + 1
+        end
+
+        if #dels > 0 and #adds > 0 then
+            vim.list_extend(result, pair_group(rows, dels, adds))
+        elseif #dels == 0 and #adds == 0 then
+            index = index + 1
+        end
+    end
+
+    return result
+end
+
 --- Line of the new version of `file` that row `lnum` stands for: its new
 --- number, for a deleted line the line that took its place, for a gap its
 --- first hidden line, for a hunk row its first row, for the header line 1.

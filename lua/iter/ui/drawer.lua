@@ -98,6 +98,7 @@ local HINTS = {
     { 'open', 'open' },
     { 'review', 'review' },
     { 'mode', 'all files' },
+    { 'split', 'split' },
     { 'help', 'help' },
 }
 
@@ -454,6 +455,14 @@ function Drawer.open(opts)
         handlers = view_handlers,
         name = review and 'iter://review-diff' or nil,
         bufhidden = review and 'hide' or nil,
+        on_cursor = function()
+            self:follow_view()
+        end,
+        on_layout = function()
+            if self.float ~= nil and not self.closed then
+                self.float:reposition({ footer = self:footer() })
+            end
+        end,
     })
 
     if not self:load() then
@@ -513,6 +522,8 @@ function Drawer:scroll(keys)
     vim.api.nvim_win_call(win, function()
         vim.cmd(cmd)
     end)
+    -- Scrollbind follows only the current window.
+    self.view:sync(self.view)
 end
 
 ---@return table<string, fun()>
@@ -605,15 +616,6 @@ function Drawer:attach()
             vim.schedule(function()
                 self:close()
             end)
-        end,
-    })
-    vim.api.nvim_create_autocmd('CursorMoved', {
-        group = self.group,
-        buffer = self.view.buf,
-        callback = function()
-            if vim.api.nvim_get_current_win() == self.view.win then
-                self:follow_view()
-            end
         end,
     })
 end
@@ -814,6 +816,8 @@ function Drawer:footer()
         or vim.tbl_map(function(hint)
             if hint[1] == 'mode' and self.all_files then
                 return { 'mode', 'one file' }
+            elseif hint[1] == 'split' and self.view.layout == 'split' then
+                return { 'unified', 'unified' }
             end
 
             return hint
@@ -1193,6 +1197,7 @@ function Drawer:resized()
     self:render()
     self:restore_selection(mark)
     self:take_focus()
+    self.view:even_widths()
     self.view:rewrap()
 end
 

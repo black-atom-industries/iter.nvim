@@ -22,7 +22,16 @@ the review straight to an agent pane.
 - A view renders a document (`iter.diff.document`): sections in order, one per file diff, and for each buffer line
   its section and model row (none on the blank line between two files). One file is a document of one section; the
   review's all-files mode is one section per drawer file, Unstaged then Staged. Callers map lines with `at()` and
-  `line_of()`, never with offsets, so a layout other than unified builds its own lines over the same sections.
+  `line_of()`, and a selection to model rows with `rows_in()`, never with offsets.
+- The split layout (side by side) is a document whose lines carry a model row per side. `model.pairs` pairs the del
+  and add rows of each change group (linematch, one by one above 60 lines); a pair shares a line, an unpaired del or
+  add faces a filler row (`kind = 'filler'`), every other row shows on both sides. Word emphasis uses the same pairs.
+  The view keeps its own window for the new side and opens the old side's pane left of it, with `scrollbind` and
+  `cursorbind`; both have the same lines, and an annotation's `virt_lines` on one side get blank `virt_lines` of the
+  same height on the other. Moves the code makes go through `View:sync()`, since the binds follow only the current
+  window. Only the review tab offers the split layout.
+- A patch of selected lines (`patch.lines`) writes each change group in pair order, the split layout's: a deleted
+  line next to the added line it pairs with, so a staged or unstaged line takes its partner's place.
 - A document of several files decorates per viewport: syntax, word emphasis and annotation `virt_lines` for the lines
   in view and two screens around them, again on `WinScrolled`; row highlights, headers and annotation positions cover
   the whole document. A read of all files keeps a file's rows, and so its parse, while its blob ids and worktree stat

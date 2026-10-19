@@ -3,12 +3,12 @@
 ---
 --- Ranges are 0-based byte columns, end exclusive: `{ col, end_col }`.
 
+local model = require('iter.diff.model')
+
 local M = {}
 
 -- Lines longer than this (bytes) get no emphasis.
 local MAX_LINE = 500
--- Groups with more del and add lines than this get no pairing.
-local MAX_GROUP = 60
 -- Share of changed bytes above which a pair gets no emphasis.
 local MAX_CHANGED = 0.6
 
@@ -35,12 +35,6 @@ local function tokenize(text)
     end
 
     return tokens
-end
-
----@param lines string[]
----@return string
-local function as_text(lines)
-    return #lines > 0 and table.concat(lines, '\n') .. '\n' or ''
 end
 
 --- Byte ranges of tokens `first` to `first + count - 1`, merged with the
@@ -82,9 +76,10 @@ function M.ranges(old, new)
     end
 
     local a, b = tokenize(old), tokenize(new)
-    local hunks = vim.text.diff(as_text(a.texts), as_text(b.texts), {
-        result_type = 'indices',
-    }) --[[@as integer[][] ]]
+    local hunks =
+        vim.text.diff(model.as_text(a.texts), model.as_text(b.texts), {
+            result_type = 'indices',
+        }) --[[@as integer[][] ]]
 
     local del, add = {}, {}
     local changed = 0
@@ -101,29 +96,17 @@ function M.ranges(old, new)
     return del, add
 end
 
---- Pair the del rows `dels` with the add rows `adds` that follow them.
+--- Set `pair` and `words` on the del and add rows of `rows` that pair by
+--- similarity (`model.pairs`), dropping any earlier values.
 ---@param rows IterDiffRow[]
----@param dels integer[] row indexes
----@param adds integer[] row indexes
-local function pair_group(rows, dels, adds)
-    if #dels + #adds > MAX_GROUP then
-        return
+function M.annotate(rows)
+    for _, row in ipairs(rows) do
+        row.pair, row.words = nil, nil
     end
 
-    local function texts(indexes)
-        return vim.tbl_map(function(index)
-            return rows[index].text
-        end, indexes)
-    end
-
-    local hunks = vim.text.diff(as_text(texts(dels)), as_text(texts(adds)), {
-        result_type = 'indices',
-        linematch = MAX_GROUP,
-    }) --[[@as integer[][] ]]
-
-    for _, hunk in ipairs(hunks) do
-        for offset = 0, math.min(hunk[2], hunk[4]) - 1 do
-            local d, a = dels[hunk[1] + offset], adds[hunk[3] + offset]
+    for _, pair in ipairs(model.pairs(rows)) do
+        if pair.similar then
+            local d, a = pair.del, pair.add
             local del, add = M.ranges(rows[d].text, rows[a].text)
 
             rows[d].pair, rows[a].pair = a, d
@@ -135,38 +118,6 @@ local function pair_group(rows, dels, adds)
             if add ~= nil and #add > 0 then
                 rows[a].words = add
             end
-        end
-    end
-end
-
---- Set `pair` and `words` on the del and add rows of `rows`, dropping any
---- earlier values. A change group is a run of del rows and the add rows
---- right after it.
----@param rows IterDiffRow[]
-function M.annotate(rows)
-    for _, row in ipairs(rows) do
-        row.pair, row.words = nil, nil
-    end
-
-    local index = 1
-
-    while index <= #rows do
-        local dels, adds = {}, {}
-
-        while rows[index] ~= nil and rows[index].kind == 'del' do
-            table.insert(dels, index)
-            index = index + 1
-        end
-
-        while rows[index] ~= nil and rows[index].kind == 'add' do
-            table.insert(adds, index)
-            index = index + 1
-        end
-
-        if #dels > 0 and #adds > 0 then
-            pair_group(rows, dels, adds)
-        elseif #dels == 0 and #adds == 0 then
-            index = index + 1
         end
     end
 end

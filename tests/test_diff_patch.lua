@@ -785,4 +785,117 @@ T['lines']['stages part of a deleted file and keeps it in the index'] = function
     eq(run({ 'status', '--porcelain', 'd.txt' }), 'MD d.txt')
 end
 
+T['lines pairs'] = new_set({
+    hooks = {
+        pre_case = function()
+            repo = helpers.create_repo({})
+        end,
+        post_case = function()
+            helpers.cleanup(repo)
+        end,
+    },
+})
+
+--- Commit l1..l8, then write `new` as the worktree file; staged too with
+--- `stage_all`.
+---@param new string[]
+---@param stage_all? boolean
+local function change_group(new, stage_all)
+    commit('f.txt', join(numbered(1, 8)))
+    write('f.txt', join(new))
+
+    if stage_all then
+        run({ 'add', 'f.txt' })
+    end
+end
+
+---@return string[]
+local function index_lines()
+    return vim.split(run({ 'show', ':f.txt' }), '\n')
+end
+
+--- l1..l8 with the lines at `at` replaced by `lines`.
+---@param at integer first line replaced
+---@param count integer lines replaced
+---@param lines string[]
+---@return string[]
+local function replaced(at, count, lines)
+    local out = numbered(1, 8)
+
+    for _ = 1, count do
+        table.remove(out, at)
+    end
+
+    for i = #lines, 1, -1 do
+        table.insert(out, at, lines[i])
+    end
+
+    return out
+end
+
+T['lines pairs']['stages the first of two pairs in place'] = function()
+    change_group(replaced(3, 2, { 'l3 changed', 'l4 changed' }))
+
+    apply('stage', assert(lines_patch(UNSTAGED_F, pick({ 3 }, { 3 }), 'stage')))
+
+    eq(index_lines(), replaced(3, 1, { 'l3 changed' }))
+end
+
+T['lines pairs']['stages the second of two pairs in place'] = function()
+    change_group(replaced(3, 2, { 'l3 changed', 'l4 changed' }))
+
+    apply('stage', assert(lines_patch(UNSTAGED_F, pick({ 4 }, { 4 }), 'stage')))
+
+    eq(index_lines(), replaced(4, 1, { 'l4 changed' }))
+end
+
+T['lines pairs']['unstages one of two pairs in place'] = function()
+    change_group(replaced(3, 2, { 'l3 changed', 'l4 changed' }), true)
+
+    apply(
+        'unstage',
+        assert(lines_patch(STAGED_F, pick({ 4 }, { 4 }), 'unstage'))
+    )
+
+    eq(index_lines(), replaced(3, 1, { 'l3 changed' }))
+end
+
+T['lines pairs']['stages the pair of three deleted lines and one added'] = function()
+    change_group(replaced(3, 3, { 'l4 changed' }))
+
+    apply('stage', assert(lines_patch(UNSTAGED_F, pick({ 4 }, { 3 }), 'stage')))
+
+    eq(index_lines(), replaced(4, 1, { 'l4 changed' }))
+end
+
+T['lines pairs']['stages the pair of one deleted line and three added'] = function()
+    change_group(replaced(3, 1, { 'x', 'l3 changed', 'y' }))
+
+    apply('stage', assert(lines_patch(UNSTAGED_F, pick({ 3 }, { 4 }), 'stage')))
+
+    eq(index_lines(), replaced(3, 1, { 'l3 changed' }))
+end
+
+T['lines pairs']['unstages the pair of three deleted lines and one added'] = function()
+    change_group(replaced(3, 3, { 'l4 changed' }), true)
+
+    apply(
+        'unstage',
+        assert(lines_patch(STAGED_F, pick({ 4 }, { 3 }), 'unstage'))
+    )
+
+    eq(index_lines(), { 'l1', 'l2', 'l4', 'l6', 'l7', 'l8' })
+end
+
+T['lines pairs']['unstages the pair of one deleted line and three added'] = function()
+    change_group(replaced(3, 1, { 'x', 'l3 changed', 'y' }), true)
+
+    apply(
+        'unstage',
+        assert(lines_patch(STAGED_F, pick({ 3 }, { 4 }), 'unstage'))
+    )
+
+    eq(index_lines(), replaced(3, 1, { 'x', 'l3', 'y' }))
+end
+
 return T
