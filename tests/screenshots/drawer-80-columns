@@ -15,12 +15,12 @@
 14|~                                                                               
 15|~                                                                               
 16|~                                                                               
-17| HEAD main · 5 changes                                                          
-18| Unstaged (4)                          │ Staged (1)                             
+17| HEAD main · 6 changes                                                          
+18| Unstaged (5)                          │ Staged (1)                             
 19| D deleted.txt                         │ M staged.txt                           
 20| M modified.txt                        │                                        
 21| ? untracked.txt                       │                                        
-22| ? untracked_dir/                      │                                        
+22| ? untracked_dir/a.txt                 │                                        
 23| s stage  u unstage  d discard  <CR> open  r review  ? help                     
 24|                                                                                
 

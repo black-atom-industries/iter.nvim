@@ -57,7 +57,6 @@ local watch = require('iter.watch')
 ---@field column IterSide selected column
 ---@field lnum integer selected line
 ---@field layout 'columns'|'stacked'
----@field expanded table<string, boolean> untracked directories shown open
 ---@field previewed? string key of the item the view shows
 ---@field previewed_stat? string worktree stat of that item when it was read
 ---@field preview_tick integer bumped per scheduled preview; only the last one runs
@@ -70,6 +69,8 @@ Drawer.__index = Drawer
 
 local SELECTED_NS = vim.api.nvim_create_namespace('iter.drawer.selected')
 local PREVIEW_DELAY_MS = 50
+-- Text lines the drawer keeps in a pane too short for `drawer.height`.
+local MIN_LINES = 5
 local SEPARATOR = '│'
 local SIDES = { 'unstaged', 'staged' }
 local TITLES = { unstaged = 'Unstaged', staged = 'Staged' }
@@ -118,40 +119,14 @@ end
 ---@field counts table<string, integer> comments per path
 ---@field viewed table<string, IterViewedState> state per file path
 
----@class IterDrawerEntry
----@field item IterChange
----@field parent? IterChange expanded directory the item belongs to
-
---- Items of one side in display order, children after their directory.
----@param items IterChange[]
----@return IterDrawerEntry[]
-local function flatten(items)
-    local entries = {}
-
-    for _, item in ipairs(items) do
-        table.insert(entries, { item = item })
-
-        if item.expanded then
-            for _, child in ipairs(item.children or {}) do
-                table.insert(entries, { item = child, parent = item })
-            end
-        end
-    end
-
-    return entries
-end
-
---- Every item in drawer order: Unstaged, then Staged, children after their
---- directory.
+--- Every item in drawer order: Unstaged, then Staged.
 ---@param result IterChanges
 ---@return IterChange[]
 local function ordered(result)
     local items = {}
 
     for _, side in ipairs(SIDES) do
-        for _, entry in ipairs(flatten(result[side])) do
-            table.insert(items, entry.item)
-        end
+        vim.list_extend(items, result[side])
     end
 
     return items
@@ -210,16 +185,14 @@ end
 --- review, the viewed mark of a file follows the code letter and the
 --- item's comment count ends the cell.
 ---@param line IterRenderLine
----@param entry IterDrawerEntry
+---@param item IterChange
 ---@param first integer byte column the cell starts at
 ---@param width integer
 ---@param review? IterDrawerReview
 ---@return string
-local function cell_text(line, entry, first, width, review)
-    local item = entry.item
-    local indent = entry.parent ~= nil and '   ' or ' '
-    local name = entry.parent ~= nil and item.path:sub(#entry.parent.path + 1)
-        or item.path
+local function cell_text(line, item, first, width, review)
+    local indent = ' '
+    local name = item.path
     local prefix = indent .. item.code .. ' '
     local mark
 
@@ -280,7 +253,7 @@ end
 ---@field cells table<IterSide, IterDrawerCell>[]
 
 --- Unstaged and Staged side by side, each half of `width`.
----@param lists table<IterSide, IterDrawerEntry[]>
+---@param lists table<IterSide, IterChange[]>
 ---@param counts table<IterSide, integer>
 ---@param width integer
 ---@param review? IterDrawerReview
@@ -298,13 +271,13 @@ local function columns_layout(lists, counts, width, review)
 
         for i, side in ipairs(SIDES) do
             local text
-            local entry = lists[side][index]
+            local item = lists[side][index]
 
             if index == 0 then
                 text = title_text(line, side, counts[side], first, widths[side])
-            elseif entry ~= nil then
-                text = cell_text(line, entry, first, widths[side], review)
-                row[side] = entry.item
+            elseif item ~= nil then
+                text = cell_text(line, item, first, widths[side], review)
+                row[side] = item
                 cells[side] = { first = first, last = first + #text }
             else
                 text = string.rep(' ', widths[side])
@@ -335,7 +308,7 @@ local function columns_layout(lists, counts, width, review)
 end
 
 --- Unstaged above Staged, both the full `width`.
----@param lists table<IterSide, IterDrawerEntry[]>
+---@param lists table<IterSide, IterChange[]>
 ---@param counts table<IterSide, integer>
 ---@param width integer
 ---@param review? IterDrawerReview
@@ -356,11 +329,11 @@ local function stacked_layout(lists, counts, width, review)
         table.insert(result.rows, {})
         table.insert(result.cells, {})
 
-        for _, entry in ipairs(lists[side]) do
+        for _, item in ipairs(lists[side]) do
             local line = render.line('')
-            line.text = cell_text(line, entry, 0, width, review)
+            line.text = cell_text(line, item, 0, width, review)
             table.insert(result.lines, line)
-            table.insert(result.rows, { [side] = entry.item })
+            table.insert(result.rows, { [side] = item })
             table.insert(
                 result.cells,
                 { [side] = { first = 0, last = #line.text } }
@@ -589,7 +562,6 @@ function Drawer.open(opts)
         column = 'unstaged',
         lnum = 1,
         layout = 'columns',
-        expanded = {},
         preview_tick = 0,
         closed = false,
         on_comments = opts.on_comments,
@@ -656,7 +628,6 @@ function Drawer:make_handlers()
         stage = act('stage'),
         unstage = act('unstage'),
         discard = act('discard'),
-        expand = act('toggle'),
         close = act('close'),
         help = act('toggle_help'),
         column_left = function()
@@ -745,12 +716,6 @@ function Drawer:load()
 
     self.changes = changes.build(snapshot)
 
-    for _, item in ipairs(self.changes.unstaged) do
-        if item.dir and self.expanded[item.path] then
-            changes.expand(self.changes.root, item)
-        end
-    end
-
     self.comments = self.comments or {}
     self.records = self.records or {}
 
@@ -804,13 +769,12 @@ function Drawer:load_viewed()
 end
 
 --- Write the items into the buffer in the layout the pane's width allows,
---- with the header and key hint line around them. The float grows to fit
---- them, up to half the pane.
+--- with the header and key hint line around them.
 function Drawer:render()
     local width = vim.api.nvim_win_get_width(self.pane)
     local lists = {
-        unstaged = flatten(self.changes.unstaged),
-        staged = flatten(self.changes.staged),
+        unstaged = self.changes.unstaged,
+        staged = self.changes.staged,
     }
     local counts = {
         unstaged = #self.changes.unstaged,
@@ -866,7 +830,7 @@ function Drawer:render()
     render.apply(self.buf, layout.lines)
 
     self.float:reposition({
-        fit = #layout.lines,
+        min_lines = math.min(#layout.lines, MIN_LINES),
         title = header_chunks(self.changes, self.layout, header),
         footer = hint_chunks(
             keymap.list(self.keys_view, self.keys, self.handlers),
@@ -888,9 +852,9 @@ function Drawer:sync_viewed()
     self.view:set_viewed(file and self.viewed[file.path])
 end
 
---- Size the pane, a split of its own in the review tab, to the drawer's
---- lines and chrome: at least `drawer.height` of the pane and the view's
---- window together, at most half of them.
+--- Size the pane, a split of its own in the review tab, to `drawer.height`
+--- of the pane and the view's window together, but at least `MIN_LINES` of
+--- the drawer's lines and chrome, up to half of them.
 ---@param count integer
 function Drawer:fit_pane(count)
     if not util.is_valid_win(self.view.win) then
@@ -904,7 +868,7 @@ function Drawer:fit_pane(count)
     local height = math.max(
         3,
         math.floor(base),
-        math.min(count + 2, math.floor(total / 2))
+        math.min(math.min(count, MIN_LINES) + 2, math.floor(total / 2))
     )
 
     if height ~= current then
@@ -1366,22 +1330,16 @@ function Drawer:has_unstaged(path)
     return false
 end
 
---- The files an action on `item` touches. Nested repositories inside an
---- untracked directory are left out.
+--- The files an action on `item` touches. A nested repository is left out.
 ---@param item IterChange
 ---@return string[]
 function Drawer:paths(item)
-    local paths = {}
-
-    for _, path in ipairs(changes.files(self.changes.root, item)) do
-        if vim.endswith(path, '/') then
-            util.warn('Skipped the nested repository ' .. path)
-        else
-            table.insert(paths, path)
-        end
+    if item.dir then
+        util.warn('Skipped the nested repository ' .. item.path)
+        return {}
     end
 
-    return paths
+    return { item.path }
 end
 
 function Drawer:stage()
@@ -1485,61 +1443,13 @@ function Drawer:discard()
     self:refresh_after(ok, err, 'Cannot discard ' .. item.path)
 end
 
---- Expand or collapse the selected untracked directory, or the directory
---- the selected file belongs to.
-function Drawer:toggle()
-    local item = self:selected()
-
-    if item == nil or item.side ~= 'unstaged' then
-        return
-    end
-
-    ---@type IterChange?
-    local dir = item
-
-    if not item.dir then
-        dir = nil
-
-        for _, candidate in ipairs(self.changes.unstaged) do
-            if
-                candidate.expanded and vim.startswith(item.path, candidate.path)
-            then
-                dir = candidate
-            end
-        end
-    end
-
-    if dir == nil then
-        return
-    end
-
-    if dir.expanded then
-        changes.collapse(dir)
-        self.expanded[dir.path] = nil
-    else
-        changes.expand(self.changes.root, dir)
-        self.expanded[dir.path] = true
-    end
-
-    if self.context == 'review' then
-        self:load_viewed()
-    end
-
-    self:render()
-    self:restore_selection({ column = 'unstaged', path = dir.path, index = 1 })
-end
-
 --- Close the drawer and edit the selected file in the pane. A deleted file
 --- keeps the drawer open.
 function Drawer:open_file()
     local item = self:selected()
 
-    if item == nil then
+    if item == nil or item.dir then
         return
-    end
-
-    if item.dir then
-        return self:toggle()
     end
 
     local path = vim.fs.joinpath(self.changes.root, item.path)
@@ -1567,12 +1477,8 @@ end
 function Drawer:enter_view()
     local item = self:selected()
 
-    if item == nil then
+    if item == nil or item.dir then
         return
-    end
-
-    if item.dir then
-        return self:toggle()
     end
 
     self:preview(false)

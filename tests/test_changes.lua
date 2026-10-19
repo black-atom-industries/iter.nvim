@@ -63,7 +63,7 @@ end
 
 T['build()'] = new_set()
 
-T['build()']['splits a real snapshot into sides, untracked last'] = function()
+T['build()']['splits a real snapshot into sides, untracked files by path'] = function()
     create_repo()
     local result = changes.build(git.status_snapshot())
 
@@ -73,12 +73,14 @@ T['build()']['splits a real snapshot into sides, untracked last'] = function()
     eq(result.staged[1].code, 'R')
     eq(result.staged[1].orig_path, 'old.txt')
     eq(result.staged[1].side, 'staged')
-    eq(paths(result.unstaged), { 'mod.txt', 'dir/', 'z.txt' })
-    eq(result.unstaged[1].code, 'M')
-    eq(result.unstaged[2].code, '?')
-    eq(result.unstaged[2].dir, true)
-    eq(result.unstaged[3].code, '?')
-    eq(result.unstaged[3].dir, nil)
+    eq(
+        paths(result.unstaged),
+        { 'dir/a.txt', 'dir/sub/b.txt', 'mod.txt', 'z.txt' }
+    )
+    eq(result.unstaged[1].code, '?')
+    eq(result.unstaged[1].dir, nil)
+    eq(result.unstaged[3].code, 'M')
+    eq(result.unstaged[4].code, '?')
     eq(result.ahead, nil)
 end
 
@@ -95,14 +97,25 @@ T['build()']['lists a partly staged file on both sides'] = function()
     eq(result.unstaged[2].code, 'D')
 end
 
-T['build()']['puts untracked files after tracked ones'] = function()
+T['build()']['sorts untracked files by path among tracked ones'] = function()
     local result = changes.build(snapshot({
         { staged = '?', unstaged = '?', path = 'a_new.txt' },
         { staged = ' ', unstaged = 'M', path = 'z_mod.txt' },
+        { staged = '?', unstaged = '?', path = 'm_new.txt' },
     }))
 
-    eq(paths(result.unstaged), { 'z_mod.txt', 'a_new.txt' })
+    eq(paths(result.unstaged), { 'a_new.txt', 'm_new.txt', 'z_mod.txt' })
+    eq(result.unstaged[3].code, 'M')
     eq(result.staged, {})
+end
+
+T['build()']['marks a nested repository row as a directory'] = function()
+    local result = changes.build(snapshot({
+        { staged = '?', unstaged = '?', path = 'nested/' },
+    }))
+
+    eq(result.unstaged[1].path, 'nested/')
+    eq(result.unstaged[1].dir, true)
 end
 
 T['build()']['keeps the rename origin on the renamed side only'] = function()
@@ -135,70 +148,15 @@ T['build()']['names a detached HEAD "HEAD" and carries ahead'] = function()
     eq(ahead.ahead, 2)
 end
 
-T['expand()'] = new_set()
-
-T['expand()']['lists untracked files without ignored ones'] = function()
-    create_repo()
-    local result = changes.build(git.status_snapshot())
-    local dir = result.unstaged[2]
-
-    eq(changes.expand(result.root, dir), true)
-    eq(dir.expanded, true)
-    eq(paths(dir.children), { 'dir/a.txt', 'dir/sub/b.txt' })
-    eq(dir.children[1].code, '?')
-    eq(dir.children[1].side, 'unstaged')
-
-    changes.collapse(dir)
-    eq(dir.expanded, false)
-end
-
-T['expand()']['ignores a plain file'] = function()
-    create_repo()
-    local result = changes.build(git.status_snapshot())
-
-    eq(changes.expand(result.root, result.unstaged[1]), false)
-    eq(result.unstaged[1].children, nil)
-end
-
-T['files()'] = new_set()
-
-T['files()']['returns the exact untracked files of a directory'] = function()
-    create_repo()
-    local result = changes.build(git.status_snapshot())
-
-    eq(
-        changes.files(result.root, result.unstaged[2]),
-        { 'dir/a.txt', 'dir/sub/b.txt' }
-    )
-    eq(changes.files(result.root, result.unstaged[3]), { 'z.txt' })
-end
-
-T['files()']['lists afresh instead of trusting stale children'] = function()
-    create_repo()
-    local result = changes.build(git.status_snapshot())
-    local dir = result.unstaged[2]
-    changes.expand(result.root, dir)
-    helpers.write_file(vim.fs.joinpath(repo, 'dir', 'late.txt'), { 'l' })
-
-    eq(
-        changes.files(result.root, dir),
-        { 'dir/a.txt', 'dir/late.txt', 'dir/sub/b.txt' }
-    )
-end
-
 T['odd paths'] = new_set()
 
 T['odd paths']['keep spaces and non-ASCII characters'] = function()
     repo = helpers.create_odd_paths_repo()
     vim.cmd.cd(vim.fn.fnameescape(repo))
     local result = changes.build(git.status_snapshot())
-    local dir = result.unstaged[2]
 
-    eq(paths(result.unstaged), { 'sp ace/ü.txt', 'ne w/' })
-    eq(dir.dir, true)
-    eq(changes.files(result.root, dir), { 'ne w/ö ä.txt' })
-    eq(changes.expand(result.root, dir), true)
-    eq(paths(dir.children), { 'ne w/ö ä.txt' })
+    eq(paths(result.unstaged), { 'ne w/ö ä.txt', 'sp ace/ü.txt' })
+    eq(result.unstaged[1].dir, nil)
 end
 
 T['truncate()'] = new_set()

@@ -1,17 +1,13 @@
-local git = require('iter.git')
-
 local M = {}
 
 ---@class IterChange: IterDiffChange one drawer item
----@field dir? boolean untracked directory, path ends with `/`
----@field expanded? boolean
----@field children? IterChange[]
+---@field dir? boolean nested repository, path ends with `/`
 
 ---@class IterChanges
 ---@field root string
 ---@field branch string 'HEAD' when detached
 ---@field ahead? integer
----@field unstaged IterChange[] untracked last
+---@field unstaged IterChange[] sorted by path, untracked included
 ---@field staged IterChange[]
 
 local conflicts = {
@@ -52,22 +48,22 @@ end
 
 --- Unstaged and Staged lists from a status snapshot. A partly staged file is
 --- on both sides, a conflict once under Unstaged with code `U`, and untracked
---- paths come last. Untracked directories stay collapsed.
+--- files sit among the other unstaged paths.
 ---@param snapshot GitStatusSnapshot
 ---@return IterChanges
 function M.build(snapshot)
-    local tracked, untracked, staged = {}, {}, {}
+    local unstaged, staged = {}, {}
 
     for _, entry in ipairs(snapshot.entries) do
         local x, y = entry.staged, entry.unstaged
 
         if conflicts[x .. y] then
             table.insert(
-                tracked,
+                unstaged,
                 change(entry.path, 'unstaged', 'U', entry.orig_path)
             )
         elseif x == '?' then
-            table.insert(untracked, change(entry.path, 'unstaged', '?'))
+            table.insert(unstaged, change(entry.path, 'unstaged', '?'))
         elseif x ~= '!' then
             if x ~= ' ' then
                 table.insert(
@@ -78,59 +74,24 @@ function M.build(snapshot)
 
             if y ~= ' ' then
                 table.insert(
-                    tracked,
+                    unstaged,
                     change(entry.path, 'unstaged', y, entry.orig_path)
                 )
             end
         end
     end
 
-    vim.list_extend(tracked, untracked)
+    table.sort(unstaged, function(a, b)
+        return a.path < b.path
+    end)
 
     return {
         root = snapshot.root,
         branch = snapshot.detached and 'HEAD' or snapshot.branch,
         ahead = snapshot.ahead,
-        unstaged = tracked,
+        unstaged = unstaged,
         staged = staged,
     }
-end
-
---- Fill an untracked directory with its untracked files; ignored files are
---- never listed.
----@param root string
----@param item IterChange
----@return boolean expanded false when `item` is not an untracked directory
-function M.expand(root, item)
-    if not item.dir then
-        return false
-    end
-
-    local files = git.untracked_files(root, item.path) or {}
-    item.children = vim.tbl_map(function(path)
-        return change(path, 'unstaged', '?')
-    end, files)
-    item.expanded = true
-
-    return true
-end
-
----@param item IterChange
-function M.collapse(item)
-    item.expanded = false
-end
-
---- The exact paths an action on `item` touches. An untracked directory is
---- listed afresh, so stale children never widen or narrow a stage or discard.
----@param root string
----@param item IterChange
----@return string[]
-function M.files(root, item)
-    if not item.dir then
-        return { item.path }
-    end
-
-    return git.untracked_files(root, item.path) or {}
 end
 
 --- Cut `path` from the left to at most `width` display cells, marking the cut

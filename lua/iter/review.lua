@@ -103,6 +103,7 @@ function Review.open(opts)
     vim.bo[buf].bufhidden = 'hide'
 
     vim.cmd('tab sbuffer ' .. buf)
+    vim.t.radar_disabled = true
 
     local diff_win = vim.api.nvim_get_current_win()
     local spacer_win = vim.api.nvim_open_win(buf, false, {

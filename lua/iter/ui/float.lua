@@ -11,7 +11,7 @@ local M = {}
 ---@field chrome? boolean a header row above and a hint row below the text
 ---@field title? [string, string][] header chunks, with `chrome`
 ---@field footer? [string, string][] hint chunks, with `chrome`
----@field fit? integer text lines to grow to, up to half the pane
+---@field min_lines? integer text lines kept when `height` gives fewer
 
 ---@class IterFloat
 ---@field win integer
@@ -31,8 +31,7 @@ end
 -- Top and bottom edges only: one row each for the title and the footer.
 local CHROME_BORDER = { '', ' ', '', '', '', ' ', '', '' }
 
---- Text rows of the float. `opts.height` and the half-pane cap for `fit`
---- count the chrome rows too.
+--- Text rows of the float. `opts.height` counts the chrome rows too.
 ---@param opts IterFloatOpts
 ---@return integer
 local function resolve_height(opts)
@@ -44,9 +43,8 @@ local function resolve_height(opts)
         height = math.floor(pane_height * height)
     end
 
-    if opts.fit ~= nil then
-        local fitted = math.min(opts.fit + chrome, math.floor(pane_height / 2))
-        height = math.max(height, fitted)
+    if opts.min_lines ~= nil then
+        height = math.max(height, opts.min_lines + chrome)
     end
 
     height = math.min(math.floor(height), pane_height) - chrome
@@ -142,7 +140,7 @@ end
 ---@field height? number
 ---@field title? [string, string][]
 ---@field footer? [string, string][]
----@field fit? integer
+---@field min_lines? integer
 
 --- Fit the float to its pane again, optionally with new options.
 ---@param overrides? IterFloatOverrides

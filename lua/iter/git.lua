@@ -215,7 +215,7 @@ function git.status_snapshot(root)
     end
 
     local status_out = git.run(
-        { 'status', '--porcelain=v1', '-z' },
+        { 'status', '--porcelain=v1', '-z', '--untracked-files=all' },
         { cwd = root }
     )
 
@@ -325,37 +325,6 @@ function git.head_branch(root)
     end
 
     return ref:sub(#'refs/heads/' + 1)
-end
-
----Untracked files under `dir`, relative to `root`. Ignored files are left
----out. A nested repository is listed as its directory, with a trailing `/`.
----@param root string
----@param dir string
----@return string[]? files
----@return string? error
-function git.untracked_files(root, dir)
-    local out = git.run({
-        'ls-files',
-        '--others',
-        '--exclude-standard',
-        '-z',
-        '--',
-        ':(literal)' .. dir,
-    }, { cwd = root, ignore_error = true })
-
-    if out.exit_code ~= 0 then
-        return nil, return_result(out)
-    end
-
-    local files = {}
-
-    for _, path in ipairs(vim.split(out.output, '\0', { plain = true })) do
-        if path ~= '' then
-            table.insert(files, path)
-        end
-    end
-
-    return files
 end
 
 --- Run `args -- <paths>` in `root`, every path a literal pathspec so glob

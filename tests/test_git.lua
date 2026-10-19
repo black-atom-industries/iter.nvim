@@ -95,7 +95,8 @@ T['status_snapshot()']['reports every fixture state'] = function()
         ['modified.txt'] = ' M',
         ['staged.txt'] = 'M ',
         ['untracked.txt'] = '??',
-        ['untracked_dir/'] = '??',
+        ['untracked_dir/a.txt'] = '??',
+        ['untracked_dir/b.txt'] = '??',
     })
 end
 
@@ -156,26 +157,28 @@ T['ahead()']['counts commits ahead of the upstream'] = function()
     eq(git.status_snapshot().ahead, 1)
 end
 
-T['untracked_files()'] = new_set()
-
-T['untracked_files()']['lists files in a directory, not ignored ones'] = function()
+T['status_snapshot()']['lists each untracked file, not ignored ones'] = function()
     write('.gitignore', { '*.log' })
     helpers.git(repo, { 'add', '.gitignore' })
     helpers.git(repo, { 'commit', '--quiet', '-m', 'ignore' })
     write('dir/a.txt', { 'a' })
     write('dir/sub/b.txt', { 'b' })
     write('dir/skip.log', { 'x' })
-    write('other/c.txt', { 'c' })
 
-    eq(git.untracked_files(repo, 'dir/'), { 'dir/a.txt', 'dir/sub/b.txt' })
+    local paths = vim.tbl_map(function(e)
+        return e.path
+    end, git.status_snapshot().entries)
+
+    table.sort(paths)
+    eq(paths, { 'dir/a.txt', 'dir/sub/b.txt' })
 end
 
-T['untracked_files()']['treats the path literally and skips tracked files'] = function()
-    write('we[ir]d/a.txt', { 'a' })
-    write('weird/b.txt', { 'b' })
+T['status_snapshot()']['lists a nested repository as one directory row'] = function()
+    helpers.write_file(vim.fs.joinpath(repo, 'nested', 'a.txt'), { 'a' })
+    helpers.git(vim.fs.joinpath(repo, 'nested'), { 'init', '--quiet' })
 
-    eq(git.untracked_files(repo, 'we[ir]d/'), { 'we[ir]d/a.txt' })
-    eq(git.untracked_files(repo, 'tracked.txt'), {})
+    eq(entry('nested/'), { staged = '?', unstaged = '?', path = 'nested/' })
+    eq(entry('nested/a.txt'), nil)
 end
 
 T['status_snapshot()']['flags a detached HEAD'] = function()
