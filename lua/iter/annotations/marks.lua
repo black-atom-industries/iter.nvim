@@ -194,18 +194,23 @@ local function wrap(text, width)
 end
 
 --- The virtual lines of one annotation for a text area `width` cells wide:
---- a bar, then the body wrapped and padded to the width. An outdated one is
---- labelled and dimmed; a focused one is highlighted.
+--- a bar, then the body wrapped and padded to the width; the first line has
+--- `icon` after the bar and the others are indented under the text. An
+--- outdated one is labelled and dimmed; a focused one is highlighted.
 ---@param annotation IterAnnotation
 ---@param outdated boolean
 ---@param width integer
 ---@param focused? boolean
+---@param icon? string shown after the bar, nil or '' for none
 ---@return [string, string][][]
-function M.lines(annotation, outdated, width, focused)
+function M.lines(annotation, outdated, width, focused, icon)
     local group = focused and 'IterDiffAnnotationFocus'
         or outdated and 'IterDiffAnnotationOutdated'
         or 'IterDiffAnnotation'
-    local text_width = math.max(1, width - vim.fn.strdisplaywidth(BAR))
+    local lead = icon ~= nil and icon ~= '' and icon .. ' ' or ''
+    local lead_width = vim.fn.strdisplaywidth(lead)
+    local text_width =
+        math.max(1, width - vim.fn.strdisplaywidth(BAR) - lead_width)
     local body = (outdated and OUTDATED or '')
         .. (annotation.body:gsub('\t', '    '))
     local result = {}
@@ -214,10 +219,20 @@ function M.lines(annotation, outdated, width, focused)
         for _, piece in ipairs(wrap(paragraph, text_width)) do
             local pad = text_width - vim.fn.strdisplaywidth(piece)
 
-            table.insert(result, {
-                { BAR, group },
-                { piece .. string.rep(' ', math.max(0, pad)), group },
-            })
+            local chunks = { { BAR, group } }
+
+            if lead_width > 0 then
+                table.insert(chunks, {
+                    #result == 0 and lead or string.rep(' ', lead_width),
+                    group,
+                })
+            end
+
+            table.insert(
+                chunks,
+                { piece .. string.rep(' ', math.max(0, pad)), group }
+            )
+            table.insert(result, chunks)
         end
     end
 
@@ -231,7 +246,8 @@ end
 ---@param marks IterAnnotationMark[]
 ---@param width integer text area width of the window
 ---@param focus? string
-function M.apply(buf, ns, marks, width, focus)
+---@param icon? string
+function M.apply(buf, ns, marks, width, focus, icon)
     vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
 
     local by_row = {}
@@ -244,7 +260,8 @@ function M.apply(buf, ns, marks, width, focus)
                 mark.annotation,
                 mark.outdated,
                 width,
-                focus ~= nil and mark.annotation.id == focus
+                focus ~= nil and mark.annotation.id == focus,
+                icon
             )
         )
     end
@@ -400,7 +417,13 @@ local function render(buf, win)
             })
         end
 
-        local virt_lines = M.lines(annotation, outdated, width)
+        local virt_lines = M.lines(
+            annotation,
+            outdated,
+            width,
+            false,
+            require('iter').config.options.icons.annotation
+        )
 
         for _, line in ipairs(virt_lines) do
             table.insert(line, 1, pad)

@@ -1,24 +1,24 @@
 --|---------|---------|---------|---------|---------|---------|---------|---------|---------|---------|---------|---------|
 01| [No Name]  4 i//review-annotations                                                                                    X
 02|          M m.txt                                                                                   ○ not viewed  +1 −2 
-03|          ▎ Needs a test                                                                                                
+03|          ▎ 󰆉 Needs a test                                                                                              
 04|          @@ -1,11 +1,10 @@                                                                                             
 05|  1   1   l1                                                                                                            
 06|  2   2   l2                                                                                                            
 07|  3     - l3                                                                                                            
 08|      3 + l3 new                                                                                                        
-09|          ▎ Why this change?                                                                                            
+09|          ▎ 󰆉 Why this change?                                                                                          
 10|  4   4   l4                                                                                                            
 11|  5   5   l5                                                                                                            
 12|  6   6   l6                                                                                                            
-13|          ▎ Extract a helper                                                                                            
-14|          ▎ for these lines                                                                                             
+13|          ▎ 󰆉 Extract a helper                                                                                          
+14|          ▎   for these lines                                                                                           
 15|  7   7   l7                                                                                                            
 16|  8     - l8                                                                                                            
-17|          ▎ Why remove it?                                                                                              
+17|          ▎ 󰆉 Why remove it?                                                                                            
 18|  9   8   l9                                                                                                            
 19| 10   9   l10                                                                                                           
-20|          ▎ outdated · Stale remark                                                                                     
+20|          ▎ 󰆉 outdated · Stale remark                                                                                   
 21|iter://review-diff [-]                                                                                                  
 22| HEAD main                                                                                                       2 files
 23| Unstaged (1)                                                                  │ Annotations (8) · 1 outdated           

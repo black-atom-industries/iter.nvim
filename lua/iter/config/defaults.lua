@@ -21,6 +21,9 @@
 ---@class IterConfirmOptions
 ---@field discard? boolean Ask before discarding changes
 
+---@class IterIconsOptions
+---@field annotation? string Shown before each annotation, '' for none
+
 ---@alias IterView 'drawer'|'review_drawer'|'diff'|'annotation'|'help'
 
 ---@alias IterKeyValue string|string[]|false
@@ -31,6 +34,7 @@
 ---@field export? IterExportOptions
 ---@field refresh? IterRefreshOptions
 ---@field confirm? IterConfirmOptions
+---@field icons? IterIconsOptions
 ---@field keys? table<IterView, table<string, IterKeyValue>>
 ---@field debug? boolean
 
@@ -62,6 +66,9 @@ M.options = {
     },
     confirm = {
         discard = true,
+    },
+    icons = {
+        annotation = '󰆉',
     },
 }
 

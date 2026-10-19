@@ -227,17 +227,25 @@ T['diff view']['shows each annotation kind under its row'] = function()
     open_review()
 
     eq(placed(), {
-        '1 ▎ File annotation',
-        '3 ▎ Line annotation',
-        '9 ▎ A range annotation that is long enough to wrap at the width of the'
-            .. '|▎ diff window, which is eighty columns minus the rail',
-        '11 ▎ Deleted line annotation',
-        '13 ▎ outdated · Outdated annotation',
-        '15 ▎ Hidden annotation',
+        '1 ▎ 󰆉 File annotation',
+        '3 ▎ 󰆉 Line annotation',
+        '9 ▎ 󰆉 A range annotation that is long enough to wrap at the width of the'
+            .. '|▎   diff window, which is eighty columns minus the rail',
+        '11 ▎ 󰆉 Deleted line annotation',
+        '13 ▎ 󰆉 outdated · Outdated annotation',
+        '15 ▎ 󰆉 Hidden annotation',
     })
     eq(child.v.errmsg, '')
 
     helpers.expect_screenshot(child, 'marks-diff')
+end
+
+T['diff view']['icons.annotation = "" leaves the bar and text only'] = function()
+    child.lua([[require('iter').config.options.icons.annotation = '']])
+    seed(ANNOTATIONS)
+    open_review()
+
+    eq(placed()[2], '3 ▎ Line annotation')
 end
 
 T['diff view']['dims outdated annotations'] = function()
@@ -263,8 +271,8 @@ T['diff view']['rewraps the text when the window width changes'] = function()
     open_review()
 
     eq(placed(), {
-        '9 ▎ A range annotation that is long enough to wrap at the width of the'
-            .. '|▎ diff window, which is eighty columns minus the rail',
+        '9 ▎ 󰆉 A range annotation that is long enough to wrap at the width of the'
+            .. '|▎   diff window, which is eighty columns minus the rail',
     })
 
     child.o.columns = 50
@@ -274,10 +282,10 @@ T['diff view']['rewraps the text when the window width changes'] = function()
     )
 
     eq(placed(), {
-        '9 ▎ A range annotation that is long enough'
-            .. '|▎ to wrap at the width of the diff'
-            .. '|▎ window, which is eighty columns minus'
-            .. '|▎ the rail',
+        '9 ▎ 󰆉 A range annotation that is long'
+            .. '|▎   enough to wrap at the width of the'
+            .. '|▎   diff window, which is eighty columns'
+            .. '|▎   minus the rail',
     })
 
     -- Stacked at 50 columns, the count still ends the full-width cell.
@@ -313,10 +321,10 @@ T['diff view']['rewraps when only the diff window narrows'] = function()
         50
     )
     eq(placed(), {
-        '9 ▎ A range annotation that is long enough'
-            .. '|▎ to wrap at the width of the diff'
-            .. '|▎ window, which is eighty columns minus'
-            .. '|▎ the rail',
+        '9 ▎ 󰆉 A range annotation that is long'
+            .. '|▎   enough to wrap at the width of the'
+            .. '|▎   diff window, which is eighty columns'
+            .. '|▎   minus the rail',
     })
     eq(child.lua_get(R .. '.drawer.layout'), 'columns')
 end
@@ -325,7 +333,7 @@ T['diff view']['expanding a gap moves a hidden annotation to its line'] = functi
     seed({ ANNOTATIONS[6] })
     open_review()
 
-    eq(placed(), { '15 ▎ Hidden annotation' })
+    eq(placed(), { '15 ▎ 󰆉 Hidden annotation' })
 
     child.lua([[
         local view = require('iter').current_review.drawer.view
@@ -333,7 +341,7 @@ T['diff view']['expanding a gap moves a hidden annotation to its line'] = functi
     ]])
 
     -- The gap of nine lines opens whole: l12 to l20 on rows 15 to 23.
-    eq(placed(), { '19 ▎ Hidden annotation' })
+    eq(placed(), { '19 ▎ 󰆉 Hidden annotation' })
     eq(child.lua_get(R .. '.drawer.view.rows[19].text'), 'l16')
 end
 
@@ -344,7 +352,7 @@ T['diff view']['a refresh picks up annotations written meanwhile'] = function()
     seed({ ANNOTATIONS[1] })
     child.lua(R .. '.drawer:refresh()')
 
-    eq(placed(), { '3 ▎ Line annotation' })
+    eq(placed(), { '3 ▎ 󰆉 Line annotation' })
 end
 
 T['diff view']['a fully staged file outdates a lost annotation'] = function()
@@ -357,7 +365,7 @@ T['diff view']['a fully staged file outdates a lost annotation'] = function()
     ]])
     wait_diff('staged m.txt')
 
-    eq(placed(), { '13 ▎ outdated · Outdated annotation' })
+    eq(placed(), { '13 ▎ 󰆉 outdated · Outdated annotation' })
 end
 
 T['diff view']['a partly staged file leaves a lost annotation out'] = function()
@@ -384,7 +392,7 @@ end
 T['diff view']['a failed store read keeps the annotations'] = function()
     seed({ ANNOTATIONS[1] })
     open_review()
-    eq(placed(), { '3 ▎ Line annotation' })
+    eq(placed(), { '3 ▎ 󰆉 Line annotation' })
 
     child.lua([[
         local path = require('iter.store').path(vim.fn.getcwd())
@@ -392,7 +400,7 @@ T['diff view']['a failed store read keeps the annotations'] = function()
         require('iter').current_review.drawer:refresh()
     ]])
 
-    eq(placed(), { '3 ▎ Line annotation' })
+    eq(placed(), { '3 ▎ 󰆉 Line annotation' })
     eq(
         child.lua_get(
             [[#vim.api.nvim_buf_get_lines(]]
@@ -631,14 +639,14 @@ T['normal buffer']['shows line and range annotations with signs'] = function()
 
     eq(buffer_marks(), {
         '1 sign',
-        '1 ▎ Line annotation',
+        '1 ▎ 󰆉 Line annotation',
         '4 sign',
         '5 sign',
         '6 sign',
-        '6 ▎ A range annotation that is long enough to wrap at the width of the diff'
-            .. '|▎ window, which is eighty columns minus the rail',
+        '6 ▎ 󰆉 A range annotation that is long enough to wrap at the width of the'
+            .. '|▎   diff window, which is eighty columns minus the rail',
         '9 sign',
-        '9 ▎ outdated · Outdated annotation',
+        '9 ▎ 󰆉 outdated · Outdated annotation',
     })
     eq(child.v.errmsg, '')
 
@@ -663,7 +671,7 @@ T['normal buffer']['setup() shows the buffers already in windows'] = function()
     child.cmd('edit m.txt')
     setup_iter()
 
-    eq(buffer_marks(), { '1 sign', '1 ▎ Line annotation' })
+    eq(buffer_marks(), { '1 sign', '1 ▎ 󰆉 Line annotation' })
 end
 
 T['normal buffer']['saving after inserting lines above moves the annotations'] = function()
@@ -678,7 +686,7 @@ T['normal buffer']['saving after inserting lines above moves the annotations'] =
         ANNOTATIONS[2].body .. ' 6-8',
     })
     eq(buffer_marks()[1], '3 sign')
-    eq(buffer_marks()[2], '3 ▎ Line annotation')
+    eq(buffer_marks()[2], '3 ▎ 󰆉 Line annotation')
     eq(buffer_marks()[5], '8 sign')
 end
 
@@ -697,12 +705,12 @@ T['normal buffer']['a reload after an outside edit moves the marks'] = function(
     eq(child.api.nvim_buf_get_lines(0, 0, 1, false), { 'agent b' })
     eq(buffer_marks(), {
         '3 sign',
-        '3 ▎ Line annotation',
+        '3 ▎ 󰆉 Line annotation',
         '6 sign',
         '7 sign',
         '8 sign',
-        '8 ▎ A range annotation that is long enough to wrap at the width of the diff'
-            .. '|▎ window, which is eighty columns minus the rail',
+        '8 ▎ 󰆉 A range annotation that is long enough to wrap at the width of the diff'
+            .. '|▎   window, which is eighty columns minus the rail',
     })
 end
 
@@ -717,7 +725,7 @@ T['normal buffer']['saving after deleting the anchored line outdates it'] = func
         'Line annotation 1-1 outdated',
         ANNOTATIONS[2].body .. ' 3-5',
     })
-    eq(buffer_marks()[2], '1 ▎ outdated · Line annotation')
+    eq(buffer_marks()[2], '1 ▎ 󰆉 outdated · Line annotation')
     eq(child.v.errmsg, '')
 end
 
@@ -741,7 +749,7 @@ T['normal buffer']['saving the last line away keeps the annotation on the buffer
     child.cmd('write')
 
     eq(stored(), { 'Last line 19-19 outdated' })
-    eq(buffer_marks(), { '9 sign', '9 ▎ outdated · Last line' })
+    eq(buffer_marks(), { '9 sign', '9 ▎ 󰆉 outdated · Last line' })
     eq(child.v.errmsg, '')
 end
 
@@ -799,7 +807,7 @@ T['normal buffer']['showing a repo buffer again spawns no git'] = function()
     child.cmd('buffer m.txt')
 
     eq(child.lua_get('_G.git_runs'), 0)
-    eq(buffer_marks(), { '1 sign', '1 ▎ Line annotation' })
+    eq(buffer_marks(), { '1 sign', '1 ▎ 󰆉 Line annotation' })
 end
 
 T['normal buffer']['an annotation written meanwhile shows on the next enter'] = function()
@@ -811,7 +819,7 @@ T['normal buffer']['an annotation written meanwhile shows on the next enter'] = 
     child.cmd('edit n.txt')
     child.cmd('buffer m.txt')
 
-    eq(buffer_marks(), { '1 sign', '1 ▎ Line annotation' })
+    eq(buffer_marks(), { '1 sign', '1 ▎ 󰆉 Line annotation' })
 end
 
 T['normal buffer']['a branch switch shows the other branch annotations'] = function()
@@ -828,7 +836,7 @@ T['normal buffer']['a branch switch shows the other branch annotations'] = funct
     child.cmd('edit n.txt')
     child.cmd('buffer m.txt')
 
-    eq(buffer_marks(), { '1 sign', '1 ▎ Line annotation' })
+    eq(buffer_marks(), { '1 sign', '1 ▎ 󰆉 Line annotation' })
 end
 
 T['normal buffer']['a linked worktree shows its branch annotations'] = function()
@@ -839,7 +847,7 @@ T['normal buffer']['a linked worktree shows its branch annotations'] = function(
     setup_iter()
     child.cmd('edit m.txt')
 
-    eq(buffer_marks(), { '1 sign', '1 ▎ Line annotation' })
+    eq(buffer_marks(), { '1 sign', '1 ▎ 󰆉 Line annotation' })
 
     helpers.cleanup(linked)
 end
@@ -937,7 +945,7 @@ T['normal buffer'][':file and :saveas re-render for the new name'] = function()
     eq(buffer_marks(), {})
 
     child.cmd('file m.txt')
-    eq(buffer_marks(), { '1 sign', '1 ▎ outdated · Line annotation' })
+    eq(buffer_marks(), { '1 sign', '1 ▎ 󰆉 outdated · Line annotation' })
 
     child.cmd('silent saveas copy.txt')
     eq(buffer_marks(), {})
@@ -1170,6 +1178,51 @@ T['lines()']['wraps on words, splits long words and keeps line breaks'] = functi
         'abcdef',
         'ghijkl',
     })
+end
+
+T['lines()']['puts the icon after the bar on the first line only'] = function()
+    local lines = marks.lines(
+        annotation('one two three', { side = 'new' }),
+        false,
+        10,
+        false,
+        '󰆉'
+    )
+    local g = 'IterDiffAnnotation'
+
+    eq(lines, {
+        { { '▎ ', g }, { '󰆉 ', g }, { 'one   ', g } },
+        { { '▎ ', g }, { '  ', g }, { 'two   ', g } },
+        { { '▎ ', g }, { '  ', g }, { 'three ', g } },
+    })
+end
+
+T['lines()']['draws the icon of an outdated annotation outdated'] = function()
+    local lines =
+        marks.lines(annotation('x', { side = 'new' }), true, 20, false, '󰆉')
+
+    eq(lines[1][2], { '󰆉 ', 'IterDiffAnnotationOutdated' })
+end
+
+T['lines()']['an empty icon leaves no extra chunk or space'] = function()
+    local lines =
+        marks.lines(annotation('x', { side = 'new' }), false, 8, false, '')
+
+    eq(lines, {
+        {
+            { '▎ ', 'IterDiffAnnotation' },
+            { 'x     ', 'IterDiffAnnotation' },
+        },
+    })
+end
+
+T['lines()']['counts the display width of a wide icon'] = function()
+    local lines =
+        marks.lines(annotation('a b', { side = 'new' }), false, 6, false, '中')
+
+    eq(lines[1][2][1], '中 ')
+    eq(lines[2][2][1], '   ')
+    eq(vim.fn.strdisplaywidth(lines[2][2][1] .. lines[2][3][1]), 4)
 end
 
 return T

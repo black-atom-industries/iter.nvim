@@ -161,6 +161,9 @@ require('iter').setup({
     confirm = {
         discard = true,   -- ask before discarding changes
     },
+    icons = {
+        annotation = '󰆉',  -- before each annotation, '' for none
+    },
     keys = {},            -- see Keys
     debug = false,        -- write debug lines to the log
 })
