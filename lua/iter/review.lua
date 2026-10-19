@@ -200,6 +200,9 @@ function Review:view_handlers()
         picker = function()
             require('iter').comments()
         end,
+        yank = function()
+            require('iter').yank()
+        end,
         close = function()
             self:close()
         end,

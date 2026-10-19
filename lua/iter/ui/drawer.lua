@@ -668,6 +668,9 @@ function Drawer:make_handlers()
         handlers.picker = function()
             require('iter').comments()
         end
+        handlers.yank = function()
+            require('iter').yank()
+        end
     end
 
     return handlers

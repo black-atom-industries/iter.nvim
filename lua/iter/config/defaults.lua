@@ -52,7 +52,7 @@ M.options = {
         word_diff = true,
     },
     export = {
-        intro = 'I reviewed your changes and have these comments. '
+        intro = 'I reviewed your changes and have these comments.\n'
             .. 'Please address them.',
     },
     refresh = {

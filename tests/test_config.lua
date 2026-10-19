@@ -23,7 +23,7 @@ T['resolve()']['returns the defaults without options'] = function()
     })
     eq(
         resolved.options.export.intro,
-        'I reviewed your changes and have these comments. Please address them.'
+        'I reviewed your changes and have these comments.\nPlease address them.'
     )
     eq(resolved.options.refresh.poll_ms, 2000)
     eq(resolved.options.confirm.discard, true)

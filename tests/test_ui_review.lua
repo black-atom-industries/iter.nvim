@@ -1092,6 +1092,7 @@ T['hunks']['? in the diff pane lists its keys'] = function()
                 ' gf    Go to the line in the file',
                 ' v     Toggle viewed',
                 ' L     List comments',
+                ' y     Copy the review',
                 ' q     Close',
                 ' ?     Show the keys',
             }
