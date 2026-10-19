@@ -286,7 +286,10 @@ T['toggle']['<C-t> hides the float and shows it in the same place'] = function()
     )
 
     child.cmd('tabnew')
-    eq(child.lua_get([[require('iter').statusline()]]), 'draft annotation')
+    eq(
+        child.lua_get([[require('iter').statusline()]]),
+        'main · 1 · draft annotation'
+    )
     child.cmd('tabprevious')
     child.type_keys('<C-t>')
     wait_editor()

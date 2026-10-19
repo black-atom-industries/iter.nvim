@@ -251,14 +251,19 @@ function M.annotations()
     end
 end
 
---- `review · <file> · <i>/<n>` inside the review tab, `''` elsewhere, with
---- `draft annotation` while an annotation draft is hidden.
+--- `review · <file> · <i>/<n>` inside the review tab, `<branch> · <n>`
+--- elsewhere in a repository, with `draft annotation` while an annotation
+--- draft is hidden.
 ---@return string
 function M.statusline()
     local parts = {}
+    local review = M.current_review ~= nil and M.current_review:statusline()
+        or ''
 
-    if M.current_review ~= nil then
-        table.insert(parts, M.current_review:statusline())
+    if review ~= '' then
+        table.insert(parts, review)
+    else
+        table.insert(parts, require('iter.statusline').get())
     end
 
     table.insert(parts, require('iter.annotations.editor').statusline())
@@ -277,6 +282,7 @@ function M.setup(opts)
     M.config = config.resolve(opts)
     M.did_setup = true
     require('iter.annotations.marks').watch_buffers()
+    require('iter.statusline').setup()
 
     return M
 end

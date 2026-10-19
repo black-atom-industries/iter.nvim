@@ -238,6 +238,66 @@ function git.status_snapshot(root, opts)
     }
 end
 
+--- `git.status_snapshot` without waiting: the branch and the entries of
+--- `root`, read in the background, then `on_done` on the main loop. The
+--- ahead count is left out.
+---@param root string
+---@param on_done fun(snapshot: GitStatusSnapshot)
+function git.status_async(root, on_done)
+    local done = vim.schedule_wrap(on_done)
+
+    if vim.fn.executable('git') == 0 then
+        done({
+            branch = '',
+            entries = {},
+            root = root,
+            error = '`git` is not executable',
+        })
+        return
+    end
+
+    -- A spawn that fails, such as on a root removed meanwhile, reads as a
+    -- failed command.
+    local function run(args, on_exit)
+        local cmd = vim.list_extend({ 'git', '--no-optional-locks' }, args)
+        local ok, err =
+            pcall(vim.system, cmd, { text = true, cwd = root }, on_exit)
+
+        if not ok then
+            on_exit({ code = -1, stdout = '', stderr = tostring(err) })
+        end
+    end
+
+    run({ 'branch', '--show-current' }, function(branch_out)
+        run(
+            { 'status', '--porcelain=v1', '-z', '--untracked-files=all' },
+            function(status_out)
+                local branch = vim.trim(branch_out.stdout or '')
+                local failed = branch_out.code ~= 0 and branch_out
+                    or status_out.code ~= 0 and status_out
+                    or nil
+
+                if failed ~= nil then
+                    done({
+                        branch = branch,
+                        entries = {},
+                        root = root,
+                        error = vim.trim(failed.stderr or ''),
+                    })
+                    return
+                end
+
+                done({
+                    branch = branch,
+                    entries = parse_status(status_out.stdout or ''),
+                    detached = branch == '',
+                    root = root,
+                })
+            end
+        )
+    end)
+end
+
 ---Number of commits HEAD is ahead of its upstream.
 ---@param root string
 ---@return integer? ahead nil when there is no upstream
@@ -386,6 +446,47 @@ end
 ---@return string?
 function git.delete_untracked(root, paths)
     return run_on_paths(root, { 'clean', '--force' }, paths)
+end
+
+--- Append `path`, a path of `root`, to the `.gitignore` at `root` as a
+--- pattern anchored to the root: `/path`, or `/dir/` for a directory given
+--- as `dir/`. Glob characters and trailing spaces are escaped, so the
+--- pattern matches the path alone. The file is created when missing; a last
+--- line without a newline gets one first. No other file is touched.
+---@param root string
+---@param path string
+---@return boolean
+---@return string? error
+function git.ignore(root, path)
+    local file = vim.fs.joinpath(root, '.gitignore')
+    local pattern = path:gsub('[\\*?%[]', '\\%0')
+    local body, spaces = pattern:match('^(.-)( *)$')
+    pattern = '/' .. body .. spaces:gsub(' ', '\\ ')
+
+    local content = ''
+    local reader = io.open(file, 'rb')
+
+    if reader ~= nil then
+        content = reader:read('*a') or ''
+        reader:close()
+    end
+
+    local writer, err = io.open(file, 'ab')
+
+    if writer == nil then
+        return false, err
+    end
+
+    local lead = (content ~= '' and content:sub(-1) ~= '\n') and '\n' or ''
+    local ok, write_err = writer:write(lead .. pattern .. '\n')
+
+    writer:close()
+
+    if not ok then
+        return false, write_err
+    end
+
+    return true
 end
 
 --- Apply the patch `lines` (carriage returns kept) to the index for

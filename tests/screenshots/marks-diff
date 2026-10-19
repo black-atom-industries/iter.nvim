@@ -33,7 +33,7 @@
 32| Staged (0)                                         │ m.txt:4–6   A range annot…
 33|                                                    │ m.txt:8 old Deleted line …
 34|                                                    │ m.txt:9     Outdated anno…
-35| s stage  u unstage  d discard  <CR> open  m all files  | split  ? help         
+35| s stage  u unstage  d discard  I ignore  <CR> open  m all files  ? help        
 36|                                                                                
 
 --|---------|---------|---------|---------|---------|---------|---------|---------|
@@ -71,5 +71,5 @@
 32|???????????===========================================FFFFFFFFF=================
 33|======================================================FFFFFFFFFFF===============
 34|=====================================================@@@@@@@@@@@@@@@@@@@@@@@@@@@
-35|=G44444444G4444444444G4444444444GGGG4444444G444444444444G44444444G44444=========
+35|=G44444444G4444444444G4444444444G444444444GGGG4444444G444444444444G44444========
 36|HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH

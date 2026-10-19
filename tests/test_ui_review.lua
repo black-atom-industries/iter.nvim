@@ -441,6 +441,31 @@ T['drawer']['s stages one file of an untracked directory'] = function()
         end)()]])
 end
 
+T['drawer']['I appends an untracked file to .gitignore'] = function()
+    child.lua([[
+        _G.confirms = {}
+        vim.fn.confirm = function(msg)
+            table.insert(_G.confirms, msg)
+            return 1
+        end
+    ]])
+    open_review()
+    wait_diff('unstaged a.txt')
+    select_item('unstaged', 'c.txt')
+    child.type_keys('I')
+
+    eq(child.lua_get('_G.confirms'), { 'Append c.txt to .gitignore?' })
+    eq(vim.fn.readfile(vim.fs.joinpath(repo, '.gitignore')), { '/c.txt' })
+    eq(
+        child.lua_get(
+            'vim.tbl_map(function(item) return item.path end, '
+                .. R
+                .. '.drawer.changes.unstaged)'
+        ),
+        { '.gitignore', 'a.txt', 'b.txt', 'd/x.txt' }
+    )
+end
+
 T['drawer']['q closes the tab and returns to the tab it came from'] = function()
     child.cmd('tabnew')
     child.cmd('tabfirst')
@@ -972,7 +997,7 @@ T['statusline']['names the file and its position inside the tab only'] = functio
     )
 
     child.cmd('tabfirst')
-    eq(child.lua_get([[require('iter').statusline()]]), '')
+    eq(child.lua_get([[require('iter').statusline()]]), 'main · 4')
 end
 
 T['close'] = new_set()
@@ -1174,6 +1199,27 @@ T['hunks']['s stages the hunk under the cursor and keeps the other'] = function(
         { 'a.txt', 'b.txt' }
     )
     eq(child.lua_get('_G.notes'), {})
+end
+
+T['hunks']['s on a hunk fires IterStage with the file'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.lua([[
+        _G.stages = {}
+        vim.api.nvim_create_autocmd('User', {
+            pattern = 'IterStage',
+            callback = function(args)
+                table.insert(_G.stages, args.data)
+            end,
+        })
+    ]])
+    cursor_on('a3 changed')
+    child.type_keys('s')
+
+    eq(
+        child.lua_get('_G.stages'),
+        { { root = repo, paths = { 'a.txt' }, action = 'stage' } }
+    )
 end
 
 T['hunks']['u unstages the hunk under the cursor and keeps the other'] = function()

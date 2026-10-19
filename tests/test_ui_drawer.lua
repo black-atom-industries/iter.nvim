@@ -977,7 +977,8 @@ local function chrome()
     return result
 end
 
-local HINT = 's stage  u unstage  d discard  <CR> open  r review  ? help'
+local HINT =
+    's stage  u unstage  d discard  I ignore  <CR> open  r review  ? help'
 
 ---@param options string Lua table passed to setup()
 local function setup(options)
@@ -1012,7 +1013,10 @@ T['header']['the hint follows remapped keys'] = function()
     setup([[{ keys = { drawer = { stage = 'S', discard = false } } }]])
     open_drawer()
 
-    eq(chrome().hint, 'S stage  u unstage  <CR> open  r review  ? help')
+    eq(
+        chrome().hint,
+        'S stage  u unstage  I ignore  <CR> open  r review  ? help'
+    )
 end
 
 T['header']['stacked, the header, hint and the selected section stay on screen'] = function()
@@ -1168,6 +1172,7 @@ T['help']['? lists the current keys and closes on q, ? and <Esc>'] = function()
             ' <CR>   Open the file and close the drawer',
             ' S gs   Stage or unstage the file',
             ' u      Unstage the file',
+            ' I      Add the untracked file to .gitignore',
             ' r      Open the review tab',
             ' q      Close',
             ' ?      Show the keys',
@@ -1977,6 +1982,188 @@ T['refresh']['closing stops the watchers and timers'] = function()
         child.lua('vim.wait(300)')
         eq(child.lua_get(count), before)
     end
+end
+
+--- Whether a drawer line shows `text`.
+---@param text string
+---@return boolean
+local function shows(text)
+    for _, line in ipairs(drawer_lines()) do
+        if line:find(text, 1, true) ~= nil then
+            return true
+        end
+    end
+
+    return false
+end
+
+T['rename'] = new_set()
+
+T['rename']['a staged rename reads old → new in one row'] = function()
+    helpers.write_file(
+        vim.fs.joinpath(repo, 'ui', 'diff', 'parser.lua'),
+        { 'one', 'two', 'three', 'four', 'five' }
+    )
+    helpers.git(repo, { 'add', 'ui' })
+    helpers.git(repo, { 'commit', '--quiet', '-m', 'add parser' })
+    vim.fn.mkdir(vim.fs.joinpath(repo, 'diff'), 'p')
+    helpers.git(repo, { 'mv', 'ui/diff/parser.lua', 'diff/parser.lua' })
+    open_drawer()
+
+    eq(shows('R ui/diff/parser.lua → diff/parser.lua'), true)
+
+    select_item('staged', 'diff/parser.lua')
+    wait_preview('staged diff/parser.lua')
+    helpers.expect_screenshot(child, 'drawer-rename')
+end
+
+T['statusline'] = new_set()
+
+T['statusline']['follows new files after the drawer closed'] = function()
+    child.lua([[require('iter').setup()]])
+    open_drawer()
+    child.type_keys('q')
+    eq(child.lua_get([[require('iter').statusline()]]), 'main · 6')
+
+    helpers.write_file(vim.fs.joinpath(repo, 'one.txt'), { '1' })
+    helpers.write_file(vim.fs.joinpath(repo, 'two.txt'), { '2' })
+    child.api.nvim_exec_autocmds('FocusGained', {})
+
+    helpers.wait_until(child, [[require('iter').statusline() == 'main · 8']])
+end
+
+T['ignore'] = new_set()
+
+T['ignore']['I on an untracked file appends it to .gitignore'] = function()
+    open_drawer()
+    select_item('unstaged', 'untracked.txt')
+    child.lua('_G.answer = 1')
+
+    child.type_keys('I')
+
+    eq(child.lua_get('_G.confirms'), { 'Append untracked.txt to .gitignore?' })
+    eq(read('.gitignore'), { '/untracked.txt' })
+    eq(status()['untracked.txt'], nil)
+    eq(shows('? untracked.txt'), false)
+    eq(shows('? .gitignore'), true)
+    eq(child.lua_get('_G.notes'), {})
+end
+
+T['ignore']['I declined leaves everything as it was'] = function()
+    open_drawer()
+    select_item('unstaged', 'untracked.txt')
+
+    child.type_keys('I')
+
+    eq(child.lua_get('_G.confirms'), { 'Append untracked.txt to .gitignore?' })
+    eq(vim.fn.filereadable(vim.fs.joinpath(repo, '.gitignore')), 0)
+    eq(status()['untracked.txt'], '??')
+    eq(shows('? untracked.txt'), true)
+end
+
+T['ignore']['I on a tracked file warns and asks nothing'] = function()
+    open_drawer()
+    select_item('unstaged', 'modified.txt')
+
+    child.type_keys('I')
+
+    eq(child.lua_get('_G.confirms'), {})
+    eq(child.lua_get('_G.notes'), {
+        { '[iter] Only untracked files can be ignored', vim.log.levels.WARN },
+    })
+    eq(vim.fn.filereadable(vim.fs.joinpath(repo, '.gitignore')), 0)
+end
+
+T['ignore']['confirm.ignore = false appends without asking'] = function()
+    setup([[{ confirm = { ignore = false } }]])
+    open_drawer()
+    select_item('unstaged', 'untracked_dir/a.txt')
+
+    child.type_keys('I')
+
+    eq(child.lua_get('_G.confirms'), {})
+    eq(read('.gitignore'), { '/untracked_dir/a.txt' })
+    eq(status()['untracked_dir/a.txt'], nil)
+    eq(status()['untracked_dir/b.txt'], '??')
+end
+
+T['events'] = new_set()
+
+local function spy_events()
+    child.lua([[
+        _G.events = {}
+        vim.api.nvim_create_autocmd('User', {
+            pattern = { 'IterRefresh', 'IterStage' },
+            callback = function(args)
+                table.insert(_G.events, { args.match, args.data })
+            end,
+        })
+    ]])
+end
+
+T['events']['s fires IterRefresh, then IterStage, with root and paths'] = function()
+    open_drawer()
+    spy_events()
+    select_item('unstaged', 'modified.txt')
+
+    child.type_keys('s')
+
+    eq(child.lua_get('_G.events'), {
+        {
+            'IterRefresh',
+            {
+                root = repo,
+                paths = {
+                    'deleted.txt',
+                    'untracked.txt',
+                    'untracked_dir/a.txt',
+                    'untracked_dir/b.txt',
+                    'modified.txt',
+                    'staged.txt',
+                },
+            },
+        },
+        {
+            'IterStage',
+            { root = repo, paths = { 'modified.txt' }, action = 'stage' },
+        },
+    })
+end
+
+T['events']['u and d fire IterStage with their action'] = function()
+    open_drawer()
+    spy_events()
+    select_item('staged', 'staged.txt')
+    child.type_keys('u')
+    select_item('unstaged', 'modified.txt')
+    child.lua('_G.answer = 1')
+    child.type_keys('d')
+
+    local stages = vim.tbl_filter(function(event)
+        return event[1] == 'IterStage'
+    end, child.lua_get('_G.events'))
+
+    eq(stages, {
+        {
+            'IterStage',
+            { root = repo, paths = { 'staged.txt' }, action = 'unstage' },
+        },
+        {
+            'IterStage',
+            { root = repo, paths = { 'modified.txt' }, action = 'discard' },
+        },
+    })
+end
+
+T['events']['a declined discard and a poll without changes fire nothing'] = function()
+    open_drawer()
+    spy_events()
+    select_item('unstaged', 'modified.txt')
+
+    child.type_keys('d')
+    child.lua([[require('iter').drawer:refresh('poll')]])
+
+    eq(child.lua_get('_G.events'), {})
 end
 
 T['odd paths'] = new_set({

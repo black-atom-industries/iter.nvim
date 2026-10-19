@@ -56,6 +56,16 @@ function M.notify(message, level)
     vim.notify('[iter] ' .. message, level)
 end
 
+--- Fire the `User` autocmd `pattern` with `data`.
+---@param pattern string
+---@param data table
+function M.emit(pattern, data)
+    vim.api.nvim_exec_autocmds(
+        'User',
+        { pattern = pattern, data = data, modeline = false }
+    )
+end
+
 ---@param message string
 function M.warn(message)
     M.notify(message, vim.log.levels.WARN)
