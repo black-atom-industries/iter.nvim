@@ -247,8 +247,12 @@ The diff pane of the review tab (`diff`):
 | `q` | `close` | Close |
 | `?` | `help` | Show the keys |
 
-The review drawer has three columns: Unstaged, Staged and Annotations. `h`
-and `l` move between them and skip a file column without files. The
+The review drawer has two columns: the files on the left, Unstaged above
+Staged, and Annotations on the right in a window of its own that stays in
+place while the file list scrolls. `j` and `k` move through both file
+sections; `h` and `l` switch between the files and Annotations, and each
+keeps its row. In narrow windows Unstaged, Staged and Annotations stack, and
+`h` and `l` step through them, skipping a file section without files. The
 Annotations column starts with the viewed progress (`viewed ■■■□□□□□ 3 of 8`,
 then `· ↻ n` for files changed since they were viewed) and lists every
 annotation in drawer file order, review annotations last: the file name with

@@ -58,10 +58,15 @@ local watch = require('iter.watch')
 ---@field section_buf? integer buffer of the Recent commits, pinned under the files
 ---@field rows IterDrawerRow[]
 ---@field cells table<string, IterLayoutCell>[]
+---@field side_buf? integer buffer of the extras' columns in a window of their own, in the review
+---@field side_rows IterDrawerRow[] per line of `side_buf`, as `rows`
+---@field side_cells table<string, IterLayoutCell>[]
+---@field split boolean whether the extras' columns show in the side window
 ---@field extra IterDrawerColumnSpec[] the extras' columns of the last render
 ---@field column string id of the selected column
 ---@field lnum integer selected line
 ---@field layout IterLayoutMode
+---@field recall table<string, IterDrawerMark> per stop, by its first column id, the selection it had when left
 ---@field previewed? string key of the item the view shows, or of the extras' item that showed it
 ---@field previewed_stat? string worktree stat of that item when it was read
 ---@field preview_tick integer bumped per scheduled preview; only the last one runs
@@ -76,6 +81,8 @@ Drawer.MIN_LINES = 5
 
 local SELECTED_NS = vim.api.nvim_create_namespace('iter.drawer.selected')
 local PREVIEW_DELAY_MS = 50
+-- Width share of the stacked file columns beside the extras' columns.
+local FILES_WEIGHT = 3
 -- Diff rows that stand for a line of the file.
 local CODE_ROWS = { context = true, del = true, add = true }
 -- Actions the key hint line shows in a file column, in order, with their
@@ -138,6 +145,50 @@ function Drawer:column_ids(first, all)
     end
 
     return ids
+end
+
+--- Whether the file columns share one column, Unstaged above Staged: in
+--- the review's columns layout.
+---@return boolean
+function Drawer:files_stacked()
+    return self.context == 'review' and self.layout == 'columns'
+end
+
+--- The columns `h` and `l` step between, left to right, each a list of
+--- column ids: the stacked file columns are one stop.
+---@return string[][]
+function Drawer:stops()
+    local stops = {}
+
+    if self:files_stacked() then
+        table.insert(stops, self:column_ids())
+    else
+        for _, id in ipairs(self:column_ids()) do
+            table.insert(stops, { id })
+        end
+    end
+
+    for _, column in ipairs(self.extra) do
+        table.insert(stops, { column.id })
+    end
+
+    return stops
+end
+
+--- The stop that holds column `id`, and its index.
+---@param id string
+---@return string[] ids
+---@return integer index
+function Drawer:stop_of(id)
+    local stops = self:stops()
+
+    for i, ids in ipairs(stops) do
+        if vim.list_contains(ids, id) then
+            return ids, i
+        end
+    end
+
+    return { id }, 1
 end
 
 --- The extras' column `id`, nil for a file column.
@@ -356,15 +407,27 @@ function Drawer.open(opts)
         config = opts.config,
         rows = {},
         cells = {},
+        side_rows = {},
+        side_cells = {},
+        split = false,
         extra = {},
         ages = '',
         column = 'unstaged',
         lnum = 1,
         layout = 'columns',
+        recall = {},
         preview_tick = 0,
         closed = false,
         on_close = opts.on_close,
     }, Drawer)
+
+    if review then
+        self.side_buf = vim.api.nvim_create_buf(false, true)
+        vim.bo[self.side_buf].bufhidden = 'hide'
+        vim.bo[self.side_buf].modifiable = false
+        vim.bo[self.side_buf].filetype = 'iter'
+        util.name_buf(self.side_buf, 'iter://review-annotations')
+    end
 
     local view_handlers = opts.view_handlers
 
@@ -388,7 +451,11 @@ function Drawer.open(opts)
 
     if not self:load() then
         self.view:close()
-        vim.api.nvim_buf_delete(buf, { force = true })
+
+        for _, b in pairs({ buf, self.side_buf }) do
+            vim.api.nvim_buf_delete(b, { force = true })
+        end
+
         return nil
     end
 
@@ -465,9 +532,11 @@ function Drawer:make_handlers()
         end,
         column_left = function()
             self:step_column(-1)
+            self:take_focus()
         end,
         column_right = function()
             self:step_column(1)
+            self:take_focus()
         end,
     }
 
@@ -484,11 +553,27 @@ function Drawer:attach()
         { clear = true }
     )
 
-    vim.api.nvim_create_autocmd('CursorMoved', {
+    for _, buf in ipairs({ self.buf, self.side_buf }) do
+        vim.api.nvim_create_autocmd('CursorMoved', {
+            group = self.group,
+            buffer = buf,
+            callback = function()
+                self:follow_cursor(vim.api.nvim_get_current_win())
+            end,
+        })
+        keymap.attach(buf, self.keys_view, self.keys, self.handlers)
+    end
+
+    vim.api.nvim_create_autocmd('WinClosed', {
         group = self.group,
-        buffer = self.buf,
-        callback = function()
-            self:follow_cursor()
+        callback = function(args)
+            local win = tonumber(args.match)
+
+            if win ~= nil and win == self.float.side_win then
+                vim.schedule(function()
+                    self:close()
+                end)
+            end
         end,
     })
     vim.api.nvim_create_autocmd({ 'WinResized', 'VimResized' }, {
@@ -515,8 +600,6 @@ function Drawer:attach()
             end)
         end,
     })
-
-    keymap.attach(self.buf, self.keys_view, self.keys, self.handlers)
 end
 
 ---@return boolean
@@ -575,12 +658,25 @@ local function commit_ages(recent)
     )
 end
 
+--- Replace the lines of `buf` with `lines` and their highlights, the
+--- selection mark cleared.
+---@param buf integer
+---@param lines IterRenderLine[]
+local function write(buf, lines)
+    vim.bo[buf].modifiable = true
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, render.text_lines(lines))
+    vim.bo[buf].modifiable = false
+    vim.api.nvim_buf_clear_namespace(buf, SELECTED_NS, 0, -1)
+    render.apply(buf, lines)
+end
+
 --- Write the items into the buffer in the layout the pane's width allows,
 --- with the header and key hint line around them, and the Recent commits
 --- pinned under them.
 function Drawer:render()
     local width = vim.api.nvim_win_get_width(self.pane)
     local decorate = self.extras and self.extras:drawer_decorator(self)
+    ---@type IterLayoutSlot[]
     local columns = vim.tbl_map(function(column)
         ---@type IterLayoutColumn
         return {
@@ -600,13 +696,21 @@ function Drawer:render()
     end, self:columns())
 
     self.extra = self.extras and self.extras:drawer_columns(self) or {}
-    vim.list_extend(columns, self.extra)
     self.layout = layout.mode(width, self.config.options.drawer.breakpoint)
 
-    local built
+    if self:files_stacked() then
+        columns = { { sections = columns, weight = FILES_WEIGHT } }
+    end
+
+    vim.list_extend(columns, self.extra)
+
+    local built, side
 
     if #self:ordered() == 0 and #self.extra == 0 then
         built = layout.message('Working tree clean')
+    elseif self:files_stacked() and self.side_buf ~= nil then
+        side = layout.split(columns, width)
+        built = side.left
     elseif self.layout == 'columns' then
         built = layout.columns(columns, width)
     else
@@ -614,26 +718,34 @@ function Drawer:render()
     end
 
     self.rows, self.cells = built.rows, built.cells
+    self.split = side ~= nil
+    self.side_rows = side and side.right.rows or {}
+    self.side_cells = side and side.right.cells or {}
+
+    -- The side window closes below the breakpoint: the drawer keeps focus.
+    if
+        side == nil
+        and self.float.side_win ~= nil
+        and vim.api.nvim_get_current_win() == self.float.side_win
+        and util.is_valid_win(self.win)
+    then
+        vim.api.nvim_set_current_win(self.win)
+    end
 
     if self.extras ~= nil then
         self.extras:drawer_rendered(self, #built.lines)
     end
 
-    vim.bo[self.buf].modifiable = true
-    vim.api.nvim_buf_set_lines(
-        self.buf,
-        0,
-        -1,
-        false,
-        render.text_lines(built.lines)
-    )
-    vim.bo[self.buf].modifiable = false
-    vim.api.nvim_buf_clear_namespace(self.buf, SELECTED_NS, 0, -1)
-    render.apply(self.buf, built.lines)
+    write(self.buf, built.lines)
+
+    if side ~= nil then
+        write(self.side_buf, side.right.lines)
+    end
 
     self.float:reposition({
         min_lines = math.min(#built.lines, Drawer.MIN_LINES),
         strip = self:render_section(width),
+        side = side ~= nil and { buf = self.side_buf, col = side.col },
         title = header_chunks(self),
         footer = self:footer(),
     })
@@ -697,10 +809,57 @@ function Drawer:shown()
     end
 end
 
+---@class IterDrawerGrid the lines of one drawer window
+---@field rows IterDrawerRow[]
+---@field cells table<string, IterLayoutCell>[]
+---@field buf integer
+---@field win? integer
+
+--- The lines column `id` shows on: the side window's for an extras' column
+--- while it is split off, else the drawer's.
+---@param id string
+---@return IterDrawerGrid
+function Drawer:grid(id)
+    if self.split and self:extra_column(id) ~= nil then
+        return {
+            rows = self.side_rows,
+            cells = self.side_cells,
+            buf = self.side_buf,
+            win = self.float and self.float.side_win,
+        }
+    end
+
+    return {
+        rows = self.rows,
+        cells = self.cells,
+        buf = self.buf,
+        win = self.win,
+    }
+end
+
+--- The window of the selection: the side window while an extras' column
+--- in it is selected, else the drawer's.
+---@return integer
+function Drawer:selection_win()
+    local win = self:grid(self.column).win
+
+    return util.is_valid_win(win) and win or self.win
+end
+
+--- Move the focus to the window of the selection when it is in the
+--- drawer's other window.
+function Drawer:take_focus()
+    local current = vim.api.nvim_get_current_win()
+
+    if current == self.win or current == self.float.side_win then
+        vim.api.nvim_set_current_win(self:selection_win())
+    end
+end
+
 --- The selected item of any column.
 ---@return any
 function Drawer:item()
-    local row = self.rows[self.lnum]
+    local row = self:grid(self.column).rows[self.lnum]
 
     return row and row[self.column]
 end
@@ -723,17 +882,32 @@ end
 ---@return integer? lnum
 ---@return string? id
 function Drawer:find(lnum, ids, dir)
-    for _, step in ipairs({ dir, -dir }) do
-        local l = lnum
+    local order, by_rows = {}, {}
 
-        while l >= 1 and l <= #self.rows do
-            for _, id in ipairs(ids) do
-                if self.rows[l][id] ~= nil then
-                    return l, id
+    for _, id in ipairs(ids) do
+        local rows = self:grid(id).rows
+
+        if by_rows[rows] == nil then
+            by_rows[rows] = {}
+            table.insert(order, rows)
+        end
+
+        table.insert(by_rows[rows], id)
+    end
+
+    for _, rows in ipairs(order) do
+        for _, step in ipairs({ dir, -dir }) do
+            local l = math.min(lnum, #rows)
+
+            while l >= 1 and l <= #rows do
+                for _, id in ipairs(by_rows[rows]) do
+                    if rows[l][id] ~= nil then
+                        return l, id
+                    end
                 end
-            end
 
-            l = l + step
+                l = l + step
+            end
         end
     end
 
@@ -771,7 +945,8 @@ end
 ---@param lnum integer
 ---@param column string
 function Drawer:select(lnum, column)
-    local cell = self.cells[lnum] and self.cells[lnum][column]
+    local grid = self:grid(column)
+    local cell = grid.cells[lnum] and grid.cells[lnum][column]
 
     if cell == nil then
         return
@@ -785,18 +960,23 @@ function Drawer:select(lnum, column)
         self.float:reposition({ footer = self:footer() })
     end
 
-    vim.api.nvim_buf_clear_namespace(self.buf, SELECTED_NS, 0, -1)
-    vim.api.nvim_buf_set_extmark(self.buf, SELECTED_NS, lnum - 1, cell.first, {
+    for _, buf in ipairs({ self.buf, self.side_buf }) do
+        vim.api.nvim_buf_clear_namespace(buf, SELECTED_NS, 0, -1)
+    end
+
+    vim.api.nvim_buf_set_extmark(grid.buf, SELECTED_NS, lnum - 1, cell.first, {
         end_col = cell.last,
         hl_group = 'IterDrawerSelected',
         priority = 100,
     })
 
-    if util.is_valid_win(self.win) then
-        local cursor = vim.api.nvim_win_get_cursor(self.win)
+    local win = grid.win
+
+    if win ~= nil and util.is_valid_win(win) then
+        local cursor = vim.api.nvim_win_get_cursor(win)
 
         if cursor[1] ~= lnum or cursor[2] ~= cell.first then
-            vim.api.nvim_win_set_cursor(self.win, { lnum, cell.first })
+            vim.api.nvim_win_set_cursor(win, { lnum, cell.first })
         end
     end
 
@@ -807,15 +987,30 @@ function Drawer:select(lnum, column)
     end
 end
 
-function Drawer:follow_cursor()
-    if not util.is_valid_win(self.win) then
+--- Select the item nearest to the cursor of `win`, the drawer's window or
+--- the side window, among the columns it moves through.
+---@param win integer
+function Drawer:follow_cursor(win)
+    if not util.is_valid_win(win) then
         return
     end
 
-    local lnum = vim.api.nvim_win_get_cursor(self.win)[1]
+    local lnum = vim.api.nvim_win_get_cursor(win)[1]
     local dir = lnum < self.lnum and -1 or 1
-    local ids = self.layout == 'stacked' and self:column_ids(nil, true)
-        or { self.column }
+    local ids
+
+    if self.layout == 'stacked' then
+        ids = self:column_ids(nil, true)
+    elseif self.split then
+        ids = win == self.float.side_win
+                and vim.tbl_map(function(column)
+                    return column.id
+                end, self.extra)
+            or self:column_ids()
+    else
+        ids = self:stop_of(self.column)
+    end
+
     local target, side = self:find(lnum, ids, dir)
 
     if target ~= nil and side ~= nil then
@@ -833,31 +1028,63 @@ function Drawer:switch(column)
     end
 end
 
---- Switch to the nearest column with items left (`dir` -1) or right (1) of
---- the selected one; at the first or last such column, stay.
+--- Switch to the nearest stop with items left (`dir` -1) or right (1) of
+--- the selected one; at the first or last such stop, stay. With the file
+--- columns stacked, a stop selects again what it had when it was left.
 ---@param dir 1|-1
 function Drawer:step_column(dir)
-    local columns = self:columns()
-    local index = 1
-
-    vim.list_extend(columns, self.extra)
-
-    for i, column in ipairs(columns) do
-        if column.id == self.column then
-            index = i
-        end
-    end
+    local stops = self:stops()
+    local current, index = self:stop_of(self.column)
 
     index = index + dir
 
-    while columns[index] ~= nil do
-        if #columns[index].items > 0 then
-            self:switch(columns[index].id)
-            return
+    while stops[index] ~= nil do
+        local ids = stops[index]
+
+        for _, id in ipairs(ids) do
+            if #self:item_lines(id) > 0 then
+                if not self:files_stacked() then
+                    return self:switch(id)
+                end
+
+                self.recall[current[1]] = self:mark()
+
+                local recalled = self.recall[ids[1]]
+
+                if recalled ~= nil and self:recall_selection(recalled) then
+                    return
+                end
+
+                local lnum, side = self:find(self.lnum, ids, 1)
+
+                if lnum ~= nil and side ~= nil then
+                    self:select(lnum, side)
+                end
+
+                return
+            end
         end
 
         index = index + dir
     end
+end
+
+--- Select the marked item again when it is still there.
+---@param mark IterDrawerMark
+---@return boolean selected
+function Drawer:recall_selection(mark)
+    local rows = self:grid(mark.column).rows
+
+    for _, lnum in ipairs(self:item_lines(mark.column)) do
+        local item = rows[lnum][mark.column]
+
+        if (item.key or item.path) == mark.key then
+            self:select(lnum, mark.column)
+            return true
+        end
+    end
+
+    return false
 end
 
 --- Lines that hold an item of `column`, top to bottom.
@@ -866,7 +1093,7 @@ end
 function Drawer:item_lines(column)
     local lines = {}
 
-    for lnum, row in ipairs(self.rows) do
+    for lnum, row in ipairs(self:grid(column).rows) do
         if row[column] ~= nil then
             table.insert(lines, lnum)
         end
@@ -909,14 +1136,12 @@ function Drawer:restore_selection(target)
     local column = target and target.column or self.column
     local lines = self:item_lines(column)
 
-    if target ~= nil and target.key ~= nil then
-        for _, lnum in ipairs(lines) do
-            local item = self.rows[lnum][column]
-
-            if (item.key or item.path) == target.key then
-                return self:select(lnum, column)
-            end
-        end
+    if
+        target ~= nil
+        and target.key ~= nil
+        and self:recall_selection(target --[[@as IterDrawerMark]])
+    then
+        return
     end
 
     if #lines > 0 then
@@ -924,7 +1149,11 @@ function Drawer:restore_selection(target)
         return self:select(lines[index], column)
     end
 
-    local lnum, side = self:find(self.lnum, self:column_ids(nil, true), 1)
+    local lnum, side = self:find(self.lnum, self:stop_of(column), 1)
+
+    if lnum == nil then
+        lnum, side = self:find(self.lnum, self:column_ids(nil, true), 1)
+    end
 
     if lnum ~= nil and side ~= nil then
         self:select(lnum, side)
@@ -939,6 +1168,7 @@ function Drawer:resized()
     local mark = self:mark()
     self:render()
     self:restore_selection(mark)
+    self:take_focus()
     self.view:rewrap()
 end
 
@@ -1396,7 +1626,7 @@ function Drawer:close()
     self.float:close()
     self.view:close()
 
-    for _, buf in ipairs({ self.buf, self.section_buf }) do
+    for _, buf in pairs({ self.buf, self.section_buf, self.side_buf }) do
         if vim.api.nvim_buf_is_valid(buf) then
             vim.api.nvim_buf_delete(buf, { force = true })
         end
@@ -1414,7 +1644,7 @@ end
 --- Focus the drawer again and reload its items.
 function Drawer:focus()
     if util.is_valid_win(self.win) then
-        vim.api.nvim_set_current_win(self.win)
+        vim.api.nvim_set_current_win(self:selection_win())
     end
 
     self:refresh()

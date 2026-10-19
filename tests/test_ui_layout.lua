@@ -147,7 +147,99 @@ T['columns()']['an item that is not selectable has no row entry'] = function()
     eq(stacked.cells[2], {})
 end
 
-T['stacked()'] = function()
+T['columns()']['a stack lays its sections below each other in one column'] = function()
+    local result = layout.columns({
+        {
+            weight = 2,
+            sections = {
+                column('left', 'Left', { 'a', 'b' }),
+                column('mid', 'Mid', { 'c' }),
+            },
+        },
+        column('right', 'Right', { 'x' }),
+    }, 31)
+
+    eq(
+        vim.tbl_map(function(line)
+            return line.text
+        end, result.lines),
+        {
+            ' Left (2)           │ Right (1)',
+            'a                   │x         ',
+            'b                   │          ',
+            '                    │          ',
+            ' Mid (1)            │          ',
+            'c                   │          ',
+        }
+    )
+    eq(result.rows, {
+        {},
+        { left = 'a', right = 'x' },
+        { left = 'b' },
+        {},
+        {},
+        { mid = 'c' },
+    })
+    eq(result.cells[6], { mid = { first = 0, last = 20 } })
+    eq(spans(result.lines[5], 'IterDrawerTitle'), { { 0, 8 } })
+end
+
+T['split()'] = function()
+    local result = layout.split({
+        column('left', 'Left', { 'a', 'b', 'c' }),
+        column('right', 'Right', { 'x' }),
+    }, 21)
+
+    eq(
+        vim.tbl_map(function(line)
+            return line.text
+        end, result.left.lines),
+        { ' Left (3) │', 'a         │', 'b         │', 'c         │' }
+    )
+    eq(
+        vim.tbl_map(function(line)
+            return line.text
+        end, result.right.lines),
+        { ' Right (1)', 'x         ', '          ', '          ' }
+    )
+    eq(result.col, 11)
+    eq(result.left.rows[2], { left = 'a' })
+    eq(result.right.rows[2], { right = 'x' })
+    eq(result.right.cells[2], { right = { first = 0, last = 10 } })
+    eq(spans(result.left.lines[2], 'WinSeparator'), { { 10, 13 } })
+end
+
+T['stacked()'] = new_set()
+
+T['stacked()']['a stack stacks its sections with the other columns'] = function()
+    local result = layout.stacked({
+        {
+            sections = {
+                column('left', 'Left', { 'a' }),
+                column('mid', 'Mid', {}),
+            },
+        },
+        column('right', 'Right', { 'x' }),
+    }, 10)
+
+    eq(
+        vim.tbl_map(function(line)
+            return line.text
+        end, result.lines),
+        {
+            ' Left (1) ',
+            'a         ',
+            '',
+            ' Mid (0)  ',
+            '',
+            ' Right (1)',
+            'x         ',
+        }
+    )
+    eq(result.rows[7], { right = 'x' })
+end
+
+T['stacked()']['columns one below the other'] = function()
     local result = layout.stacked({
         column('left', 'Left', { 'a' }),
         column('right', 'Right', { 'c', 'd' }),
