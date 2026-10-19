@@ -1,5 +1,6 @@
 local git = require('iter.git')
 local store = require('iter.store')
+local util = require('iter.util')
 
 ---@alias IterViewedState 'viewed'|'changed'|'unviewed'
 
@@ -20,26 +21,6 @@ local DELETED = 'deleted'
 -- (mtime, size) differs from the one its cached hash was taken at.
 ---@type table<string, table<string, IterViewedCacheEntry>>
 local cache = {}
-
----@param path string
----@return string? stat nil when the file is missing
-local function stat_key(path)
-    local stat = vim.uv.fs_stat(path)
-
-    if stat == nil then
-        return nil
-    end
-
-    return string.format(
-        '%d.%d:%d.%d:%d:%d',
-        stat.mtime.sec,
-        stat.mtime.nsec,
-        stat.ctime.sec,
-        stat.ctime.nsec,
-        stat.ino,
-        stat.size
-    )
-end
 
 --- `git hash-object` of one file, for the paths a batch can't carry or the
 --- batch failed on.
@@ -112,7 +93,7 @@ function M.hashes(root, paths, fresh)
     local hashes, stale, stats = {}, {}, {}
 
     for _, path in ipairs(paths) do
-        local stat = stat_key(vim.fs.joinpath(root, path))
+        local stat = util.stat_key(vim.fs.joinpath(root, path))
         local entry = entries[path]
 
         if stat == nil then

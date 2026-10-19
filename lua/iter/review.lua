@@ -6,6 +6,7 @@ local help = require('iter.ui.help')
 local patch = require('iter.diff.patch')
 local store = require('iter.store')
 local util = require('iter.util')
+local viewed = require('iter.viewed')
 
 ---@class IterReviewOpenOptions
 ---@field config IterConfig
@@ -14,7 +15,7 @@ local util = require('iter.util')
 ---@field on_annotations? fun() after an annotation of the review is saved or deleted
 ---@field on_close? fun(review: IterReview)
 
----@class IterReview
+---@class IterReview: IterDrawerExtras
 ---@field tab integer
 ---@field origin_tab integer tab the review was opened from; `gf` opens files there
 ---@field origin_win? integer normal window of that tab
@@ -22,6 +23,10 @@ local util = require('iter.util')
 ---@field spacer_win integer bottom split the drawer float covers
 ---@field buf integer empty buffer of the split and of the diff window without a diff
 ---@field drawer IterDrawer
+---@field annotations IterAnnotation[] stored annotations
+---@field records table<string, IterViewed> stored viewed records
+---@field viewed table<string, IterViewedState> state per file path in the drawer
+---@field fresh? boolean read the store on the next load whatever its stat says
 ---@field help? IterHelp help float of the diff pane
 ---@field group integer
 ---@field closed boolean
@@ -48,13 +53,12 @@ local SPACER_WINOPTS = {
     statusline = ' ',
 }
 
----@param win integer?
----@return boolean
-local function is_normal_win(win)
-    return util.is_valid_win(win)
-        and vim.api.nvim_win_get_config(win --[[@as integer]]).relative
-            == ''
-end
+-- Glyph and group per viewed state in a drawer row.
+local VIEWED_MARKS = {
+    viewed = { '✓', 'IterViewed' },
+    changed = { '↻', 'IterViewedChanged' },
+    unviewed = { '○', 'IterDrawerHint' },
+}
 
 --- A normal window of `tab`: `preferred` when it is one there, else the
 --- tab's current window, else its first normal one.
@@ -63,7 +67,7 @@ end
 ---@return integer?
 local function normal_win(tab, preferred)
     if
-        is_normal_win(preferred)
+        util.is_normal_win(preferred)
         and vim.api.nvim_win_get_tabpage(preferred --[[@as integer]]) == tab
     then
         return preferred
@@ -71,12 +75,12 @@ local function normal_win(tab, preferred)
 
     local current = vim.api.nvim_tabpage_get_win(tab)
 
-    if is_normal_win(current) then
+    if util.is_normal_win(current) then
         return current
     end
 
     for _, win in ipairs(vim.api.nvim_tabpage_list_wins(tab)) do
-        if is_normal_win(win) then
+        if util.is_normal_win(win) then
             return win
         end
     end
@@ -126,6 +130,9 @@ function Review.open(opts)
         diff_win = diff_win,
         spacer_win = spacer_win,
         buf = buf,
+        annotations = {},
+        records = {},
+        viewed = {},
         closed = false,
         on_annotations = opts.on_annotations,
         on_close = opts.on_close,
@@ -135,12 +142,12 @@ function Review.open(opts)
         pane = spacer_win,
         view_win = diff_win,
         context = 'review',
+        extras = self,
         height = 1,
         config = opts.config,
         path = opts.path,
         side = opts.side,
         view_handlers = self:view_handlers(),
-        on_annotations = opts.on_annotations,
         on_close = function()
             self:close()
         end,
@@ -201,7 +208,12 @@ function Review:view_handlers()
             self:annotate()
         end,
         annotate_file = function()
-            self:annotate_file()
+            local view = self.drawer.view
+            local file = view:is_shown() and view.files[1] or nil
+
+            if file ~= nil then
+                self:annotate_file(file.path)
+            end
         end,
         edit = function()
             self:edit_annotation()
@@ -210,7 +222,12 @@ function Review:view_handlers()
             self:delete_annotation()
         end,
         viewed = function()
-            self:toggle_viewed()
+            local view = self.drawer.view
+            local file = view:is_shown() and view.files[1] or nil
+
+            if file ~= nil then
+                self:toggle_viewed(file.path)
+            end
         end,
         picker = function()
             require('iter').annotations()
@@ -313,14 +330,229 @@ function Review:apply_hunk(kind)
     end
 end
 
---- Toggle the viewed mark of the file the diff pane shows.
-function Review:toggle_viewed()
-    local view = self.drawer.view
-    local file = view:is_shown() and view.files[1] or nil
+--- Annotations per path, review annotations left out.
+---@param annotations IterAnnotation[]
+---@return table<string, integer>
+local function annotation_counts(annotations)
+    local counts = {}
 
-    if file ~= nil then
-        self.drawer:toggle_viewed(file.path)
+    for _, annotation in ipairs(annotations) do
+        local path = annotation.anchor.path
+
+        if annotation.scope ~= 'review' and path ~= nil then
+            counts[path] = (counts[path] or 0) + 1
+        end
     end
+
+    return counts
+end
+
+--- Annotations on `item`; a directory counts those on the files inside it.
+---@param counts table<string, integer>
+---@param item IterChange
+---@return integer
+local function item_count(counts, item)
+    if not item.dir then
+        return counts[item.path] or 0
+    end
+
+    local count = 0
+
+    for path, n in pairs(counts) do
+        if vim.startswith(path, item.path) then
+            count = count + n
+        end
+    end
+
+    return count
+end
+
+--- Read the stored annotations and viewed records through the store cache,
+--- and the viewed state of every file in the drawer. Files whose stat is
+--- unchanged are not hashed again.
+---@param drawer IterDrawer
+---@return boolean changed
+function Review:drawer_load(drawer)
+    local root = drawer.changes.root
+    local before_annotations, before_viewed = self.annotations, self.viewed
+    local data = store.cached(root, self.fresh)
+    local paths, seen = {}, {}
+
+    self.fresh = nil
+    self.annotations, self.records = data.annotations, data.viewed
+
+    for _, item in ipairs(drawer:files()) do
+        if not seen[item.path] then
+            seen[item.path] = true
+            table.insert(paths, item.path)
+        end
+    end
+
+    self.viewed = viewed.states(root, paths, self.records)
+
+    local annotations_changed =
+        not vim.deep_equal(before_annotations, self.annotations)
+
+    if annotations_changed then
+        drawer.view:set_annotations(self.annotations)
+    end
+
+    return annotations_changed or not vim.deep_equal(before_viewed, self.viewed)
+end
+
+--- A file row shows its viewed mark after the code letter and its
+--- annotation count at the end.
+---@param _ IterDrawer
+---@return fun(item: IterChange): IterLayoutDecor
+function Review:drawer_decorator(_)
+    local counts = annotation_counts(self.annotations)
+
+    return function(item)
+        return {
+            mark = not item.dir and VIEWED_MARKS[self.viewed[item.path]] or nil,
+            count = item_count(counts, item),
+        }
+    end
+end
+
+--- With files, `viewed <n> of <m> · ↻ <k> changed` in place of the change
+--- summary, then `· <c> annotations · <o> outdated`, each only above 0.
+---@param _ IterDrawer
+---@param summary [string, string]
+---@return [string, string][]
+function Review:drawer_header(_, summary)
+    local counts = viewed.summary(self.viewed)
+    local outdated = #vim.tbl_filter(function(annotation)
+        return annotation.outdated
+    end, self.annotations)
+    local chunks = {}
+
+    if counts.total > 0 then
+        table.insert(chunks, {
+            string.format(' · viewed %d of %d', counts.viewed, counts.total),
+            'IterDrawerHint',
+        })
+
+        if counts.changed > 0 then
+            table.insert(chunks, {
+                string.format(' · ↻ %d changed', counts.changed),
+                'IterViewedChanged',
+            })
+        end
+    else
+        table.insert(chunks, summary)
+    end
+
+    if #self.annotations > 0 then
+        table.insert(chunks, {
+            string.format(
+                ' · %d %s',
+                #self.annotations,
+                #self.annotations == 1 and 'annotation' or 'annotations'
+            ),
+            'IterDrawerCount',
+        })
+    end
+
+    if outdated > 0 then
+        table.insert(chunks, {
+            string.format(' · %d outdated', outdated),
+            'IterDrawerHint',
+        })
+    end
+
+    return chunks
+end
+
+--- Size the spacer split to `drawer.height` of the spacer and the diff
+--- window together, but at least `MIN_LINES` of the drawer's `count` lines
+--- and chrome, up to half of them.
+---@param drawer IterDrawer
+---@param count integer
+function Review:drawer_rendered(drawer, count)
+    if not util.is_valid_win(drawer.view.win) then
+        return
+    end
+
+    local current = vim.api.nvim_win_get_height(drawer.pane)
+    local total = current + vim.api.nvim_win_get_height(drawer.view.win)
+    local option = drawer.config.options.drawer.height
+    local base = option <= 1 and math.floor(total * option) or option
+    local height = math.max(
+        3,
+        math.floor(base),
+        math.min(math.min(count, Drawer.MIN_LINES) + 2, math.floor(total / 2))
+    )
+
+    if height ~= current then
+        vim.api.nvim_win_set_height(drawer.pane, height)
+    end
+end
+
+--- Show the viewed state of the shown file in the diff header.
+---@param drawer IterDrawer
+function Review:drawer_shown(drawer)
+    local file = drawer.view.files[1]
+
+    drawer.view:set_viewed(file and self.viewed[file.path])
+end
+
+--- The review's drawer actions: `open` moves into the diff, and the
+--- annotation and viewed actions work on the selected file.
+---@param drawer IterDrawer
+---@param handlers table<string, fun()>
+function Review:drawer_handlers(drawer, handlers)
+    ---@param fn fun(path: string)
+    local function on_file(fn)
+        return function()
+            local item = drawer:selected()
+
+            if item == nil or item.dir then
+                util.warn('No file selected')
+                return
+            end
+
+            fn(item.path)
+        end
+    end
+
+    handlers.open = function()
+        drawer:enter_view()
+    end
+    handlers.review = nil
+    handlers.annotate_file = on_file(function(path)
+        self:annotate_file(path)
+    end)
+    handlers.viewed = on_file(function(path)
+        self:toggle_viewed(path)
+    end)
+    handlers.picker = function()
+        require('iter').annotations()
+    end
+    handlers.yank = function()
+        require('iter').yank()
+    end
+end
+
+--- Read the stored annotations again whatever the store file's stat says,
+--- then refresh the drawer. For writes of this instance, which can keep the
+--- stat.
+function Review:refresh_annotations()
+    self.fresh = true
+    self.drawer:refresh()
+end
+
+--- Toggle the viewed mark of `path` and refresh.
+---@param path string
+function Review:toggle_viewed(path)
+    local _, err = viewed.toggle(self.drawer.changes.root, path)
+
+    if err ~= nil then
+        util.warn('Cannot toggle viewed: ' .. err)
+        return
+    end
+
+    self:refresh_annotations()
 end
 
 --- Open the help float with the diff pane's keys, or close it.
@@ -560,32 +792,13 @@ function Review:open_file(path, line)
 
     self.origin_win = win
 
-    -- With 'nohidden' a modified buffer can't leave its window (E37).
-    local buf = vim.api.nvim_win_get_buf(win)
-
-    if
-        not vim.o.hidden
-        and vim.bo[buf].modified
-        and vim.api.nvim_buf_get_name(buf) ~= path
-    then
-        util.warn('The pane has unsaved changes')
+    if not util.can_leave(vim.api.nvim_win_get_buf(win), path) then
         return
     end
 
     vim.api.nvim_set_current_tabpage(self.origin_tab)
     vim.api.nvim_set_current_win(win)
-
-    local ok, err = pcall(vim.cmd.edit, vim.fn.fnameescape(path))
-
-    if not ok then
-        util.error(tostring(err), 'Cannot open ' .. vim.fs.basename(path))
-        return
-    end
-
-    vim.api.nvim_win_set_cursor(
-        win,
-        { math.min(line, vim.api.nvim_buf_line_count(0)), 0 }
-    )
+    util.edit_at(path, line)
 end
 
 --- Show the diff that places `annotation` and put the cursor on its row,
@@ -594,9 +807,9 @@ end
 ---@param annotation IterAnnotation
 ---@return boolean
 function Review:show_annotation(annotation)
-    self.drawer:refresh_annotations()
+    self:refresh_annotations()
 
-    if not self.drawer:show_annotation(annotation) then
+    if not self:select_annotation(annotation) then
         return false
     end
 
@@ -605,6 +818,62 @@ function Review:show_annotation(annotation)
     if self.drawer.view:is_shown() then
         vim.api.nvim_set_current_win(self.diff_win)
     end
+
+    return true
+end
+
+--- Select the file `annotation` belongs to in the drawer, show its diff and
+--- put the diff cursor on the annotation's row. An annotation is found in
+--- the staged diff or the unstaged one, the side of its old version first.
+--- False when the file isn't among the changes.
+---@param annotation IterAnnotation
+---@return boolean
+function Review:select_annotation(annotation)
+    local a = annotation.anchor
+    local drawer = self.drawer
+
+    if a.path == nil then
+        return false
+    end
+
+    local sides = a.side == 'old'
+            and a.base == 'HEAD'
+            and { 'staged', 'unstaged' }
+        or { 'unstaged', 'staged' }
+    local found = {}
+
+    for _, side in ipairs(sides) do
+        for lnum, row in ipairs(drawer.rows) do
+            local item = row[side]
+
+            if
+                item ~= nil
+                and not item.dir
+                and (item.path == a.path or item.orig_path == a.path)
+            then
+                table.insert(found, { lnum = lnum, side = side })
+            end
+        end
+    end
+
+    for _, target in ipairs(found) do
+        drawer:select(target.lnum, target.side)
+        drawer:preview(false)
+
+        for _, mark in ipairs(drawer.view.marks) do
+            if mark.annotation.id == annotation.id then
+                vim.api.nvim_win_set_cursor(drawer.view.win, { mark.lnum, 0 })
+                return true
+            end
+        end
+    end
+
+    if found[1] == nil then
+        return false
+    end
+
+    drawer:select(found[1].lnum, found[1].side)
+    drawer:preview(false)
 
     return true
 end
@@ -627,7 +896,7 @@ function Review:annotations_changed()
     if self.on_annotations ~= nil then
         self.on_annotations()
     else
-        self.drawer:refresh_annotations()
+        self:refresh_annotations()
     end
 end
 
@@ -730,18 +999,12 @@ function Review:annotate()
     })
 end
 
---- Annotate the file of the diff pane.
-function Review:annotate_file()
-    local view = self.drawer.view
-    local file = view:is_shown() and view.files[1] or nil
-
-    if file == nil then
-        return
-    end
-
+--- Annotate the file at `path`.
+---@param path string
+function Review:annotate_file(path)
     self:open_editor({
         scope = 'file',
-        anchor = { path = file.path, side = 'new' },
+        anchor = { path = path, side = 'new' },
     })
 end
 
@@ -781,23 +1044,9 @@ function Review:delete_annotation()
         return
     end
 
-    local first = vim.split(annotation.body, '\n')[1]
-
-    if
-        vim.fn.confirm('Delete the annotation?\n' .. first, '&Delete\n&No', 2)
-        ~= 1
-    then
-        return
+    if editor.delete(self.drawer.changes.root, annotation) ~= nil then
+        self:annotations_changed()
     end
-
-    local _, err =
-        store.remove_annotations(self.drawer.changes.root, { annotation.id })
-
-    if err ~= nil then
-        util.warn('Cannot delete the annotation: ' .. err)
-    end
-
-    self:annotations_changed()
 end
 
 return Review

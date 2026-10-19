@@ -2,6 +2,7 @@
 --- in normal buffers of repo files.
 
 local anchor = require('iter.annotations.anchor')
+local util = require('iter.util')
 
 ---@class IterAnnotationMark
 ---@field lnum integer row the annotation sits below
@@ -259,120 +260,15 @@ local WIDTH = 'iter_annotation_width'
 
 local buffer_ns = vim.api.nvim_create_namespace('iter.buffer.annotations')
 
----@class IterRootAnnotations
----@field head_path? string
----@field head? string contents of `head_path` when `store_path` was resolved
----@field store_path? string
----@field stat? string stat of `store_path` when `annotations` was read
----@field annotations IterAnnotation[]
-
----@type table<string, IterRootAnnotations>
-local roots = {}
-
 -- Save errors shown so far, so a failing store warns once per message.
 ---@type table<string, true>
 local save_warned = {}
 
---- The store writes through a rename, so the inode changes with every
---- write, also one that keeps the size within one mtime tick.
----@param path string
----@return string
-local function stat_key(path)
-    local stat = vim.uv.fs_stat(path)
-
-    if stat == nil then
-        return ''
-    end
-
-    return string.format(
-        '%d.%d:%d:%d',
-        stat.mtime.sec,
-        stat.mtime.nsec,
-        stat.size,
-        stat.ino
-    )
-end
-
----@param path string
----@return string?
-local function read_line(path)
-    local file = io.open(path, 'r')
-
-    if file == nil then
-        return nil
-    end
-
-    local line = file:read('*l')
-    file:close()
-
-    return line
-end
-
---- The HEAD file of the worktree at `root`, found without spawning git: in
---- `.git/`, or in the directory a `.git` file points to.
----@param root string
----@return string?
-local function head_path(root)
-    local dotgit = vim.fs.joinpath(root, '.git')
-    local stat = vim.uv.fs_stat(dotgit)
-
-    if stat == nil then
-        return nil
-    end
-
-    if stat.type == 'directory' then
-        return vim.fs.joinpath(dotgit, 'HEAD')
-    end
-
-    local gitdir = (read_line(dotgit) or ''):match('^gitdir: (.+)$')
-
-    if gitdir == nil then
-        return nil
-    end
-
-    if not vim.startswith(gitdir, '/') then
-        gitdir = vim.fs.joinpath(root, gitdir)
-    end
-
-    return vim.fs.joinpath(gitdir, 'HEAD')
-end
-
---- The stored annotations of the repo at `root`. The store path is resolved
---- again only when HEAD changed, and the file read again only when its
---- stat changed. A failed read keeps the annotations there are.
+--- The stored annotations of the repo at `root`.
 ---@param root string
 ---@return IterAnnotation[]
 local function root_annotations(root)
-    local cache = roots[root]
-
-    if cache == nil then
-        cache = { head_path = head_path(root), annotations = {} }
-        roots[root] = cache
-    end
-
-    local head = cache.head_path and read_line(cache.head_path)
-
-    if cache.store_path == nil or head ~= cache.head then
-        cache.store_path = require('iter.store').path(root)
-        cache.head = head
-        cache.stat = nil
-    end
-
-    local stat = cache.store_path and stat_key(cache.store_path)
-
-    if stat ~= nil and stat == cache.stat then
-        return cache.annotations
-    end
-
-    local data = cache.store_path
-        and require('iter.store').read(cache.store_path)
-
-    if data ~= nil then
-        cache.annotations = data.annotations
-        cache.stat = stat
-    end
-
-    return cache.annotations
+    return require('iter.store').cached(root).annotations
 end
 
 --- The repo root and repo-relative path of `buf`, or nil when it is not a
@@ -555,24 +451,9 @@ local function reanchor(buf)
 
         if not save_warned[message] then
             save_warned[message] = true
-            require('iter.util').warn(message)
+            util.warn(message)
         end
-
-        return
     end
-
-    local cache = roots[target.root]
-
-    if cache ~= nil then
-        cache.annotations = data.annotations
-        cache.stat = cache.store_path and stat_key(cache.store_path)
-    end
-end
-
----@param win integer
----@return boolean
-local function is_normal_win(win)
-    return vim.api.nvim_win_get_config(win).relative == ''
 end
 
 --- A normal window showing `buf`, floats left out: marks are per buffer, so
@@ -581,7 +462,7 @@ end
 ---@return integer?
 local function normal_win_of(buf)
     for _, win in ipairs(vim.fn.win_findbuf(buf)) do
-        if is_normal_win(win) then
+        if util.is_normal_win(win) then
             return win
         end
     end
@@ -620,7 +501,7 @@ function M.watch_buffers()
         callback = function(args)
             local win = vim.api.nvim_get_current_win()
 
-            if is_normal_win(win) then
+            if util.is_normal_win(win) then
                 render(args.buf, win)
             end
         end,
@@ -677,7 +558,7 @@ function M.watch_buffers()
         group = group,
         callback = function()
             for _, win in ipairs(vim.v.event.windows) do
-                if vim.api.nvim_win_is_valid(win) and is_normal_win(win) then
+                if util.is_normal_win(win) then
                     local buf = vim.api.nvim_win_get_buf(win)
                     local width = vim.b[buf][WIDTH]
 
@@ -693,7 +574,7 @@ function M.watch_buffers()
     })
 
     for _, win in ipairs(vim.api.nvim_list_wins()) do
-        if is_normal_win(win) then
+        if util.is_normal_win(win) then
             render(vim.api.nvim_win_get_buf(win), win)
         end
     end

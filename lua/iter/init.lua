@@ -13,31 +13,24 @@ local M = {
 local log = require('iter.log')
 local util = require('iter.util')
 
----@param win integer
----@return boolean
-local function is_normal_win(win)
-    return util.is_valid_win(win)
-        and vim.api.nvim_win_get_config(win).relative == ''
-end
-
 --- The window the drawer anchors to: the current one, or when that is a
 --- float, the previous or else the first normal window of the tab.
 ---@return integer
 local function target_pane()
     local current = vim.api.nvim_get_current_win()
 
-    if is_normal_win(current) then
+    if util.is_normal_win(current) then
         return current
     end
 
     local previous = vim.fn.win_getid(vim.fn.winnr('#'))
 
-    if is_normal_win(previous) then
+    if util.is_normal_win(previous) then
         return previous
     end
 
     for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-        if is_normal_win(win) then
+        if util.is_normal_win(win) then
             return win
         end
     end
@@ -86,7 +79,7 @@ end
 --- Refresh the open review's annotations after a write from outside it.
 local function refresh_review()
     if M.current_review ~= nil and M.current_review:is_open() then
-        M.current_review.drawer:refresh_annotations()
+        M.current_review:refresh_annotations()
     end
 end
 
@@ -205,23 +198,6 @@ local function open_review()
     return review ~= nil and review:is_open() and review or nil
 end
 
---- Edit `path`, an absolute file path, at `line` in the current window.
----@param path string
----@param line integer
-local function edit_at(path, line)
-    local ok, err = pcall(vim.cmd.edit, vim.fn.fnameescape(path))
-
-    if not ok then
-        util.error(tostring(err), 'Cannot open ' .. vim.fs.basename(path))
-        return
-    end
-
-    vim.api.nvim_win_set_cursor(
-        0,
-        { math.min(line, vim.api.nvim_buf_line_count(0)), 0 }
-    )
-end
-
 --- Go to `annotation`: in the review when it is open and has the annotation's
 --- file among its changes, else in the file's buffer. A deleted line only
 --- exists in the review, which opens for it.
@@ -274,7 +250,7 @@ local function jump_to_annotation(root, annotation)
     if review ~= nil then
         review:open_file(path, line)
     else
-        edit_at(path, line)
+        util.edit_at(path, line)
     end
 end
 

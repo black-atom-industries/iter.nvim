@@ -544,4 +544,29 @@ function M.selection()
     return cursor, cursor
 end
 
+--- Delete `annotation` from the store after a confirm that shows its first
+--- line. A failed delete warns.
+---@param root string
+---@param annotation IterAnnotation
+---@return boolean? deleted nil when the confirm was declined
+function M.delete(root, annotation)
+    local first = vim.split(annotation.body, '\n')[1]
+
+    if
+        vim.fn.confirm('Delete the annotation?\n' .. first, '&Delete\n&No', 2)
+        ~= 1
+    then
+        return nil
+    end
+
+    local _, err = store.remove_annotations(root, { annotation.id })
+
+    if err ~= nil then
+        util.warn('Cannot delete the annotation: ' .. err)
+        return false
+    end
+
+    return true
+end
+
 return M

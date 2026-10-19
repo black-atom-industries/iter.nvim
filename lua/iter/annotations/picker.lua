@@ -2,6 +2,7 @@
 --- filtered by what is typed in a prompt float above it.
 
 local anchor = require('iter.annotations.anchor')
+local editor = require('iter.annotations.editor')
 local highlight = require('iter.highlight')
 local keymap = require('iter.keymap')
 local store = require('iter.store')
@@ -546,19 +547,7 @@ function Picker:delete()
         return
     end
 
-    local first = vim.split(annotation.body, '\n')[1]
-
-    if
-        vim.fn.confirm('Delete the annotation?\n' .. first, '&Delete\n&No', 2)
-        ~= 1
-    then
-        return
-    end
-
-    local _, err = store.remove_annotations(self.opts.root, { annotation.id })
-
-    if err ~= nil then
-        util.warn('Cannot delete the annotation: ' .. err)
+    if not editor.delete(self.opts.root, annotation) then
         return
     end
 

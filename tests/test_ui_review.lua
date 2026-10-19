@@ -1399,7 +1399,7 @@ end
 local function wait_state(path, state)
     helpers.wait_until(
         child,
-        string.format([[%s.drawer.viewed[%q] == %q]], R, path, state)
+        string.format([[%s.viewed[%q] == %q]], R, path, state)
     )
 end
 

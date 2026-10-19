@@ -35,6 +35,8 @@ the review straight to an agent pane.
 - Store: `stdpath('data')/iter/<main worktree basename>-<first 8 hex of sha256 of git-common-dir>/<branch>.json`, so
   linked worktrees share it. The branch name has `%` and `/` percent-encoded; a detached HEAD uses `HEAD.json`.
   Writes go through a temp file renamed into place, after re-reading and merging by annotation id.
+  The review drawer and the buffer marks read through one cache per root (`store.cached`), read again when the
+  file's stat or HEAD changes.
 - Viewed: viewed when the stored `git hash-object` of the worktree file equals the current one, changed when it
   differs, unviewed without a record. Staging doesn't change it.
 - Discard never touches the index or ignored files: an unstaged row restores from the index, an untracked row deletes
@@ -44,6 +46,10 @@ the review straight to an agent pane.
   of its own height, so it never hides the diff.
 - In the status drawer the pane above shows the diff view in place of its buffer. The view saves the window-local
   options it changes and restores them on every exit path.
+- The drawer's lines come from `iter.ui.layout`: pure functions from a list of column specs and the width to render
+  lines, side by side at `drawer.breakpoint` and wider, stacked below it. The drawer holds what the status and review
+  drawers share; the review tab plugs in its viewed marks, annotation counts, header summary and spacer sizing as the
+  drawer's extras (`IterDrawerExtras`).
 - Viewed marks and annotation counts show only in the review drawer.
 
 ## Project shape

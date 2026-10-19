@@ -475,4 +475,65 @@ T['branches']['follow a checkout'] = function()
     eq(vim.fs.basename(assert(store.path(repo))), 'HEAD.json')
 end
 
+T['cached()'] = new_set()
+
+T['cached()']['reads again only when the file changed'] = function()
+    assert(store.put_annotation(repo, annotation('first')))
+    eq(bodies(store.cached(repo)), { 'first' })
+
+    local read = store.read
+    local reads = 0
+    ---@diagnostic disable-next-line: duplicate-set-field
+    store.read = function(...)
+        reads = reads + 1
+        return read(...)
+    end
+
+    local ok, err = pcall(function()
+        local before = store.cached(repo)
+        eq(store.cached(repo) == before, true)
+        eq(reads, 0)
+
+        assert(store.put_annotation(repo, annotation('second')))
+        eq(bodies(store.cached(repo)), { 'first', 'second' })
+        eq(reads, 1)
+
+        store.cached(repo, true)
+        eq(reads, 2)
+    end)
+
+    store.read = read
+    assert(ok, err)
+end
+
+T['cached()']['keeps the data when a read fails'] = function()
+    assert(store.put_annotation(repo, annotation('kept')))
+    eq(bodies(store.cached(repo)), { 'kept' })
+
+    write(assert(store.path(repo)), '{"version":2,"annotations":[]}')
+
+    eq(bodies(store.cached(repo)), { 'kept' })
+end
+
+T['cached()']['follows a checkout'] = function()
+    assert(store.put_annotation(repo, annotation('on main')))
+    eq(bodies(store.cached(repo)), { 'on main' })
+
+    helpers.git(repo, { 'checkout', '--quiet', '-b', 'other' })
+    eq(store.cached(repo).annotations, {})
+end
+
+T['cached()']['starts empty on a branch whose store cannot be read'] = function()
+    assert(store.put_annotation(repo, annotation('on main')))
+    eq(bodies(store.cached(repo)), { 'on main' })
+
+    helpers.git(repo, { 'checkout', '--quiet', '-b', 'other' })
+    write(
+        assert(store.path(repo)),
+        '{"version":99,"annotations":[],"viewed":{}}'
+    )
+
+    eq(store.cached(repo).annotations, {})
+end
+
 return T

@@ -761,7 +761,7 @@ T['delete']['<C-x> deletes after the confirm and keeps the picker open'] = funct
     eq(selected(), 'Needs a test')
     eq(mode(), 'i')
 
-    helpers.wait_until(child, [[#]] .. R .. [[.drawer.annotations == 7]])
+    helpers.wait_until(child, [[#]] .. R .. [[.annotations == 7]])
 end
 
 T['delete']['<C-x> on the last row selects the one before'] = function()
