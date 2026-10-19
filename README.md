@@ -134,8 +134,10 @@ and the annotation. It then asks once whether to clear the annotations.
 
 `statusline()` returns `review · <file> · <i>/<n>` inside the review tab
 (`review` when no file is shown), `review · all files · <file> · <i>/<n>`
-for the file under the cursor when the pane shows all files, and `''`
-elsewhere. While an annotation draft is hidden it adds `draft annotation`.
+for the file under the cursor when the pane shows all files, with `split`
+after the mode while the diff shows side by side
+(`review · split · <file> · <i>/<n>`), and `''` elsewhere. While an
+annotation draft is hidden it adds `draft annotation`.
 
 ## Configuration
 
@@ -220,6 +222,8 @@ The drawer of the review tab (`review_drawer`):
 | `d` | `discard` | Discard changes in the file |
 | `v` | `viewed` | Toggle viewed |
 | `m` | `mode` | Toggle one file or all files |
+| `\|` | `split` | Show the diff side by side |
+| `-` | `unified` | Show the diff unified |
 | `A` | `annotate_file` | Annotate the file |
 | `e` | `edit` | Edit the annotation |
 | `x` | `delete` | Delete the annotation |
@@ -251,6 +255,8 @@ The diff pane of the review tab (`diff`):
 | `gf` | `goto_file` | Go to the line in the file |
 | `v` | `viewed` | Toggle viewed |
 | `m` | `mode` | Toggle one file or all files |
+| `\|` | `split` | Show the diff side by side |
+| `-` | `unified` | Show the diff unified |
 | `y` | `yank` | Copy the review |
 | `q` | `close` | Close |
 | `?` | `help` | Show the keys |
@@ -272,8 +278,8 @@ opens a review annotation in the editor. `e`
 and `x` work only on an annotation row.
 
 In visual mode, `s` and `u` take only the added and deleted lines of the
-selection, which may span several hunks, as `git add -p` does when you edit a
-hunk. After `s` or `u` on the last change of a file, the pane shows the same
+selection, which may span several hunks. A changed line staged or unstaged
+alone takes the place of the line it pairs with. After `s` or `u` on the last change of a file, the pane shows the same
 file on its other side. A file opened in the diff pane, with `:edit` for
 example, opens in the tab the review came from, and the pane keeps its diff. A
 mode change shows in the diff header as `mode 100644 → 100755`; `s` on the file
@@ -292,6 +298,26 @@ under the cursor. A visual selection over two files stages and annotates
 nothing. `m` again shows the selected file alone; the key hint line names
 the mode it switches to. The mode lasts until the
 review tab closes.
+
+`|`, in the diff pane or the review drawer, shows the diff side by side: the
+old version in a window on the left (`HEAD` for a staged file, `index` for an
+unstaged one), the new version on the right (`index` or `worktree`), each
+with its own line numbers, syntax and a clean buffer. The right header keeps
+the stat and the annotation count and shows the viewed state as its glyph
+(`✓`, `↻`, `○`). The two windows scroll
+and move the cursor together. A deleted line and the added line it pairs
+with share a row, with the changed words highlighted; a line without a
+partner faces a row of `╱`. Hidden context shows on both sides and expands
+on both. An annotation shows on its side, with blank lines of the same
+height on the other. `a` takes the lines of its window's side: in the left
+window a selection with a deleted line annotates the old version, unchanged
+lines in it included; an added or unchanged line alone annotates the new
+one. `s` and `u` stage and unstage
+the hunk under the cursor from either window; in visual mode they take the
+added and deleted lines on both sides of the selected rows. `m` works here
+too, with every file on both sides. `-` goes back to one unified pane, and
+so does closing the left window. The key hint line names the layout it
+switches to. The status drawer's diff stays unified.
 
 The annotation float (`annotation`). `:w` saves and keeps the float open; `:wq` and `<C-s>` save and close it.
 

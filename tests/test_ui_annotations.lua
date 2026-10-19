@@ -421,7 +421,7 @@ T['column']['l reaches the column, the progress row is skipped'] = function()
     eq(child.lua_get(R .. '.drawer.column'), 'unstaged')
     eq(
         footer(),
-        's stage  u unstage  d discard  <CR> open  m all files  ? help'
+        's stage  u unstage  d discard  <CR> open  m all files  | split  ? help'
     )
 end
 

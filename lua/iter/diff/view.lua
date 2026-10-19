@@ -1,3 +1,4 @@
+local anchor = require('iter.annotations.anchor')
 local document = require('iter.diff.document')
 local highlight = require('iter.highlight')
 local keymap = require('iter.keymap')
@@ -16,16 +17,30 @@ local words = require('iter.diff.words')
 ---@field word_diff? boolean
 ---@field name? string buffer name, `iter://diff/<buf>` by default
 ---@field bufhidden? string 'bufhidden' of the buffer, `wipe` by default
+---@field on_cursor? fun() after the cursor moved in a window of the view while it is the current one
+---@field on_layout? fun() after the layout changed
+---@field on_pane_replaced? fun(buf: integer, line: integer) after another buffer took the old side's window, with that buffer and its cursor line; the pane is back in a window of its own
 
----@class IterDiffView
+--- A buffer of the view in its window: the view itself, or in the split
+--- layout also the old side left of it.
+---@class IterDiffPane
 ---@field buf integer
 ---@field win integer
----@field document IterDocument the files shown and the line of each row
----@field files IterFileDiff[] the files of the document, in order
----@field rows (IterDiffRow|IterDocSeparator)[] one per buffer line
----@field headers { mark?: integer, code?: integer }[] extmark ids of each section's header row
----@field saved_winopts? table<string, any> restored when the view leaves a user window
+---@field side? 'old'|'new' side the pane shows in the split layout
+---@field rows IterDocRow[] one per buffer line
+---@field headers { mark?: integer, code?: integer, label?: integer }[] extmark ids of each section's header row
 ---@field width integer digits of the widest line number
+---@field drawn table<integer, true> lines whose syntax and words this render requested
+---@field marks_width? integer text width the marks were wrapped to
+---@field autocmds? integer[] autocommands of the old side's pane
+
+---@class IterDiffView: IterDiffPane
+---@field document IterDocument the files shown and the line of each row
+---@field layout IterDocLayout layout of the documents the view shows
+---@field old? IterDiffPane the old side, in the split layout
+---@field name string buffer name
+---@field files IterFileDiff[] the files of the document, in order
+---@field saved_winopts? table<string, any> restored when the view leaves a user window
 ---@field keys table<string, string[]>
 ---@field handlers table<string, fun()> bound actions, for help
 ---@field expand_step integer
@@ -34,16 +49,17 @@ local words = require('iter.diff.words')
 ---@field generation integer bumped by every render
 ---@field decorated integer equals `generation` once the syntax requested for it is applied
 ---@field pending integer syntax requests of this generation not answered yet
----@field drawn table<integer, true> lines whose syntax and words this render requested
 ---@field paired table<integer, true> sections whose words this render paired
 ---@field prev_buf? integer buffer the window showed before the view
 ---@field annotations IterAnnotation[] stored annotations the view places on its files
 ---@field marks IterAnnotationMark[] annotations placed on the rows, by buffer line
 ---@field marks_drawn table<integer, true> lines whose annotations are drawn
----@field marks_width? integer text width the marks were wrapped to
 ---@field focus? string id of the annotation drawn as focused
 ---@field new_follows boolean a staged file's index equals its worktree, for a section that doesn't say
 ---@field viewed? table<string, IterViewedState> state per path the header rows show; nil shows no state and no annotation count
+---@field on_cursor? fun()
+---@field on_layout? fun()
+---@field on_pane_replaced? fun(buf: integer, line: integer)
 ---@field group integer
 local View = {}
 View.__index = View
@@ -60,6 +76,9 @@ local WORD_PRIORITY = vim.hl.priorities.treesitter + 50
 
 local WORD_HL = { add = 'IterDiffAddText', del = 'IterDiffDeleteText' }
 
+-- Fill of a filler row, wider than any pane.
+local FILL = string.rep('╱', 300)
+
 -- Screens above and below the visible lines that a document of several
 -- files decorates ahead, so scrolling shows them done.
 local MARGIN_SCREENS = 2
@@ -75,7 +94,13 @@ local WINOPTS = {
     list = false,
     spell = false,
     statuscolumn = "%!v:lua.require'iter.diff.view'.statuscolumn()",
+    scrollbind = false,
+    cursorbind = false,
 }
+
+-- The window options of both panes in the split layout.
+local SPLIT_WINOPTS =
+    vim.tbl_extend('force', WINOPTS, { scrollbind = true, cursorbind = true })
 
 local ROW_HL = {
     header = 'IterDiffHeader',
@@ -120,6 +145,14 @@ function View.new(opts)
     vim.validate('opts.word_diff', opts.word_diff, 'boolean', true)
     vim.validate('opts.name', opts.name, 'string', true)
     vim.validate('opts.bufhidden', opts.bufhidden, 'string', true)
+    vim.validate('opts.on_cursor', opts.on_cursor, 'function', true)
+    vim.validate('opts.on_layout', opts.on_layout, 'function', true)
+    vim.validate(
+        'opts.on_pane_replaced',
+        opts.on_pane_replaced,
+        'function',
+        true
+    )
 
     local config = require('iter').config
 
@@ -129,6 +162,7 @@ function View.new(opts)
         buf = vim.api.nvim_create_buf(false, true),
         win = opts.win,
         document = document.build({}),
+        layout = 'unified',
         files = {},
         rows = {},
         headers = {},
@@ -147,6 +181,9 @@ function View.new(opts)
         marks = {},
         marks_drawn = {},
         new_follows = false,
+        on_cursor = opts.on_cursor,
+        on_layout = opts.on_layout,
+        on_pane_replaced = opts.on_pane_replaced,
     }, View)
 
     if self.word_diff == nil then
@@ -155,7 +192,8 @@ function View.new(opts)
 
     vim.bo[self.buf].bufhidden = opts.bufhidden or 'wipe'
     vim.bo[self.buf].modifiable = false
-    util.name_buf(self.buf, opts.name or ('iter://diff/' .. self.buf))
+    self.name = opts.name or ('iter://diff/' .. self.buf)
+    util.name_buf(self.buf, self.name)
     views[self.buf] = self
 
     self.group = vim.api.nvim_create_augroup(
@@ -181,11 +219,15 @@ function View.new(opts)
     vim.api.nvim_create_autocmd('WinScrolled', {
         group = self.group,
         callback = function()
-            if vim.v.event[tostring(self.win)] ~= nil then
-                self:update_viewport()
+            for _, pane in ipairs(self:panes()) do
+                if vim.v.event[tostring(pane.win)] ~= nil then
+                    self:update_viewport()
+                    return
+                end
             end
         end,
     })
+    self:watch_cursor(self.buf)
 
     self.handlers = vim.tbl_extend('force', {
         expand = function()
@@ -195,6 +237,255 @@ function View.new(opts)
     keymap.attach(self.buf, 'diff', self.keys, self.handlers)
 
     return self
+end
+
+--- Run `on_cursor` when the cursor moves in a window of the view that shows
+--- `buf` and is the current one.
+---@param buf integer
+function View:watch_cursor(buf)
+    vim.api.nvim_create_autocmd('CursorMoved', {
+        group = self.group,
+        buffer = buf,
+        callback = function()
+            local win = vim.api.nvim_get_current_win()
+
+            if
+                self.on_cursor ~= nil
+                and (win == self.win or (self.old and self.old.win == win))
+            then
+                self.on_cursor()
+            end
+        end,
+    })
+end
+
+--- The panes of the view, left to right: the old side in the split layout,
+--- then the view itself.
+---@return IterDiffPane[]
+function View:panes()
+    return self.old ~= nil and { self.old, self } or { self }
+end
+
+--- The pane in the current window, else the view itself.
+---@return IterDiffPane
+function View:active()
+    local old = self.old
+
+    if old ~= nil and old.win == vim.api.nvim_get_current_win() then
+        return old
+    end
+
+    return self
+end
+
+--- The side of the pane in the current window in the split layout, nil in
+--- the unified layout.
+---@return 'old'|'new'|nil
+function View:active_side()
+    return self:active().side
+end
+
+--- Open the old side's pane left of the view's window, unless it is open.
+function View:open_old()
+    if self.old ~= nil then
+        return
+    end
+
+    local buf = vim.api.nvim_create_buf(false, true)
+
+    -- Hidden, not wiped, when another buffer takes the window, so the
+    -- pane can tell that from a close.
+    vim.bo[buf].bufhidden = 'hide'
+    vim.bo[buf].modifiable = false
+    util.name_buf(buf, self.name .. '/old')
+
+    local win = vim.api.nvim_open_win(buf, false, {
+        split = 'left',
+        win = self.win,
+    })
+
+    -- A new window copies the jumplist of the window it opens from.
+    vim.api.nvim_win_call(win, function()
+        vim.cmd.clearjumps()
+    end)
+
+    self.old = {
+        buf = buf,
+        win = win,
+        side = 'old',
+        rows = {},
+        headers = {},
+        width = 1,
+        drawn = {},
+    }
+    views[buf] = self
+    keymap.attach(buf, 'diff', self.keys, self.handlers)
+    self:watch_cursor(buf)
+
+    local old = self.old
+
+    -- Closed or wiped from outside, the pane leaves the view unified.
+    local function gone()
+        if self.old ~= old then
+            return
+        end
+
+        vim.schedule(function()
+            if self.old ~= old then
+                return
+            end
+
+            self:close_old()
+
+            if vim.api.nvim_buf_is_valid(self.buf) then
+                self:set_layout('unified')
+            end
+        end)
+    end
+
+    -- Another buffer in the window: the pane comes back in a window of its
+    -- own and `on_pane_replaced` gets that buffer.
+    local function replaced()
+        vim.schedule(function()
+            if
+                self.old ~= old
+                or not util.is_valid_win(win)
+                or vim.api.nvim_win_get_buf(win) == buf
+            then
+                return
+            end
+
+            local other = vim.api.nvim_win_get_buf(win)
+            local line = vim.api.nvim_win_get_cursor(win)[1]
+
+            self:close_old()
+
+            if self:is_shown() then
+                self:show_document(self.document)
+            end
+
+            if self.on_pane_replaced ~= nil then
+                self.on_pane_replaced(other, line)
+            end
+        end)
+    end
+
+    old.autocmds = {
+        vim.api.nvim_create_autocmd('BufWipeout', {
+            group = self.group,
+            buffer = buf,
+            callback = gone,
+        }),
+        vim.api.nvim_create_autocmd('BufWinLeave', {
+            group = self.group,
+            buffer = buf,
+            callback = replaced,
+        }),
+        vim.api.nvim_create_autocmd('WinClosed', {
+            group = self.group,
+            pattern = tostring(win),
+            callback = gone,
+        }),
+    }
+end
+
+--- Close the old side's pane, its window and its buffer.
+function View:close_old()
+    local old = self.old
+
+    if old == nil then
+        return
+    end
+
+    self.old = nil
+    views[old.buf] = nil
+
+    for _, id in ipairs(old.autocmds or {}) do
+        pcall(vim.api.nvim_del_autocmd, id)
+    end
+
+    if util.is_valid_win(old.win) then
+        if vim.api.nvim_get_current_win() == old.win then
+            if util.is_valid_win(self.win) then
+                vim.api.nvim_set_current_win(self.win)
+            end
+        end
+
+        vim.api.nvim_win_close(old.win, true)
+    end
+
+    if vim.api.nvim_buf_is_valid(old.buf) then
+        vim.api.nvim_buf_delete(old.buf, { force = true })
+    end
+end
+
+--- Give both panes of the split layout half of their width together.
+function View:even_widths()
+    local old = self.old
+
+    if
+        old == nil
+        or not util.is_valid_win(old.win)
+        or not util.is_valid_win(self.win)
+    then
+        return
+    end
+
+    local width = vim.api.nvim_win_get_width(old.win)
+    local half = math.ceil((width + vim.api.nvim_win_get_width(self.win)) / 2)
+
+    if width ~= half then
+        vim.api.nvim_win_set_width(old.win, half)
+    end
+end
+
+--- Give the other panes the cursor line and the top line of `from`, the
+--- pane in the current window by default.
+---@param from? IterDiffPane
+function View:sync(from)
+    if self.old == nil or not self:is_shown() then
+        return
+    end
+
+    from = from or self:active()
+
+    if not util.is_valid_win(from.win) then
+        return
+    end
+
+    local lnum = vim.api.nvim_win_get_cursor(from.win)[1]
+
+    -- Scrollbind keeps the offset between the windows at the time it was
+    -- set; syncbind makes it 0 again.
+    vim.api.nvim_win_call(from.win, function()
+        vim.cmd('syncbind')
+    end)
+
+    for _, pane in ipairs(self:panes()) do
+        if pane ~= from and util.is_valid_win(pane.win) then
+            vim.api.nvim_win_set_cursor(pane.win, { lnum, 0 })
+        end
+    end
+end
+
+--- Show the documents in `layout` from now on, the one shown at once.
+---@param layout IterDocLayout
+function View:set_layout(layout)
+    if layout == self.layout then
+        return
+    end
+
+    self.layout = layout
+
+    if self:is_shown() and #self.document.sections > 0 then
+        self:show_document(self.document)
+    elseif layout ~= 'split' then
+        self:close_old()
+    end
+
+    if self.on_layout ~= nil then
+        self.on_layout()
+    end
 end
 
 ---@param rows (IterDiffRow|IterDocSeparator)[]
@@ -217,17 +508,30 @@ local function number_width(rows)
     return math.max(3, #tostring(max))
 end
 
+--- The version a side of `file` shows: `HEAD`, `index` or `worktree`.
+---@param file IterFileDiff
+---@param side 'old'|'new'
+---@return string
+local function version_label(file, side)
+    if side == 'old' then
+        return anchor.OLD_BASE[file.side]
+    end
+
+    return file.side == 'staged' and 'index' or 'worktree'
+end
+
 --- Draw the header row of section `index`: the code letter, and at the
 --- right the viewed state, a mode change, the stat (`untracked · +n` for
 --- an untracked file) and, where the viewed state shows, the count of
 --- annotations placed in the file, for an untracked file only when it has
---- any. Drawn again in place, so the viewed state and the count can change
---- alone.
+--- any. In the split layout each side names its version after the path,
+--- and only the new side shows the right part, with the viewed state as its
+--- glyph. Drawn again in place, so the viewed state and the count can
+--- change alone.
 ---@param index integer
 function View:decorate_header(index)
     local section = self.document.sections[index]
     local file = section.file
-    local ids = self.headers[index] or {}
     local untracked = file.code == '?'
     local stat = file.binary and 'binary'
         or untracked and string.format('+%d', file.stat.add)
@@ -266,32 +570,60 @@ function View:decorate_header(index)
     local state = VIEWED_HEADER[self.viewed and self.viewed[file.path]]
 
     if state ~= nil then
-        table.insert(virt_text, 1, { state[1] .. '  ', state[2] })
+        -- Half a window wide, the split layout shows the state's glyph only.
+        local text = self.old ~= nil and vim.fn.strcharpart(state[1], 0, 1)
+            or state[1]
+
+        table.insert(virt_text, 1, { text .. '  ', state[2] })
     end
 
-    ids.code =
-        vim.api.nvim_buf_set_extmark(self.buf, NS, section.first - 1, 0, {
+    local lnum = section.first - 1
+
+    for _, pane in ipairs(self:panes()) do
+        local ids = pane.headers[index] or {}
+
+        ids.code = vim.api.nvim_buf_set_extmark(pane.buf, NS, lnum, 0, {
             id = ids.code,
             virt_text = { { file.code .. ' ', 'IterDiffHeader' } },
             virt_text_pos = 'inline',
         })
-    ids.mark =
-        vim.api.nvim_buf_set_extmark(self.buf, NS, section.first - 1, 0, {
+        ids.mark = vim.api.nvim_buf_set_extmark(pane.buf, NS, lnum, 0, {
             id = ids.mark,
             line_hl_group = ROW_HL.header,
-            virt_text = virt_text,
-            virt_text_pos = 'right_align',
+            virt_text = pane.side ~= 'old' and virt_text or nil,
+            virt_text_pos = pane.side ~= 'old' and 'right_align' or nil,
         })
-    self.headers[index] = ids
+
+        if pane.side ~= nil then
+            local col =
+                #vim.api.nvim_buf_get_lines(pane.buf, lnum, lnum + 1, true)[1]
+
+            ids.label = vim.api.nvim_buf_set_extmark(pane.buf, NS, lnum, col, {
+                id = ids.label,
+                virt_text = {
+                    { '  ' .. version_label(file, pane.side), 'IterDiffHunk' },
+                },
+                virt_text_pos = 'inline',
+            })
+        end
+
+        pane.headers[index] = ids
+    end
 end
 
----@param row IterDiffRow|IterDocSeparator
+---@param pane IterDiffPane
+---@param row IterDocRow
 ---@param lnum integer
 ---@param expand_lhs? string
-function View:decorate(row, lnum, expand_lhs)
+function View:decorate(pane, row, lnum, expand_lhs)
     local mark
 
-    if row.kind == 'add' or row.kind == 'del' then
+    if row.kind == 'filler' then
+        mark = {
+            virt_text = { { FILL, 'IterDiffFiller' } },
+            virt_text_pos = 'overlay',
+        }
+    elseif row.kind == 'add' or row.kind == 'del' then
         -- A line highlight would cover the word emphasis; a range under it
         -- lets syntax and words draw on top.
         mark = {
@@ -329,25 +661,28 @@ function View:decorate(row, lnum, expand_lhs)
     end
 
     if mark ~= nil then
-        vim.api.nvim_buf_set_extmark(self.buf, NS, lnum - 1, 0, mark)
+        vim.api.nvim_buf_set_extmark(pane.buf, NS, lnum - 1, 0, mark)
     end
 end
 
 ---@class IterDiffSyntaxJob
+---@field pane IterDiffPane
 ---@field lines string[] version the rows come from
 ---@field lang string
 ---@field lnums integer[] version lines to highlight
 ---@field targets integer[] buffer line of each entry in `lnums`
 
---- One job per version of `section` for its lines between `first` and
---- `last` not drawn yet: del rows read the old version, context and add
---- rows the new one. A version without a parser, above the size cap or
---- missing (hunk-only rows) gets none.
+--- One job per version of `section` for the lines of `pane` between
+--- `first` and `last` not drawn yet: del rows read the old version, add
+--- rows the new one, context rows the new one, or on the old side the old
+--- one. A version without a parser, above the size cap or missing
+--- (hunk-only rows) gets none.
+---@param pane IterDiffPane
 ---@param section IterDocSection
 ---@param first integer
 ---@param last integer
 ---@return IterDiffSyntaxJob[]
-function View:syntax_jobs(section, first, last)
+function View:syntax_jobs(pane, section, first, last)
     local file = section.file
     local sides = {
         { lines = file.old_lines, path = file.orig_path or file.path },
@@ -357,23 +692,29 @@ function View:syntax_jobs(section, first, last)
 
     for index, side in ipairs(sides) do
         local lines = side.lines
-        local lang = lines ~= nil
+        local old = index == 1
+        local lang = (pane.side == nil or (pane.side == 'old') == old)
+            and lines ~= nil
             and #lines > 0
             and #lines <= self.syntax_max_lines
             and syntax.lang(side.path)
 
         if lang then
-            local job = { lines = lines, lang = lang, lnums = {}, targets = {} }
+            local job = {
+                pane = pane,
+                lines = lines,
+                lang = lang,
+                lnums = {},
+                targets = {},
+            }
+            local kinds = old and { del = true, context = pane.side == 'old' }
+                or { add = true, context = pane.side ~= 'old' }
 
             for lnum = math.max(first, section.first), math.min(last, section.last) do
-                local row = self.rows[lnum]
-                local line = not self.drawn[lnum]
-                    and (
-                        index == 1 and row.kind == 'del' and row.old
-                        or index == 2
-                            and (row.kind == 'context' or row.kind == 'add')
-                            and row.new
-                    )
+                local row = pane.rows[lnum]
+                local line = not pane.drawn[lnum]
+                    and kinds[row.kind]
+                    and (old and row.old or not old and row.new)
 
                 if line then
                     table.insert(job.lnums, line)
@@ -416,13 +757,17 @@ function View:request_syntax(jobs)
                 return
             end
 
-            for i, lnum in ipairs(job.targets) do
-                local width = #self.rows[lnum].text
+            local pane = job.pane
+            local targets = vim.api.nvim_buf_is_valid(pane.buf) and job.targets
+                or {}
+
+            for i, lnum in ipairs(targets) do
+                local width = #pane.rows[lnum].text
 
                 for _, span in ipairs(spans and spans[job.lnums[i]] or {}) do
                     if span.col < width then
                         vim.api.nvim_buf_set_extmark(
-                            self.buf,
+                            pane.buf,
                             NS_SYNTAX,
                             lnum - 1,
                             span.col,
@@ -451,6 +796,7 @@ end
 ---@param last integer
 function View:decorate_lines(first, last)
     local doc = self.document
+    local panes = self:panes()
     local jobs = {}
 
     for _, index in ipairs(document.sections_in(doc, first, last)) do
@@ -461,28 +807,32 @@ function View:decorate_lines(first, last)
             self.paired[index] = true
         end
 
-        vim.list_extend(jobs, self:syntax_jobs(section, first, last))
+        for _, pane in ipairs(panes) do
+            vim.list_extend(jobs, self:syntax_jobs(pane, section, first, last))
+        end
     end
 
-    for lnum = first, last do
-        if not self.drawn[lnum] then
-            local row = self.rows[lnum]
+    for _, pane in ipairs(panes) do
+        for lnum = first, last do
+            if not pane.drawn[lnum] then
+                local row = pane.rows[lnum]
 
-            for _, range in ipairs(self.word_diff and row.words or {}) do
-                vim.api.nvim_buf_set_extmark(
-                    self.buf,
-                    NS_WORDS,
-                    lnum - 1,
-                    range[1],
-                    {
-                        end_col = range[2],
-                        hl_group = WORD_HL[row.kind],
-                        priority = WORD_PRIORITY,
-                    }
-                )
+                for _, range in ipairs(self.word_diff and row.words or {}) do
+                    vim.api.nvim_buf_set_extmark(
+                        pane.buf,
+                        NS_WORDS,
+                        lnum - 1,
+                        range[1],
+                        {
+                            end_col = range[2],
+                            hl_group = WORD_HL[row.kind],
+                            priority = WORD_PRIORITY,
+                        }
+                    )
+                end
+
+                pane.drawn[lnum] = true
             end
-
-            self.drawn[lnum] = true
         end
     end
 
@@ -536,58 +886,128 @@ function View:update_viewport(lnum)
     end
 end
 
---- Write the rows into the buffer with their highlights.
-function View:render()
-    local lines = vim.tbl_map(function(row)
+--- The text of `row` in `pane`: the row's own, except that in the split
+--- layout a header names the path of its side and a hunk row its range on
+--- that side.
+---@param pane IterDiffPane
+---@param row IterDocRow
+---@param file? IterFileDiff
+---@return string
+local function line_text(pane, row, file)
+    if pane.side == nil or file == nil then
         return row.text
-    end, self.rows)
-
-    -- Cleared first: replacing the lines moves every extmark still there.
-    for _, ns in ipairs({ NS, NS_SYNTAX, NS_WORDS, NS_ANNOTATIONS }) do
-        vim.api.nvim_buf_clear_namespace(self.buf, ns, 0, -1)
     end
 
-    vim.bo[self.buf].modifiable = true
-    vim.api.nvim_buf_set_lines(self.buf, 0, -1, false, lines)
-    vim.bo[self.buf].modifiable = false
+    local old = pane.side == 'old'
 
-    self.width = number_width(self.rows)
+    if row.kind == 'header' then
+        return old and (file.orig_path or file.path) or file.path
+    end
+
+    local hunk = row.kind == 'hunk' and file.hunks[row.hunk]
+
+    if hunk then
+        local start = old and hunk.old_start or hunk.new_start
+        local count = old and hunk.old_count or hunk.new_count
+
+        return string.format(
+            '@@ %s%d%s',
+            old and '-' or '+',
+            start,
+            count == 1 and '' or (',' .. count)
+        )
+    end
+
+    return row.text
+end
+
+--- Open or close the old side's pane for the document's layout.
+function View:arrange()
+    if self.document.layout == 'split' and util.is_valid_win(self.win) then
+        self:open_old()
+        self.old.rows = self.document.old_rows
+        self.side = 'new'
+    else
+        self:close_old()
+        self.side = nil
+    end
+end
+
+--- Write the rows into the buffers with their highlights.
+function View:render()
+    local doc = self.document
+    local panes = self:panes()
+    local width = 1
+
+    for _, pane in ipairs(panes) do
+        local lines = {}
+
+        for lnum, row in ipairs(pane.rows) do
+            local section = document.at(doc, lnum)
+
+            lines[lnum] = line_text(pane, row, section and section.file)
+        end
+
+        -- Cleared first: replacing the lines moves every extmark still there.
+        for _, ns in ipairs({ NS, NS_SYNTAX, NS_WORDS, NS_ANNOTATIONS }) do
+            vim.api.nvim_buf_clear_namespace(pane.buf, ns, 0, -1)
+        end
+
+        vim.bo[pane.buf].modifiable = true
+        vim.api.nvim_buf_set_lines(pane.buf, 0, -1, false, lines)
+        vim.bo[pane.buf].modifiable = false
+
+        width = math.max(width, number_width(pane.rows))
+        pane.drawn, pane.headers = {}, {}
+    end
+
+    for _, pane in ipairs(panes) do
+        pane.width = width
+    end
+
     self.generation = self.generation + 1
     self.pending = 0
-    self.drawn, self.paired, self.headers = {}, {}, {}
+    self.paired = {}
 
     local expand_lhs = (self.keys.expand or {})[1]
 
     self:place_marks()
 
-    for index in ipairs(self.document.sections) do
+    for index in ipairs(doc.sections) do
         self:decorate_header(index)
     end
 
-    for lnum, row in ipairs(self.rows) do
-        self:decorate(row, lnum, expand_lhs)
+    for _, pane in ipairs(panes) do
+        for lnum, row in ipairs(pane.rows) do
+            self:decorate(pane, row, lnum, expand_lhs)
+        end
     end
 
     self:update_viewport()
 
     if self:is_shown() then
         -- Setting the option again lets the rail shrink to a new width.
-        set_winopts(self.win, { statuscolumn = WINOPTS.statuscolumn })
+        for _, pane in ipairs(panes) do
+            set_winopts(pane.win, { statuscolumn = WINOPTS.statuscolumn })
+        end
     end
 end
 
---- Width of the text area right of the rail, which the view's options make
---- the only column in front of the text.
+--- Width of the text area of `pane`, the view's own by default, right of
+--- the rail, which the view's options make the only column in front of the
+--- text.
+---@param pane? IterDiffPane
 ---@return integer
-function View:text_width()
-    if not vim.api.nvim_win_is_valid(self.win) then
+function View:text_width(pane)
+    pane = pane or self
+
+    if not vim.api.nvim_win_is_valid(pane.win) then
         return 1
     end
 
-    return math.max(
-        1,
-        vim.api.nvim_win_get_width(self.win) - 2 * self.width - 4
-    )
+    local rail = pane.side ~= nil and pane.width + 3 or 2 * pane.width + 4
+
+    return math.max(1, vim.api.nvim_win_get_width(pane.win) - rail)
 end
 
 --- Place the annotations on the rows of every section, by buffer line.
@@ -613,7 +1033,7 @@ function View:place_marks()
                 )
             )
         do
-            mark.lnum = section.first + mark.lnum - 1
+            mark.lnum = assert(document.line_of(doc, index, mark.lnum))
             mark.section = index
             table.insert(self.marks, mark)
         end
@@ -621,15 +1041,19 @@ function View:place_marks()
 end
 
 --- Draw the annotations below lines `first` to `last` not drawn yet,
---- wrapped to the window.
+--- wrapped to the window. In the split layout an annotation shows on the
+--- side it anchors to, a file annotation on the new side, and the other
+--- side gets as many blank lines, so the rows stay aligned.
 ---@param first integer
 ---@param last integer
 function View:draw_marks(first, last)
-    local width = self:text_width()
+    local panes = self:panes()
     local icon = require('iter').config.options.icons.annotation
     local by_row, order = {}, {}
 
-    self.marks_width = width
+    for _, pane in ipairs(panes) do
+        pane.marks_width = self:text_width(pane)
+    end
 
     for _, mark in ipairs(self.marks) do
         local lnum = mark.lnum
@@ -640,30 +1064,62 @@ function View:draw_marks(first, last)
                 table.insert(order, lnum)
             end
 
-            vim.list_extend(
-                by_row[lnum],
-                marks.lines(
-                    mark.annotation,
-                    mark.outdated,
-                    width,
-                    self.focus ~= nil and mark.annotation.id == self.focus,
-                    icon
-                )
-            )
+            table.insert(by_row[lnum], mark)
         end
     end
 
     for _, lnum in ipairs(order) do
-        vim.api.nvim_buf_set_extmark(self.buf, NS_ANNOTATIONS, lnum - 1, 0, {
-            virt_lines = by_row[lnum],
-        })
+        local lines, height = {}, 0
+
+        for i, pane in ipairs(panes) do
+            lines[i] = {}
+
+            for _, mark in ipairs(by_row[lnum]) do
+                local side = mark.annotation.anchor.side == 'old' and 'old'
+                    or 'new'
+
+                if pane.side == nil or pane.side == side then
+                    vim.list_extend(
+                        lines[i],
+                        marks.lines(
+                            mark.annotation,
+                            mark.outdated,
+                            pane.marks_width,
+                            self.focus ~= nil
+                                and mark.annotation.id == self.focus,
+                            icon
+                        )
+                    )
+                end
+            end
+
+            height = math.max(height, #lines[i])
+        end
+
+        for i, pane in ipairs(panes) do
+            while #lines[i] < height do
+                table.insert(lines[i], {})
+            end
+
+            vim.api.nvim_buf_set_extmark(
+                pane.buf,
+                NS_ANNOTATIONS,
+                lnum - 1,
+                0,
+                { virt_lines = lines[i] }
+            )
+        end
+
         self.marks_drawn[lnum] = true
     end
 end
 
 --- Place and draw the annotations again, and the header counts with them.
 function View:render_marks()
-    vim.api.nvim_buf_clear_namespace(self.buf, NS_ANNOTATIONS, 0, -1)
+    for _, pane in ipairs(self:panes()) do
+        vim.api.nvim_buf_clear_namespace(pane.buf, NS_ANNOTATIONS, 0, -1)
+    end
+
     self:place_marks()
 
     for index in ipairs(self.document.sections) do
@@ -672,7 +1128,6 @@ function View:render_marks()
 
     local first, last = self:decor_range()
 
-    self.marks_width = self:text_width()
     self:draw_marks(first, last)
 end
 
@@ -732,11 +1187,15 @@ end
 
 --- Wrap the annotations again when the window width changed.
 function View:rewrap()
-    if
-        vim.api.nvim_buf_is_valid(self.buf)
-        and self:text_width() ~= self.marks_width
-    then
-        self:render_marks()
+    if not vim.api.nvim_buf_is_valid(self.buf) then
+        return
+    end
+
+    for _, pane in ipairs(self:panes()) do
+        if self:text_width(pane) ~= pane.marks_width then
+            self:render_marks()
+            return
+        end
     end
 end
 
@@ -841,18 +1300,26 @@ local function restored_line(doc, before, row, position)
     )
 end
 
---- Show `doc` in the borrowed window. The window's own options are saved
---- the first time and come back as soon as the view leaves it. The file
---- under the cursor stays under it near its row when `doc` shows it again;
---- else the cursor starts at the top.
+--- Show `doc` in the borrowed window, built again in the view's layout
+--- when it has another; the split layout opens the old side left of it.
+--- The window's own options are saved the first time and come back as soon
+--- as the view leaves it. The file under the cursor stays under it near its
+--- row when `doc` shows it again; else the cursor starts at the top.
 ---@param doc IterDocument
 function View:show_document(doc)
     local cursor, view, before, row, position
 
+    if doc.layout ~= self.layout then
+        doc = document.build(doc.sections, self.layout)
+    end
+
     if self:is_shown() then
-        cursor = vim.api.nvim_win_get_cursor(self.win)
-        view = vim.api.nvim_win_call(self.win, vim.fn.winsaveview)
-        before, row, position = document.at(self.document, cursor[1])
+        local active = self:active()
+
+        cursor = vim.api.nvim_win_get_cursor(active.win)
+        view = vim.api.nvim_win_call(active.win, vim.fn.winsaveview)
+        before, row, position =
+            document.at(self.document, cursor[1], active.side)
 
         if before ~= nil and row == nil then
             row = #before.file.rows
@@ -864,6 +1331,7 @@ function View:show_document(doc)
         return section.file
     end, doc.sections)
     self.rows = doc.rows
+    self:arrange()
     self:render()
 
     if not vim.api.nvim_win_is_valid(self.win) then
@@ -884,16 +1352,19 @@ function View:show_document(doc)
         vim.api.nvim_win_set_buf(self.win, self.buf)
     end
 
-    set_winopts(self.win, WINOPTS)
+    for _, pane in ipairs(self:panes()) do
+        set_winopts(pane.win, self.old and SPLIT_WINOPTS or WINOPTS)
+    end
 
     local lnum = before ~= nil
         and row ~= nil
         and restored_line(doc, before, row, position --[[@as integer]])
+    local active = self:active()
 
     if lnum and cursor ~= nil and view ~= nil then
         local topline = math.max(1, view.topline + lnum - cursor[1])
 
-        vim.api.nvim_win_call(self.win, function()
+        vim.api.nvim_win_call(active.win, function()
             vim.fn.winrestview({
                 lnum = lnum,
                 col = cursor[2],
@@ -901,22 +1372,23 @@ function View:show_document(doc)
             })
         end)
     else
-        vim.api.nvim_win_set_cursor(self.win, { 1, 0 })
+        vim.api.nvim_win_set_cursor(active.win, { 1, 0 })
     end
 
+    self:sync(active)
     self:update_viewport()
 end
 
 --- Show `file` alone in the borrowed window, see `show_document`.
 ---@param file IterFileDiff
 function View:show(file)
-    self:show_document(document.build({ { file = file } }))
+    self:show_document(document.build({ { file = file } }, self.layout))
 end
 
 --- Show the files of `entries` one below the other, see `show_document`.
 ---@param entries IterDocEntry[]
 function View:show_all(entries)
-    self:show_document(document.build(entries))
+    self:show_document(document.build(entries, self.layout))
 end
 
 function View:restore_winopts()
@@ -928,9 +1400,12 @@ function View:restore_winopts()
     self.saved_winopts = nil
 end
 
---- Give the window back its previous buffer and options. The view stays
---- usable: the next `show()` borrows the window again.
+--- Give the window back its previous buffer and options, and close the old
+--- side's pane. The view stays usable: the next `show()` borrows the window
+--- again.
 function View:hide()
+    self:close_old()
+
     if not self:is_shown() then
         return
     end
@@ -958,11 +1433,13 @@ function View:close()
     end
 end
 
+--- `lnum`, else the cursor line of the pane in the current window, else
+--- of the view's window.
 ---@param lnum? integer
 ---@return integer?
 function View:cursor_line(lnum)
     if lnum == nil and self:is_shown() then
-        lnum = vim.api.nvim_win_get_cursor(self.win)[1]
+        lnum = vim.api.nvim_win_get_cursor(self:active().win)[1]
     end
 
     return lnum
@@ -978,7 +1455,8 @@ function View:row(lnum)
 end
 
 --- The section at `lnum`, the cursor line by default, with the model row
---- of its file there (nil on a separator) and the section's index.
+--- of its file there (nil on a separator; in the split layout the row of
+--- the side in the current window) and the section's index.
 ---@param lnum? integer
 ---@return IterDocSection? section
 ---@return integer? row
@@ -990,7 +1468,7 @@ function View:at(lnum)
         return nil, nil, nil
     end
 
-    return document.at(self.document, lnum)
+    return document.at(self.document, lnum, self:active_side())
 end
 
 --- The file at `lnum`, the cursor line by default.
@@ -1012,20 +1490,25 @@ function View:reveal(lnum, align)
         return
     end
 
+    local active = self:active()
+
     self:update_viewport(lnum)
-    vim.api.nvim_win_set_cursor(self.win, { lnum, 0 })
+    vim.api.nvim_win_set_cursor(active.win, { lnum, 0 })
 
     if align ~= nil then
-        vim.api.nvim_win_call(self.win, function()
+        vim.api.nvim_win_call(active.win, function()
             vim.cmd(align == 'center' and 'normal! zz' or 'normal! zt')
         end)
     end
+
+    self:sync(active)
 end
 
 --- Reveal hidden context of the gap at `lnum`, the cursor line by default.
 ---@param lnum? integer
 function View:expand(lnum)
-    local cursor = self:is_shown() and vim.api.nvim_win_get_cursor(self.win)
+    local active = self:active()
+    local cursor = self:is_shown() and vim.api.nvim_win_get_cursor(active.win)
         or nil
 
     if lnum == nil and cursor ~= nil then
@@ -1042,14 +1525,16 @@ function View:expand(lnum)
         return
     end
 
-    local doc = document.build(self.document.sections)
+    local doc = document.build(self.document.sections, self.layout)
 
     self.document = doc
     self.rows = doc.rows
+    self:arrange()
     self:render()
 
     if cursor ~= nil then
-        vim.api.nvim_win_set_cursor(self.win, cursor)
+        vim.api.nvim_win_set_cursor(active.win, cursor)
+        self:sync(active)
         self:update_viewport()
     end
 end
@@ -1062,7 +1547,7 @@ function View:jump_hunk(dir)
         return
     end
 
-    local lnum = vim.api.nvim_win_get_cursor(self.win)[1] + dir
+    local lnum = self:cursor_line() + dir
 
     while lnum >= 1 and lnum <= #self.rows do
         if self.rows[lnum].kind == 'hunk' then
@@ -1082,7 +1567,7 @@ function View:jump_annotation(dir)
         return
     end
 
-    local lnum = vim.api.nvim_win_get_cursor(self.win)[1]
+    local lnum = self:cursor_line() --[[@as integer]]
     local first = dir == 1 and 1 or #self.marks
     local last = dir == 1 and #self.marks or 1
 
@@ -1105,7 +1590,7 @@ function View:jump_file(dir)
         return false
     end
 
-    local lnum = vim.api.nvim_win_get_cursor(self.win)[1]
+    local lnum = self:cursor_line() --[[@as integer]]
     local sections = self.document.sections
     local first = dir == 1 and 1 or #sections
     local last = dir == 1 and #sections or 1
@@ -1127,43 +1612,63 @@ end
 ---@field context string
 ---@field del string
 ---@field add string
+---@field filler? string
 
----@type table<integer, IterDiffRailFormats>
+---@type table<string, IterDiffRailFormats>
 local rail_formats = {}
 
+--- The rail formats of a pane on `side` (nil in the unified layout) for
+--- line numbers `width` digits wide: old and new numbers and the sign, or
+--- in the split layout the number of the pane's side and the sign.
 ---@param width integer
+---@param side? 'old'|'new'
 ---@return IterDiffRailFormats
-local function formats_for(width)
-    local formats = rail_formats[width]
+local function formats_for(width, side)
+    local id = (side or 'unified') .. width
+    local formats = rail_formats[id]
 
     if formats == nil then
         local number = '%' .. width .. 'd'
         local none = string.rep(' ', width)
 
-        formats = {
-            blank = string.rep(' ', 2 * width + 4),
-            context = '%%#IterDiffNr#' .. number .. ' ' .. number .. '   ',
-            del = '%%#IterDiffDeleteNr#' .. number .. ' ' .. none .. ' - ',
-            add = '%%#IterDiffAddNr#' .. none .. ' ' .. number .. ' + ',
-        }
-        rail_formats[width] = formats
+        if side == nil then
+            formats = {
+                blank = string.rep(' ', 2 * width + 4),
+                context = '%%#IterDiffNr#' .. number .. ' ' .. number .. '   ',
+                del = '%%#IterDiffDeleteNr#' .. number .. ' ' .. none .. ' - ',
+                add = '%%#IterDiffAddNr#' .. none .. ' ' .. number .. ' + ',
+            }
+        else
+            formats = {
+                blank = string.rep(' ', width + 3),
+                context = '%%#IterDiffNr#' .. number .. '   ',
+                del = '%%#IterDiffDeleteNr#' .. number .. ' - ',
+                add = '%%#IterDiffAddNr#' .. number .. ' + ',
+                filler = '%#IterDiffFiller#' .. FILL:sub(1, 3 * (width + 3)),
+            }
+        end
+
+        rail_formats[id] = formats
     end
 
     return formats
 end
 
 --- 'statuscolumn' of a diff view: old and new line numbers and the change
---- sign, blank on virtual and wrapped lines.
+--- sign, in the split layout the number of the pane's side, blank on
+--- virtual and wrapped lines.
 ---@return string
 function View.statuscolumn()
-    local view = views[vim.api.nvim_win_get_buf(vim.g.statusline_winid)]
+    local buf = vim.api.nvim_win_get_buf(vim.g.statusline_winid)
+    local view = views[buf]
 
     if view == nil then
         return ''
     end
 
-    local formats = formats_for(view.width)
-    local row = view.rows[vim.v.lnum]
+    local pane = view.old ~= nil and view.old.buf == buf and view.old or view
+    local formats = formats_for(pane.width, pane.side)
+    local row = pane.rows[vim.v.lnum]
 
     if row == nil or vim.v.virtnum ~= 0 then
         return formats.blank
@@ -1171,7 +1676,16 @@ function View.statuscolumn()
 
     local kind = row.kind
 
-    if kind == 'context' then
+    if kind == 'filler' then
+        return formats.filler or formats.blank
+    elseif kind == 'context' then
+        if pane.side ~= nil then
+            return string.format(
+                formats.context,
+                pane.side == 'old' and row.old or row.new
+            )
+        end
+
         return string.format(formats.context, row.old, row.new)
     elseif kind == 'del' then
         return string.format(formats.del, row.old)

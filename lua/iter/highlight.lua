@@ -100,6 +100,7 @@ function M.apply()
         IterDiffHeader = { link = 'Title' },
         IterDiffHunk = { link = 'Comment' },
         IterDiffGap = { link = 'Folded' },
+        IterDiffFiller = { link = 'NonText' },
         IterDiffAnnotation = { link = 'NormalFloat' },
         IterDiffAnnotationOutdated = { link = 'Comment' },
         IterDiffAnnotationFocus = { link = 'Visual' },

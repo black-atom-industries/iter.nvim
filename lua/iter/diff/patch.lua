@@ -1,3 +1,4 @@
+local document = require('iter.diff.document')
 local parser = require('iter.ui.diff.parser')
 
 local M = {}
@@ -134,11 +135,57 @@ end
 ---@field text string
 ---@field eof? true followed by a no-newline marker
 
---- The body of `hunk` with only the selected changes, as `git add -p` edit
---- mode builds it. The side the patch applies to stays whole: staging turns
---- an unselected del row into context and drops an unselected add row;
---- unstaging, which applies the patch in reverse, turns an unselected add
---- row into context and drops an unselected del row.
+---@class IterPatchRow: IterDiffRow
+---@field eof? true followed by a no-newline marker
+
+--- The rows of `hunk` in `raw`, each with the no-newline marker after it.
+---@param raw string[]
+---@param hunk IterDiffHunk
+---@return IterPatchRow[]
+local function hunk_rows(raw, hunk)
+    local rows = {}
+    local old, new = hunk.old_start, hunk.new_start
+    local old_left, new_left = hunk.old_count, hunk.new_count
+    local index = hunk.raw_header_row + 1
+
+    while
+        index <= #raw
+        and (old_left > 0 or new_left > 0 or vim.startswith(raw[index], '\\'))
+    do
+        local line = raw[index]
+        local marker, text = line:sub(1, 1), line:sub(2)
+
+        if marker == '-' then
+            table.insert(rows, { kind = 'del', text = text, old = old })
+            old, old_left = old + 1, old_left - 1
+        elseif marker == '+' then
+            table.insert(rows, { kind = 'add', text = text, new = new })
+            new, new_left = new + 1, new_left - 1
+        elseif marker == ' ' or line == '' then
+            table.insert(rows, { kind = 'context', text = text })
+            old, old_left = old + 1, old_left - 1
+            new, new_left = new + 1, new_left - 1
+        elseif marker == '\\' then
+            if #rows > 0 then
+                rows[#rows].eof = true
+            end
+        else
+            break
+        end
+
+        index = index + 1
+    end
+
+    return rows
+end
+
+--- The body of `hunk` with only the selected changes, in pair order. The
+--- side the patch applies to stays whole: staging turns an unselected del
+--- row into context and drops an unselected add row; unstaging, which
+--- applies the patch in reverse, turns an unselected add row into context
+--- and drops an unselected del row. The rows of a change group go in the
+--- order of the split layout, a deleted line next to the added line it
+--- pairs with, so a staged or unstaged line takes its partner's place.
 ---@param raw string[]
 ---@param hunk IterDiffHunk
 ---@param selection IterLineSelection
@@ -146,58 +193,44 @@ end
 ---@return IterPatchLine[]
 ---@return boolean picked whether a selected change is in it
 local function select_body(raw, hunk, selection, kind)
+    local rows = hunk_rows(raw, hunk)
     local body = {}
     local picked = false
-    local old, new = hunk.old_start, hunk.new_start
-    local old_left, new_left = hunk.old_count, hunk.new_count
-    local row = hunk.raw_header_row + 1
-    local kept = false
 
-    while
-        row <= #raw
-        and (old_left > 0 or new_left > 0 or vim.startswith(raw[row], '\\'))
-    do
-        local line = raw[row]
-        local marker, text = line:sub(1, 1), line:sub(2)
-        local sign
+    for _, line in ipairs(document.split_lines(rows)) do
+        local indexes = line.old ~= line.new and { line.old, line.new }
+            or { line.old }
 
-        if marker == '-' then
-            if selection.old[old] then
-                sign, picked = '-', true
-            elseif kind == 'stage' then
-                sign = ' '
-            end
+        for i = 1, 2 do
+            local row = rows[indexes[i]]
 
-            old, old_left = old + 1, old_left - 1
-        elseif marker == '+' then
-            if selection.new[new] then
-                sign, picked = '+', true
-            elseif kind == 'unstage' then
-                sign = ' '
-            end
+            if row ~= nil then
+                local sign
 
-            new, new_left = new + 1, new_left - 1
-        elseif marker == ' ' or line == '' then
-            sign = ' '
-            old, old_left = old + 1, old_left - 1
-            new, new_left = new + 1, new_left - 1
-        elseif marker == '\\' then
-            if kept then
-                body[#body].eof = true
-            end
-        else
-            break
-        end
+                if row.kind == 'del' then
+                    if selection.old[row.old] then
+                        sign, picked = '-', true
+                    elseif kind == 'stage' then
+                        sign = ' '
+                    end
+                elseif row.kind == 'add' then
+                    if selection.new[row.new] then
+                        sign, picked = '+', true
+                    elseif kind == 'unstage' then
+                        sign = ' '
+                    end
+                else
+                    sign = ' '
+                end
 
-        if marker ~= '\\' then
-            kept = sign ~= nil
-
-            if kept then
-                table.insert(body, { sign = sign, text = text })
+                if sign ~= nil then
+                    table.insert(
+                        body,
+                        { sign = sign, text = row.text, eof = row.eof }
+                    )
+                end
             end
         end
-
-        row = row + 1
     end
 
     return body, picked
