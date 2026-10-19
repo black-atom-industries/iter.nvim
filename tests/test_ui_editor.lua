@@ -784,6 +784,55 @@ T['edit and delete']['x deletes after the confirm'] = function()
     helpers.wait_until(child, [[#]] .. R .. [[.drawer.view.marks == 0]])
 end
 
+--- Text of the comment lines in the buffer of `m.txt`.
+---@return string[]
+local function buffer_mark_texts()
+    return child.lua_get([[(function()
+        local buf = vim.fn.bufnr('m.txt')
+        local ns = vim.api.nvim_get_namespaces()['iter.buffer.comments']
+        local texts = {}
+        for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true, type = 'virt_lines' })) do
+            for _, line in ipairs(mark[4].virt_lines) do
+                local parts = {}
+                for _, chunk in ipairs(line) do
+                    table.insert(parts, chunk[1])
+                end
+                table.insert(texts, vim.trim(table.concat(parts)))
+            end
+        end
+        return texts
+    end)()]])
+end
+
+T['edit and delete']['e in the review redraws the file buffer'] = function()
+    seed_line_comment()
+    child.cmd('edit m.txt')
+    eq(buffer_mark_texts(), { '▎ old body' })
+
+    open_review()
+    diff_cursor('l4')
+    child.type_keys('e')
+    wait_editor()
+    -- The same length, so only the content of the store file changes.
+    child.type_keys('<C-u>', 'new body', '<C-s>')
+
+    eq(stored()[1].body, 'new body')
+    eq(buffer_mark_texts(), { '▎ new body' })
+end
+
+T['edit and delete']['x in the review clears the mark of the file buffer'] = function()
+    seed_line_comment()
+    child.cmd('edit m.txt')
+    eq(buffer_mark_texts(), { '▎ old body' })
+
+    open_review()
+    diff_cursor('l4')
+    child.type_keys('x')
+
+    eq(#stored(), 0)
+    eq(buffer_mark_texts(), {})
+end
+
 T['api'] = new_set()
 
 T['api']['comment() comments on a line of a normal buffer'] = function()

@@ -208,6 +208,28 @@ T['build()']['pure rename hides the whole file in one gap'] = function()
     eq(#file.hunks, 0)
 end
 
+T['build()']['a mode change is kept, with or without content changes'] = function()
+    repo = helpers.create_repo({ ['run.sh'] = { 'echo' }, ['f.txt'] = { 'a' } })
+    vim.uv.fs_chmod(vim.fs.joinpath(repo, 'run.sh'), tonumber('755', 8))
+    vim.uv.fs_chmod(vim.fs.joinpath(repo, 'f.txt'), tonumber('755', 8))
+    write('f.txt', { 'b' })
+
+    local only = load({ path = 'run.sh', side = 'unstaged', code = 'M' })
+    eq(only.mode, { old = '100644', new = '100755' })
+    eq(only.stat, { add = 0, del = 0 })
+    eq(#only.hunks, 0)
+
+    local both = load({ path = 'f.txt', side = 'unstaged', code = 'M' })
+    eq(both.mode, { old = '100644', new = '100755' })
+    eq(#both.hunks, 1)
+
+    write('f.txt', { 'a' })
+    vim.uv.fs_chmod(vim.fs.joinpath(repo, 'f.txt'), tonumber('644', 8))
+    write('run.sh', { 'echo', 'more' })
+    vim.uv.fs_chmod(vim.fs.joinpath(repo, 'run.sh'), tonumber('644', 8))
+    eq(load({ path = 'run.sh', side = 'unstaged', code = 'M' }).mode, nil)
+end
+
 T['build()']['binary file has a header and no blobs'] = function()
     repo = helpers.create_repo({ ['keep.txt'] = { 'keep' } })
 

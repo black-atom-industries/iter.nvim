@@ -3,6 +3,7 @@ local keymap = require('iter.keymap')
 local marks = require('iter.comments.marks')
 local model = require('iter.diff.model')
 local syntax = require('iter.diff.syntax')
+local util = require('iter.util')
 local words = require('iter.diff.words')
 
 ---@class IterDiffViewOptions
@@ -12,6 +13,8 @@ local words = require('iter.diff.words')
 ---@field expand_step? integer
 ---@field syntax_max_lines? integer
 ---@field word_diff? boolean
+---@field name? string buffer name, `iter://diff/<buf>` by default
+---@field bufhidden? string 'bufhidden' of the buffer, `wipe` by default
 
 ---@class IterDiffView
 ---@field buf integer
@@ -107,6 +110,8 @@ function View.new(opts)
     vim.validate('opts.expand_step', opts.expand_step, 'number', true)
     vim.validate('opts.syntax_max_lines', opts.syntax_max_lines, 'number', true)
     vim.validate('opts.word_diff', opts.word_diff, 'boolean', true)
+    vim.validate('opts.name', opts.name, 'string', true)
+    vim.validate('opts.bufhidden', opts.bufhidden, 'string', true)
 
     local config = require('iter').config
 
@@ -135,10 +140,9 @@ function View.new(opts)
         self.word_diff = config.options.diff.word_diff
     end
 
-    vim.bo[self.buf].bufhidden = 'wipe'
+    vim.bo[self.buf].bufhidden = opts.bufhidden or 'wipe'
     vim.bo[self.buf].modifiable = false
-    -- A 'nofile' buffer: the name only labels it, nothing writes it.
-    vim.api.nvim_buf_set_name(self.buf, 'iter://diff/' .. self.buf)
+    util.name_buf(self.buf, opts.name or ('iter://diff/' .. self.buf))
     views[self.buf] = self
 
     vim.api.nvim_create_autocmd('BufWinLeave', {
@@ -207,6 +211,13 @@ function View:decorate(row, file, lnum, expand_lhs)
         mark.id = HEADER_MARK
         mark.virt_text = { { stat .. ' ', 'IterDiffHunk' } }
         mark.virt_text_pos = 'right_align'
+
+        if file.mode ~= nil then
+            table.insert(mark.virt_text, 1, {
+                string.format('mode %s → %s  ', file.mode.old, file.mode.new),
+                'IterDiffHunk',
+            })
+        end
 
         local state = VIEWED_HEADER[self.viewed]
 
@@ -623,9 +634,10 @@ function View:hide()
     end
 
     -- 'bufhidden' only acts when the buffer leaves its last window.
+    local bufhidden = vim.bo[self.buf].bufhidden
     vim.bo[self.buf].bufhidden = 'hide'
     vim.api.nvim_win_set_buf(self.win, target)
-    vim.bo[self.buf].bufhidden = 'wipe'
+    vim.bo[self.buf].bufhidden = bufhidden
 end
 
 --- Give the window back its previous buffer and options. The view's buffer

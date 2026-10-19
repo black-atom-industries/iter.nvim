@@ -267,6 +267,45 @@ T['open'][':Iter review opens the tab with the diff above the drawer'] = functio
     helpers.expect_screenshot(child, 'review-tab')
 end
 
+--- Text of screen row `row` after a redraw.
+---@param row integer
+---@return string
+local function screen_row(row)
+    return child.lua_get(
+        [[(function(row)
+            vim.cmd.redraw()
+            local cells = {}
+            for col = 1, vim.o.columns do
+                table.insert(cells, vim.fn.screenstring(row, col))
+            end
+            return table.concat(cells)
+        end)(...)]],
+        { row }
+    )
+end
+
+T['open']['the tab label and the statuslines read plainly'] = function()
+    child.o.laststatus = 2
+    child.o.showtabline = 2
+    open_review()
+    wait_diff('unstaged a.txt')
+
+    -- The default tabline names the current window's buffer, shortened.
+    eq(screen_row(1):find(' i//review ', 1, true) ~= nil, true)
+    child.type_keys('<CR>')
+    eq(screen_row(1):find(' i//review-diff ', 1, true) ~= nil, true)
+
+    local spacer = child.lua_get(R .. '.spacer_win')
+    local status_row = child.fn.win_screenpos(spacer)[1]
+        + child.api.nvim_win_get_height(spacer)
+    eq(vim.trim(screen_row(status_row)), '')
+
+    local diff = child.lua_get(R .. '.diff_win')
+    local diff_status = child.fn.win_screenpos(diff)[1]
+        + child.api.nvim_win_get_height(diff)
+    eq(vim.startswith(screen_row(diff_status), 'iter://review-diff'), true)
+end
+
 T['open']['opening twice gives one tab'] = function()
     open_review()
     open_review()
@@ -624,9 +663,106 @@ T['goto']['the spacer and the view buffer are hermetic'] = function()
         child.lua_get(
             [[vim.api.nvim_buf_get_name(]] .. R .. [[.drawer.view.buf)]]
         ),
-        'iter://diff/' .. child.lua_get(R .. '.drawer.view.buf')
+        'iter://review-diff'
     )
     eq(child.lua_get('vim.bo[' .. R .. '.drawer.view.buf].buftype'), 'nofile')
+end
+
+T['switch'] = new_set()
+
+--- The review is open, its diff pane shows the view and its drawer float
+--- shows the drawer buffer.
+local function expect_review_intact()
+    child.lua('vim.wait(100)')
+    eq(#child.api.nvim_list_tabpages(), 2)
+    eq(child.lua_get(R .. ' ~= nil and ' .. R .. ':is_open()'), true)
+    eq(
+        child.lua_get(
+            'vim.api.nvim_win_get_buf('
+                .. R
+                .. '.diff_win) == '
+                .. R
+                .. '.drawer.view.buf'
+        ),
+        true
+    )
+    eq(
+        child.lua_get(
+            'vim.api.nvim_win_get_buf('
+                .. R
+                .. '.drawer.win) == '
+                .. R
+                .. '.drawer.buf'
+        ),
+        true
+    )
+end
+
+T['switch']['<C-o> in the diff pane keeps the review'] = function()
+    child.cmd('edit b.txt')
+    child.cmd('edit a.txt')
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.type_keys('<CR>')
+    child.type_keys('<C-o>')
+
+    expect_review_intact()
+    eq(child.lua_get(R .. '.diff_win == vim.api.nvim_get_current_win()'), true)
+    eq(child.v.errmsg, '')
+end
+
+T['switch']['<C-o> in the drawer keeps the review'] = function()
+    child.cmd('edit b.txt')
+    child.cmd('edit a.txt')
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.type_keys('<C-o>')
+
+    expect_review_intact()
+    eq(child.v.errmsg, '')
+end
+
+T['switch'][':e in the diff pane opens the file in the previous tab'] = function()
+    local origin = child.api.nvim_get_current_tabpage()
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.type_keys('<CR>')
+    child.cmd('edit +2 c.txt')
+    child.lua('vim.wait(100)')
+
+    eq(goto_target(), { line = 1, text = 'c', tab = origin, name = 'c.txt' })
+    child.cmd('tablast')
+    expect_review_intact()
+    eq(child.lua_get(R .. '.drawer.view.files[1].path'), 'a.txt')
+    eq(child.v.errmsg, '')
+
+    -- Putting the view back leaves no jump to the file behind.
+    child.lua('vim.api.nvim_set_current_win(' .. R .. '.diff_win)')
+    eq(
+        child.lua_get([[vim.tbl_map(function(entry)
+            return vim.fs.basename(vim.fn.bufname(entry.bufnr))
+        end, vim.fn.getjumplist()[1])]]),
+        {}
+    )
+    child.type_keys('<C-o>')
+    child.lua('vim.wait(50)')
+    eq(child.api.nvim_get_current_tabpage(), child.lua_get(R .. '.tab'))
+    expect_review_intact()
+
+    -- The pane stays the view's: closing the review gives nothing back to it.
+    child.type_keys('q')
+    eq(child.lua_get(R), vim.NIL)
+    eq(#child.api.nvim_list_tabpages(), 1)
+end
+
+T['switch'][':enew in the diff pane puts the view back'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.type_keys('<CR>')
+    child.cmd('enew')
+
+    expect_review_intact()
+    eq(child.v.errmsg, '')
 end
 
 T['refresh'] = new_set({
@@ -931,7 +1067,9 @@ T['hunks']['u unstages the hunk under the cursor and keeps the other'] = functio
     eq(child.lua_get('_G.notes'), {})
 end
 
-T['hunks']['staging and unstaging the last hunk of a file moves on'] = function()
+T['hunks']['staging and unstaging the last hunk of a file keeps the file'] = function()
+    local b_index = git_out({ 'diff', '--cached', '--', 'b.txt' })
+
     open_review()
     wait_diff('unstaged a.txt')
     cursor_on('a3 changed')
@@ -940,19 +1078,25 @@ T['hunks']['staging and unstaging the last hunk of a file moves on'] = function(
     child.type_keys('s')
 
     eq(git_out({ 'diff', '--', 'a.txt' }), '')
-    wait_diff('unstaged b.txt')
-    eq(selected(), 'unstaged b.txt')
-
-    select_item('staged', 'a.txt')
     wait_diff('staged a.txt')
+    eq(selected(), 'staged a.txt')
+
+    -- A second s stays on the file the pane shows.
+    child.type_keys('s')
+    eq(git_out({ 'diff', '--cached', '--', 'b.txt' }), b_index)
+    eq(child.lua_get('_G.notes'), {
+        { '[iter] The hunk is staged already', vim.log.levels.WARN },
+    })
+    child.lua('_G.notes = {}')
+
     cursor_on('a3 changed')
     child.type_keys('u')
     wait_cursor('hunk @@ -22,7 +22,7 @@ a21')
     child.type_keys('u')
 
     eq(git_out({ 'diff', '--cached', '--', 'a.txt' }), '')
-    wait_diff('staged b.txt')
-    eq(selected(), 'staged b.txt')
+    wait_diff('unstaged a.txt')
+    eq(selected(), 'unstaged a.txt')
     eq(child.lua_get('_G.notes'), {})
     eq(child.v.errmsg, '')
 end
@@ -1520,6 +1664,115 @@ T['viewed']['screenshot of viewed, changed and unviewed rows'] = function()
     wait_diff_header('✓ viewed')
 
     helpers.expect_screenshot(child, 'review-viewed')
+end
+
+T['flow'] = new_set()
+
+-- Everything the whole flow could leave behind. The augroups of setup()
+-- and of the highlight groups live for the session.
+local FLOW_STATE = [[(function()
+    local handles = {}
+    vim.uv.walk(function(handle)
+        if not handle:is_closing() then
+            local kind = handle:get_type()
+            handles[kind] = (handles[kind] or 0) + 1
+        end
+    end)
+    local groups = {}
+    for _, name in ipairs(vim.split(vim.fn.execute('augroup'), '%s+')) do
+        if
+            vim.startswith(name, 'iter.')
+            and name ~= 'iter.buffer_comments'
+            and name ~= 'iter.highlight'
+        then
+            table.insert(groups, name)
+        end
+    end
+    local iter_bufs = vim.tbl_filter(function(buf)
+        return vim.api.nvim_buf_get_name(buf):match('^iter://') ~= nil
+    end, vim.api.nvim_list_bufs())
+    local ctrl_t = vim.fn.maparg('<C-t>', 'n', false, true)
+    return {
+        handles = handles,
+        groups = groups,
+        iter_bufs = #iter_bufs,
+        bufs = #vim.api.nvim_list_bufs(),
+        wins = #vim.api.nvim_list_wins(),
+        tabs = #vim.api.nvim_list_tabpages(),
+        ctrl_t = ctrl_t.desc or ctrl_t.rhs or '',
+    }
+end)()]]
+
+T['flow']['status, review, comment, picker, yank and close leave nothing behind'] = function()
+    child.lua([[
+        require('iter').setup()
+        vim.keymap.set('n', '<C-t>', '<Nop>', { desc = 'user ctrl-t' })
+    ]])
+    child.cmd('edit a.txt')
+    child.lua('vim.wait(200)')
+    local before = child.lua_get(FLOW_STATE)
+
+    child.cmd('Iter')
+    helpers.wait_until(child, [[require('iter').drawer ~= nil]])
+    child.type_keys('r')
+    helpers.wait_until(child, R .. ' ~= nil and ' .. R .. '.drawer.win ~= nil')
+    wait_diff('unstaged a.txt')
+    eq(child.lua_get([[require('iter').drawer]]), vim.NIL)
+
+    -- Comment, hide the draft, show it again and save.
+    child.type_keys('<CR>')
+    cursor_on('a3 changed')
+    child.type_keys('c')
+    helpers.wait_until(child, [[require('iter.comments.editor').is_shown()]])
+    child.type_keys('flow note', '<C-t>')
+    eq(child.lua_get([[require('iter.comments.editor').is_shown()]]), false)
+    child.type_keys('<C-t>')
+    helpers.wait_until(child, [[require('iter.comments.editor').is_shown()]])
+    child.type_keys('<C-s>', '<Esc>', 'q')
+    helpers.wait_until(
+        child,
+        [[not require('iter.comments.editor').is_shown()]]
+    )
+    eq(
+        child.lua_get(
+            [[vim.tbl_map(function(c) return c.body end, require('iter.store').load(vim.fn.getcwd()).comments)]]
+        ),
+        { 'flow note' }
+    )
+
+    -- Jump back to it through the picker, from another file.
+    child.lua('vim.api.nvim_set_current_win(' .. R .. '.diff_win)')
+    child.type_keys(']f')
+    wait_diff('unstaged b.txt')
+    child.type_keys('L')
+    helpers.wait_until(
+        child,
+        [[vim.bo[vim.api.nvim_get_current_buf()].filetype == 'iterpicker']]
+    )
+    child.type_keys('<CR>')
+    wait_diff('unstaged a.txt')
+    eq(cursor_row(), 'add a3 changed')
+
+    -- Yank and clear.
+    child.type_keys('y')
+    child.type_keys('y')
+    helpers.wait_until(
+        child,
+        [[#require('iter.store').load(vim.fn.getcwd()).comments == 0]]
+    )
+    eq(child.fn.getreg('"'):find('flow note', 1, true) ~= nil, true)
+
+    child.type_keys('q')
+    child.lua('vim.wait(200)')
+
+    eq(child.lua_get(R), vim.NIL)
+    eq(child.lua_get(FLOW_STATE), before)
+    eq(
+        child.lua_get([[vim.fn.maparg('<C-t>', 'n', false, true).desc]]),
+        'user ctrl-t'
+    )
+    eq(child.lua_get('_G.notes'), {})
+    eq(child.v.errmsg, '')
 end
 
 return T

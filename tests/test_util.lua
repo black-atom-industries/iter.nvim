@@ -11,6 +11,7 @@ local function capture(fn)
     local original = vim.notify
     local calls = {}
 
+    ---@diagnostic disable-next-line: duplicate-set-field
     vim.notify = function(message, level)
         table.insert(calls, { message = message, level = level })
     end

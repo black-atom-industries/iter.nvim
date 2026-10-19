@@ -8,5 +8,8 @@
         "need-check-nil"
     ],
     "runtime.version": "LuaJIT",
-    "workspace.checkThirdParty": false
+    "workspace.checkThirdParty": false,
+    "workspace.library": [
+        "$VIMRUNTIME/lua"
+    ]
 }

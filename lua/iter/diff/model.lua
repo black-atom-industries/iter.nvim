@@ -35,6 +35,7 @@ local parser = require('iter.ui.diff.parser')
 ---@field new_lines? string[] unstaged: worktree; staged: index
 ---@field binary boolean
 ---@field stat { add: integer, del: integer }
+---@field mode? { old: string, new: string } file mode change
 
 local M = {}
 
@@ -142,6 +143,25 @@ local function push_gap(rows, old, new, count)
     end
 end
 
+--- The mode change in the file header of `raw`, the lines before the first
+--- hunk.
+---@param raw string[]
+---@return { old: string, new: string }?
+local function mode_change(raw)
+    local old, new
+
+    for _, line in ipairs(raw) do
+        if vim.startswith(line, '@@') then
+            break
+        end
+
+        old = old or line:match('^old mode (%d+)$')
+        new = new or line:match('^new mode (%d+)$')
+    end
+
+    return old and new and { old = old, new = new } or nil
+end
+
 ---@param change IterDiffChange
 ---@return string
 local function header_text(change)
@@ -170,6 +190,7 @@ function M.build(change, source)
         rows = { { kind = 'header', text = header_text(change) } },
         binary = source.binary,
         stat = { add = 0, del = 0 },
+        mode = mode_change(source.raw),
     }
 
     if source.binary then

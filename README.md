@@ -208,6 +208,12 @@ The diff pane of the review tab (`diff`):
 | `q` | `close` | Close |
 | `?` | `help` | Show the keys |
 
+After `s` or `u` on the last hunk of a file, the pane shows the same file on
+its other side. A file opened in the diff pane, with `:edit` for example, opens
+in the tab the review came from, and the pane keeps its diff. A mode change
+shows in the diff header as `mode 100644 → 100755`; `s` on the file in the
+drawer stages it.
+
 The comment float (`comment`). `:w` also saves and `:wq` saves and closes.
 
 | Key | Action | Does |
@@ -253,7 +259,7 @@ and `just`. Install [mise](https://mise.jdx.dev/), then run `mise install`.
 
 ```bash
 just checks        # lint, format-check and test
-just lint          # lua-language-server --check with .luarc.json
+just lint          # lua-language-server --check against Neovim's Lua API
 just format        # format all Lua files with stylua
 just format-check  # check formatting only
 just test          # run the whole test suite
