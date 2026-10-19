@@ -325,10 +325,7 @@ function Review:apply_change(kind)
 
     local what = visual and 'selected lines' or 'hunk'
 
-    if file.side == 'branch' then
-        util.warn(Drawer.READ_ONLY)
-        return
-    elseif kind == 'stage' and file.side ~= 'unstaged' then
+    if kind == 'stage' and file.side ~= 'unstaged' then
         util.warn(
             visual and 'The lines are staged already'
                 or 'The hunk is staged already'
@@ -832,9 +829,8 @@ function Review:close()
     end
 end
 
---- `review · <file> · <i>/<n>` for windows of the tab, `''` elsewhere, with
---- `branch · ` before the file of the Branch column. The position counts
---- files in drawer order.
+--- `review · <file> · <i>/<n>` for windows of the tab, `''` elsewhere. The
+--- position counts files in drawer order.
 ---@return string
 function Review:statusline()
     local win = vim.g.statusline_winid or vim.api.nvim_get_current_win()
@@ -856,15 +852,18 @@ function Review:statusline()
 
     local files = self.drawer:files()
 
-    local name = (file.side == 'branch' and 'branch · ' or '') .. file.path
-
     for index, item in ipairs(files) do
         if item.side == file.side and item.path == file.path then
-            return string.format('review · %s · %d/%d', name, index, #files)
+            return string.format(
+                'review · %s · %d/%d',
+                file.path,
+                index,
+                #files
+            )
         end
     end
 
-    return 'review · ' .. name
+    return 'review · ' .. file.path
 end
 
 --- Edit the file of the diff in the tab the review came from, at the
@@ -943,10 +942,9 @@ function Review:show_annotation(annotation)
 end
 
 --- Select the file `annotation` belongs to in the drawer, show its diff and
---- put the diff cursor on the annotation's row. A deleted-line annotation is
---- found in the diff whose old version is its base, the other side's next; a
---- new-side one in the unstaged, staged, then branch diff. False when the
---- file isn't among the changes.
+--- put the diff cursor on the annotation's row. An annotation is found in
+--- the staged diff or the unstaged one, the side of its old version first.
+--- False when the file isn't among the changes.
 ---@param annotation IterAnnotation
 ---@return boolean
 function Review:select_annotation(annotation)
@@ -957,15 +955,10 @@ function Review:select_annotation(annotation)
         return false
     end
 
-    local sides = { 'unstaged', 'staged', 'branch' }
-
-    if a.side == 'old' and a.base == 'merge-base' then
-        sides = { 'branch' }
-    elseif a.side == 'old' and a.base == 'HEAD' then
-        sides = { 'staged', 'unstaged' }
-    elseif a.side == 'old' then
-        sides = { 'unstaged', 'staged' }
-    end
+    local sides = a.side == 'old'
+            and a.base == 'HEAD'
+            and { 'staged', 'unstaged' }
+        or { 'unstaged', 'staged' }
     local found = {}
 
     for _, side in ipairs(sides) do
@@ -1028,9 +1021,8 @@ end
 
 --- The anchor of rows `first` to `last` of the shown diff. Rows with a new
 --- line number anchor on the new side, which follows the worktree, so a
---- staged line goes through the unstaged diff and a branch line through the
---- uncommitted one; only deleted rows anchor on the old side, against the
---- version they were deleted from: the index, HEAD or the merge-base.
+--- staged line goes through the unstaged diff; only deleted rows anchor on
+--- the old side, against the version they were deleted from.
 ---@param file IterFileDiff
 ---@param first integer
 ---@param last integer

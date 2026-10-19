@@ -115,10 +115,8 @@ end
 --- view's own version and sit below their last line, deleted-line annotations
 --- go to the view whose old version is their base, file annotations sit below
 --- the header, and a line hidden in a gap puts its annotation below the gap.
---- A staged or branch view outdates new-side annotations only with
---- `opts.new_follows`, set when its new version is the worktree file: a
---- staged file without unstaged changes, a branch file without uncommitted
---- ones.
+--- A staged view outdates new-side annotations only with `opts.new_follows`,
+--- set when the file has no unstaged changes, so the index is the worktree.
 ---@param file IterFileDiff
 ---@param annotations IterAnnotation[]
 ---@param opts? { new_follows?: boolean }

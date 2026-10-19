@@ -55,7 +55,6 @@ local watch = require('iter.watch')
 ---@field layout IterLayoutMode
 ---@field previewed? string key of the item the view shows
 ---@field previewed_stat? string worktree stat of that item when it was read
----@field branch? IterDrawerBranch the last branch diff read, review only
 ---@field preview_tick integer bumped per scheduled preview; only the last one runs
 ---@field group integer
 ---@field closed boolean
@@ -63,16 +62,8 @@ local watch = require('iter.watch')
 local Drawer = {}
 Drawer.__index = Drawer
 
----@class IterDrawerBranch
----@field ref? string base ref, nil when none resolved
----@field revs? string shas of HEAD and `ref` when it was read
----@field diff? GitBranchDiff
-
 -- Text lines the drawer keeps in a pane too short for `drawer.height`.
 Drawer.MIN_LINES = 5
-
--- What `s`, `u` and `d` say on a Branch file.
-Drawer.READ_ONLY = 'Branch files are committed; nothing to stage or discard'
 
 local SELECTED_NS = vim.api.nvim_create_namespace('iter.drawer.selected')
 local PREVIEW_DELAY_MS = 50
@@ -87,8 +78,6 @@ local HINTS = {
     { 'review', 'review' },
     { 'help', 'help' },
 }
--- Actions that change the index or the worktree, off in the Branch column.
-local WRITE_ACTIONS = { stage = true, unstage = true, discard = true }
 
 ---@param item IterChange
 ---@return string
@@ -99,29 +88,17 @@ end
 ---@class IterDrawerColumn
 ---@field id IterSide
 ---@field title string
----@field note? string
 ---@field items IterChange[]
 
---- The columns left to right, each listing the changes of its side. The
---- review adds Branch when a base branch resolves.
+--- The columns left to right, each listing the changes of its side.
 ---@return IterDrawerColumn[]
 function Drawer:columns()
     local result = self.changes
-    local columns = {
+
+    return {
         { id = 'unstaged', title = 'Unstaged', items = result.unstaged },
         { id = 'staged', title = 'Staged', items = result.staged },
     }
-
-    if self.context == 'review' and result.base ~= nil then
-        table.insert(columns, {
-            id = 'branch',
-            title = 'Branch',
-            note = ' vs ' .. result.base.name,
-            items = result.base.files,
-        })
-    end
-
-    return columns
 end
 
 --- Column ids left to right, `first` moved to the front when given.
@@ -151,11 +128,10 @@ function Drawer:ordered()
     return items
 end
 
---- `HEAD <branch> ↑<ahead> · base <name> · <n> changes`; `↑` only when HEAD
---- is ahead of its upstream, the base only with a Branch column. A file in
---- more than one column counts once. Stacked, the counts are per column,
---- since a lower title may sit below the visible lines. `extras` replaces
---- the summary after the branch.
+--- `HEAD <branch> ↑<ahead> · <n> changes`; `↑` only when HEAD is ahead of
+--- its upstream. A file in more than one column counts once. Stacked, the
+--- counts are per column, since a lower title may sit below the visible
+--- lines. `extras` replaces the summary after the branch.
 ---@param drawer IterDrawer
 ---@return [string, string][]
 local function header_chunks(drawer)
@@ -181,11 +157,6 @@ local function header_chunks(drawer)
 
     if result.ahead ~= nil and result.ahead > 0 then
         table.insert(chunks, { ' ↑' .. result.ahead, 'IterUnpushed' })
-    end
-
-    if drawer.context == 'review' and result.base ~= nil then
-        table.insert(chunks, { ' · base ', 'IterDrawerHint' })
-        table.insert(chunks, { result.base.name, 'IterHead' })
     end
 
     local summary =
@@ -426,40 +397,11 @@ function Drawer:is_open()
     return not self.closed and util.is_valid_win(self.win)
 end
 
---- The branch diff of the review. Read in full the first time and on git and
---- focus events; otherwise one `git rev-parse` checks that HEAD and the base
---- still point where they did, and the last diff stays.
----@param root string
----@param reason? IterWatchReason
----@return GitBranchDiff?
-function Drawer:branch_diff(root, reason)
-    local cached = self.branch
-
-    if cached ~= nil and reason ~= 'git' and reason ~= 'focus' then
-        local revs = git.rev_parse(root, { 'HEAD', cached.ref })
-
-        if revs == cached.revs then
-            return cached.diff
-        end
-    end
-
-    local ref = git.base_ref(root, self.config.options.diff.base)
-
-    self.branch = {
-        ref = ref,
-        revs = git.rev_parse(root, { 'HEAD', ref }),
-        diff = ref and git.branch_diff_from(root, ref) or nil,
-    }
-
-    return self.branch.diff
-end
-
 --- Read the status afresh, keeping open directories open, then the extras.
 --- Once loaded, the drawer stays on its root whatever the cwd becomes.
----@param reason? IterWatchReason
 ---@return boolean loaded
 ---@return boolean extras_changed
-function Drawer:load(reason)
+function Drawer:load()
     local snapshot =
         git.status_snapshot(self.changes and self.changes.root or nil)
 
@@ -468,11 +410,7 @@ function Drawer:load(reason)
         return false, false
     end
 
-    local branch = self.context == 'review'
-            and self:branch_diff(snapshot.root, reason)
-        or nil
-
-    self.changes = changes.build(snapshot, branch)
+    self.changes = changes.build(snapshot)
 
     if self.extras == nil then
         return true, false
@@ -491,7 +429,6 @@ function Drawer:render()
         return {
             id = column.id,
             title = column.title,
-            note = column.note,
             items = column.items,
             cell = function(line, item, first, cell_width)
                 return layout.file_cell(
@@ -538,30 +475,14 @@ function Drawer:render()
     self.float:reposition({
         min_lines = math.min(#built.lines, Drawer.MIN_LINES),
         title = header_chunks(self),
-        footer = self:hints(width),
+        footer = layout.hints(
+            keymap.list(self.keys_view, self.keys, self.handlers),
+            HINTS,
+            width
+        ),
     })
 
     self:shown()
-end
-
---- The key hint line for the selected column; the Branch column leaves out
---- the actions it has off.
----@param width integer
----@return [string, string][]
-function Drawer:hints(width)
-    local actions = HINTS
-
-    if self.column == 'branch' then
-        actions = vim.tbl_filter(function(hint)
-            return not WRITE_ACTIONS[hint[1]]
-        end, HINTS)
-    end
-
-    return layout.hints(
-        keymap.list(self.keys_view, self.keys, self.handlers),
-        actions,
-        width
-    )
 end
 
 --- Let the extras follow what the view shows.
@@ -640,15 +561,7 @@ function Drawer:select(lnum, column)
         return
     end
 
-    local branch_before = self.column == 'branch'
-
     self.lnum, self.column = lnum, column
-
-    if branch_before ~= (column == 'branch') and self.float ~= nil then
-        self.float:reposition({
-            footer = self:hints(vim.api.nvim_win_get_width(self.pane)),
-        })
-    end
 
     vim.api.nvim_buf_clear_namespace(self.buf, SELECTED_NS, 0, -1)
     vim.api.nvim_buf_set_extmark(self.buf, SELECTED_NS, lnum - 1, cell.first, {
@@ -811,7 +724,7 @@ function Drawer:refresh(reason, target)
 
     local before = self.changes
     local mark = self:mark()
-    local loaded, extras_changed = self:load(reason)
+    local loaded, extras_changed = self:load()
 
     if not loaded then
         return
@@ -905,7 +818,6 @@ function Drawer:preview(force)
     self.previewed_stat = stat
     self.view:set_new_follows(
         item.side == 'staged' and not self:has_unstaged(item.path)
-            or item.side == 'branch' and not self:has_uncommitted(item.path)
     )
 
     -- The same diff again keeps the view as it is, expanded gaps included.
@@ -922,14 +834,8 @@ function Drawer:preview(force)
         return
     end
 
-    local file = model.build(item, source)
-
-    if item.side == 'branch' then
-        file.range = self.changes.base.name .. '…HEAD'
-    end
-
     self.previewed = key(item)
-    self.view:show(file)
+    self.view:show(model.build(item, source))
     self:shown()
 end
 
@@ -938,24 +844,6 @@ end
 function Drawer:has_unstaged(path)
     for _, item in ipairs(self.changes.unstaged) do
         if item.path == path then
-            return true
-        end
-    end
-
-    return false
-end
-
---- Whether `path` has staged or unstaged changes, so its worktree file
---- differs from HEAD.
----@param path string
----@return boolean
-function Drawer:has_uncommitted(path)
-    if self:has_unstaged(path) then
-        return true
-    end
-
-    for _, item in ipairs(self.changes.staged) do
-        if item.path == path or item.orig_path == path then
             return true
         end
     end
@@ -980,9 +868,6 @@ function Drawer:stage()
 
     if item == nil then
         return
-    elseif item.side == 'branch' then
-        util.warn(Drawer.READ_ONLY)
-        return
     end
 
     if item.side == 'staged' then
@@ -1003,9 +888,6 @@ function Drawer:unstage()
     local item = self:selected()
 
     if item == nil then
-        return
-    elseif item.side == 'branch' then
-        util.warn(Drawer.READ_ONLY)
         return
     end
 
@@ -1041,9 +923,6 @@ function Drawer:discard()
     local item = self:selected()
 
     if item == nil then
-        return
-    elseif item.side == 'branch' then
-        util.warn(Drawer.READ_ONLY)
         return
     end
 
@@ -1137,30 +1016,12 @@ end
 
 --- The worktree line for row `lnum` of `file`, a diff of this drawer's
 --- changes. A staged line goes through the unstaged diff of the same path,
---- when there is one; a branch line, a line of HEAD, through the diff of
---- HEAD with the worktree.
+--- when there is one.
 ---@param file IterFileDiff
 ---@param lnum integer
 ---@return integer
 function Drawer:worktree_line(file, lnum)
     local line = model.new_line(file, lnum)
-
-    if file.side == 'branch' then
-        if not self:has_uncommitted(file.path) then
-            return line
-        end
-
-        ---@type IterDiffChange
-        local change =
-            { path = file.path, side = 'branch', code = 'M', base = 'HEAD' }
-        local source = git.file_diff(self.changes.root, change)
-
-        if source == nil then
-            return line
-        end
-
-        return model.old_line_to_new_line(model.build(change, source), line)
-    end
 
     if file.side ~= 'staged' then
         return line
