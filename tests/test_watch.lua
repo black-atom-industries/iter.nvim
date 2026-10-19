@@ -185,6 +185,61 @@ T['poll']['fires every poll_ms'] = function()
     helpers.cleanup(repo)
 end
 
+T['shared'] = new_set()
+
+T['shared']['two subscribers of a root share one poll timer'] = function()
+    local repo = helpers.create_repo({ ['a.txt'] = { 'a' } })
+    local before = handles()
+    local second_reasons = {}
+    start(repo, 30)
+    local after_first = handles()
+
+    local second = watch.start({
+        root = repo,
+        poll_ms = 30,
+        on_change = function(reason)
+            table.insert(second_reasons, reason)
+        end,
+    })
+
+    eq(handles(), after_first)
+    eq(after_first.timer - before.timer, 2)
+
+    wait_for(2)
+    vim.wait(2000, function()
+        return #second_reasons >= 2
+    end, 10)
+    eq(#second_reasons >= 2, true)
+
+    second:stop()
+    helpers.cleanup(repo)
+end
+
+T['shared']['the watchers stop with the last subscriber'] = function()
+    local repo = helpers.create_repo({ ['a.txt'] = { 'a' } })
+    local before = handles()
+    start(repo, 30)
+    local second = watch.start({
+        root = repo,
+        poll_ms = 30,
+        on_change = function() end,
+    })
+
+    second:stop()
+    eq(second:is_active(), false)
+    eq(handles().timer > before.timer, true)
+    wait_for(1)
+
+    watcher:stop()
+    eq(handles(), before)
+
+    -- A new subscriber starts the watchers again.
+    start(repo, 30)
+    eq(handles().timer > before.timer, true)
+
+    helpers.cleanup(repo)
+end
+
 T['stop'] = new_set()
 
 T['stop']['ends every event and closes its handles'] = function()

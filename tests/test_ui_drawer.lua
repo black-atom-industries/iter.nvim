@@ -515,12 +515,24 @@ T['stage']['s and d skip a nested repository with a warning'] = function()
     select_item('unstaged', 'nested/')
     child.lua('_G.answer = 1')
 
-    child.type_keys('s', 'd')
+    child.type_keys('s')
+
+    eq(child.lua_get('_G.notes'), {
+        {
+            '[iter] Skipped the nested repository nested/',
+            vim.log.levels.WARN,
+        },
+    })
+
+    child.lua('_G.notes = {}')
+    child.type_keys('d')
 
     eq(child.lua_get('_G.confirms'), {})
-    eq(child.lua_get('_G.notes')[1], {
-        '[iter] Skipped the nested repository nested/',
-        vim.log.levels.WARN,
+    eq(child.lua_get('_G.notes'), {
+        {
+            '[iter] Skipped the nested repository nested/',
+            vim.log.levels.WARN,
+        },
     })
     eq(status()['nested/'], '??')
 end
