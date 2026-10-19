@@ -479,8 +479,51 @@ The help float (`help`): `close` on `q`, `?` and `<Esc>`.
 ### Highlight groups
 
 iter defines its own groups, all named `Iter*`, and derives them from the
-colorscheme on every `ColorScheme` event. The list is in
-[`lua/iter/highlight.lua`](lua/iter/highlight.lua).
+colorscheme on every `ColorScheme` event. A group the colorscheme defines
+itself is left as it is; only undefined groups are derived.
+
+A colorscheme that runs `:hi clear` loses iter's derived groups and gets them
+re-derived after it loads. One that does not keeps them too: iter re-derives a
+group only while it still holds exactly what iter set last, and never
+overwrites a different definition. Define the groups before the `ColorScheme`
+event fires (the usual place, in the colorscheme file) and they win.
+
+"Derived from" lists the first group found with that colour, then the
+fallback. Row backgrounds blend the diff colour 60 % towards `Normal`.
+
+| Group | Colours | Derived from |
+| ----- | ------- | ------------ |
+| `IterStage` | Staged files in the drawer | fg of `Added`, `String` |
+| `IterUnstage` | Unstaged files in the drawer | fg of `Removed`, `Error` |
+| `IterUntracked` | Untracked files | fg of `DiagnosticInfo`, `Directory`, `Identifier` |
+| `IterIgnored` | Ignored files | fg of `Comment` |
+| `IterConflict` | Files with merge conflicts | fg of `DiagnosticError`, `ErrorMsg`, `Error` |
+| `IterHead` | Branch name in the drawer | fg of `Identifier`, `Keyword` |
+| `IterUnpushed` | Unpushed commits and the ahead count | fg of `Constant`, `Number` |
+| `IterBehind` | Behind count | fg of `Removed`, `Error` |
+| `IterViewed` | Viewed marks and progress | fg of `Added`, `String` |
+| `IterViewedChanged` | Files changed since viewed | fg of `DiagnosticWarn`, `WarningMsg`, `Constant` |
+| `IterDrawer` | Drawer text | link to `Normal` |
+| `IterDrawerTitle` | Drawer titles | link to `Title` |
+| `IterDrawerSelected` | Selected drawer row | link to `Visual` |
+| `IterDrawerKey` | Key hints | link to `Special` |
+| `IterDrawerHint` | Dimmed drawer text | link to `Comment` |
+| `IterDrawerCount` | Counts in section titles | link to `Special` |
+| `IterDiffAdd` | Added line rows | bg of `DiffAdd`, blended with `Normal` |
+| `IterDiffDelete` | Deleted line rows | bg of `DiffDelete`, blended with `Normal` |
+| `IterDiffAddText` | Changed words in added lines | bg of `DiffAdd` |
+| `IterDiffDeleteText` | Changed words in deleted lines | bg of `DiffDelete` |
+| `IterDiffAddNr` | Line number of added lines | fg of `diffAdded`, `Added`, `DiffAdd`; bg as `IterDiffAdd` |
+| `IterDiffDeleteNr` | Line number of deleted lines | fg of `diffRemoved`, `Removed`, `DiffDelete`; bg as `IterDiffDelete` |
+| `IterDiffNr` | Line number of context lines | link to `LineNr` |
+| `IterDiffHeader` | File headers in the diff | link to `Title` |
+| `IterDiffHunk` | Hunk headers and stats | link to `Comment` |
+| `IterDiffGap` | Collapsed unchanged lines | link to `Folded` |
+| `IterDiffFiller` | Filler rows beside a one-sided change | link to `NonText` |
+| `IterDiffAnnotation` | Annotation text | link to `NormalFloat` |
+| `IterDiffAnnotationOutdated` | Annotation whose lines changed | link to `Comment` |
+| `IterDiffAnnotationFocus` | Focused annotation | link to `Visual` |
+| `IterAnnotationSign` | Annotation sign in the gutter | link to `Special` |
 
 ### Files
 

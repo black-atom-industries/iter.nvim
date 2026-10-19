@@ -1,5 +1,5 @@
 --- All `Iter*` groups, derived from the colorscheme and rederived on every
---- `ColorScheme`.
+--- `ColorScheme`. Groups the colorscheme defines itself are left alone.
 
 local M = {}
 
@@ -63,6 +63,45 @@ local FOREGROUNDS = {
     },
 }
 
+-- Definition each group had right after iter last set it, by group name.
+---@type table<string, table>
+local owned = {}
+
+-- Neovim drops the `default` flag from the groups when `Normal` is redefined,
+-- so definitions are compared without it.
+local function definition(name)
+    local hl = vim.api.nvim_get_hl(0, { name = name, link = true })
+    hl.default = nil
+
+    return hl
+end
+
+--- Set a derived group unless the colorscheme defined it. An undefined group
+--- gets the derived value as a `default`. A group still holding exactly what
+--- iter set last time (a colorscheme without `:hi clear`) is re-derived, and
+--- any other definition belongs to the colorscheme and stays.
+---@param name string
+---@param spec vim.api.keyset.highlight
+local function set_derived(name, spec)
+    local current = definition(name)
+
+    if next(current) == nil then
+        vim.api.nvim_set_hl(
+            0,
+            name,
+            vim.tbl_extend('force', spec, { default = true })
+        )
+    elseif vim.deep_equal(current, owned[name]) then
+        vim.api.nvim_set_hl(0, name, spec)
+    else
+        owned[name] = nil
+        return
+    end
+
+    owned[name] = definition(name)
+end
+
+--- Define the `Iter*` groups the colorscheme left undefined.
 function M.apply()
     local dark = vim.o.background ~= 'light'
     local base = color({ 'Normal' }, 'bg')
@@ -118,7 +157,7 @@ function M.apply()
     end
 
     for name, spec in pairs(groups) do
-        vim.api.nvim_set_hl(0, name, spec)
+        set_derived(name, spec)
     end
 end
 
