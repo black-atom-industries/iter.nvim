@@ -234,7 +234,7 @@ The M1 plan below holds the inspection, the module sketch and the slices.
 -- Defaults:
 -- drawer = { height = 0.3, zindex = 40, breakpoint = 80 }
 -- diff = { expand_step = 20, syntax_max_lines = 20000, word_diff = true }
--- export.intro = 'I reviewed your changes and have these comments. Please address them.'
+-- export.intro = 'I reviewed your changes and have these comments.\nPlease address them.'
 -- refresh.poll_ms = 2000, confirm.discard = true
 -- keys.drawer = { open = '<CR>', stage = 's', unstage = 'u', discard = 'd', expand = '<Tab>',
 --   review = 'r', close = 'q', help = '?', column_left = 'h', column_right = 'l' }
@@ -572,7 +572,7 @@ Each slice leaves `just checks` green and the plugin usable.
 - Tests: functional state for viewed, changed, deleted, unviewed; child UI after an external file write.
 - Removes: nothing.
 
-#### S13 · Export
+#### S13 · Export — done
 
 - Goal: `y` and `require('iter').yank()` copy the review and ask once whether to clear it.
 - Files: new `iter/export.lua`; `iter/review.lua`, `iter/ui/drawer.lua`, `iter/init.lua`, `tests/test_export.lua`.

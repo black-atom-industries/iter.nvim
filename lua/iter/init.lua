@@ -290,18 +290,14 @@ local function jump_to_comment(root, comment)
     end
 end
 
---- Open the comment picker over the comments of the repository: the open
---- review's, else the current directory's.
-function M.comments()
+--- The repository the comment commands work on, with the files of the open
+--- review in drawer order: the review's, else the current directory's.
+---@return string root
+---@return string[] order
+local function comment_scope()
     local review = open_review()
     local root = review and review.drawer.changes.root
         or require('iter.git').root()
-
-    if root == '' then
-        util.warn('Not inside a git repository')
-        return
-    end
-
     local order = {}
 
     if review ~= nil then
@@ -312,6 +308,38 @@ function M.comments()
                 table.insert(order, item.orig_path)
             end
         end
+    end
+
+    return root, order
+end
+
+--- Copy the comments of the repository as text for an agent, then ask once
+--- whether to clear them.
+function M.yank()
+    local root, order = comment_scope()
+
+    if root == '' then
+        util.warn('Not inside a git repository')
+        return
+    end
+
+    require('iter.export').yank({
+        root = root,
+        config = M.config,
+        order = order,
+        on_clear = refresh_comments,
+    })
+end
+
+--- Open the comment picker over the comments of the repository: the open
+--- review's, else the current directory's.
+function M.comments()
+    local review = open_review()
+    local root, order = comment_scope()
+
+    if root == '' then
+        util.warn('Not inside a git repository')
+        return
     end
 
     local pane = vim.api.nvim_get_current_win()
