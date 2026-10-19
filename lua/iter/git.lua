@@ -642,6 +642,7 @@ local function diff_text(root, change, bytes)
         args = { 'diff' }
     end
 
+    vim.list_extend(args, require('iter').config.options.diff.args)
     vim.list_extend(args, DIFF_FLAGS)
     table.insert(args, '--')
 
