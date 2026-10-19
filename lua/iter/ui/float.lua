@@ -2,6 +2,23 @@ local util = require('iter.util')
 
 local M = {}
 
+-- Floats take the editor's background, not the colorscheme's float one.
+local WINHIGHLIGHT = table.concat({
+    'NormalFloat:IterDrawer',
+    'FloatBorder:IterDrawer',
+    'FloatTitle:IterDrawer',
+    'FloatFooter:IterDrawer',
+}, ',')
+
+---@param win integer
+local function paint(win)
+    vim.api.nvim_set_option_value(
+        'winhighlight',
+        WINHIGHLIGHT,
+        { scope = 'local', win = win }
+    )
+end
+
 ---@class IterFloatOpts
 ---@field pane integer window the float is anchored to
 ---@field buf integer
@@ -146,6 +163,7 @@ function M.open(opts)
 
     local config, strip_config = win_config(opts)
     local win = vim.api.nvim_open_win(opts.buf, opts.enter == true, config)
+    paint(win)
 
     local self = setmetatable({
         win = win,
@@ -263,6 +281,7 @@ function Float:place_strip(config)
     end
 
     self.strip_win = vim.api.nvim_open_win(buf, false, config)
+    paint(self.strip_win)
     vim.api.nvim_set_option_value(
         'wrap',
         false,

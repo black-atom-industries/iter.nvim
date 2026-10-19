@@ -245,6 +245,41 @@ T['open'][':Iter shows the columns side by side at 80 columns'] = function()
     helpers.expect_screenshot(child, 'drawer-80-columns')
 end
 
+T['open']['drawer windows take the Normal background, not the float one'] = function()
+    child.lua([[
+        vim.api.nvim_set_hl(0, 'Normal', { bg = 0x101010, fg = 0xcccccc })
+        vim.api.nvim_set_hl(0, 'NormalFloat', { bg = 0x303030, fg = 0xcccccc })
+    ]])
+    child.lua([[require('iter.highlight').apply()]])
+    -- Read before the drawer opens: a focused window's winhighlight remaps the lookup.
+    local bgs = child.lua_get([[{
+        vim.api.nvim_get_hl(0, { name = 'IterDrawer', link = false }).bg,
+        vim.api.nvim_get_hl(0, { name = 'Normal', link = false }).bg,
+        vim.api.nvim_get_hl(0, { name = 'NormalFloat', link = false }).bg,
+    }]])
+    eq(bgs[2], 0x101010)
+    eq(bgs[1], bgs[2])
+    eq(bgs[1] ~= bgs[3], true)
+
+    open_drawer()
+
+    local d = 'require("iter").drawer'
+    local wins = child.lua_get(
+        '{ ' .. d .. '.win, ' .. d .. '.float.strip_win or vim.NIL }'
+    )
+    eq(type(wins[2]), 'number')
+
+    for _, win in ipairs(wins) do
+        local winhl = child.lua_get('vim.wo[' .. win .. '].winhighlight')
+        eq(winhl:find('NormalFloat:IterDrawer', 1, true) ~= nil, true)
+        eq(winhl:find('FloatBorder:IterDrawer', 1, true) ~= nil, true)
+        eq(winhl:find('FloatTitle:IterDrawer', 1, true) ~= nil, true)
+        eq(winhl:find('FloatFooter:IterDrawer', 1, true) ~= nil, true)
+    end
+
+    helpers.expect_screenshot(child, 'drawer-normal-background')
+end
+
 T['open'][':Iter status opens the drawer'] = function()
     open_drawer('Iter status')
 

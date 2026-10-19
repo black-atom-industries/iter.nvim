@@ -104,6 +104,7 @@ function M.apply()
         IterDiffAnnotationOutdated = { link = 'Comment' },
         IterDiffAnnotationFocus = { link = 'Visual' },
         IterAnnotationSign = { link = 'Special' },
+        IterDrawer = { link = 'Normal' },
         IterDrawerTitle = { link = 'Title' },
         IterDrawerSelected = { link = 'Visual' },
         IterDrawerKey = { link = 'Special' },
