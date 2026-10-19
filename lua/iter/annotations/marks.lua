@@ -195,13 +195,15 @@ end
 
 --- The virtual lines of one annotation for a text area `width` cells wide:
 --- a bar, then the body wrapped and padded to the width. An outdated one is
---- labelled and dimmed.
+--- labelled and dimmed; a focused one is highlighted.
 ---@param annotation IterAnnotation
 ---@param outdated boolean
 ---@param width integer
+---@param focused? boolean
 ---@return [string, string][][]
-function M.lines(annotation, outdated, width)
-    local group = outdated and 'IterDiffAnnotationOutdated'
+function M.lines(annotation, outdated, width, focused)
+    local group = focused and 'IterDiffAnnotationFocus'
+        or outdated and 'IterDiffAnnotationOutdated'
         or 'IterDiffAnnotation'
     local text_width = math.max(1, width - vim.fn.strdisplaywidth(BAR))
     local body = (outdated and OUTDATED or '')
@@ -222,12 +224,14 @@ function M.lines(annotation, outdated, width)
     return result
 end
 
---- Draw `marks` into `ns` of `buf`, below their rows.
+--- Draw `marks` into `ns` of `buf`, below their rows, the annotation with
+--- id `focus` as focused.
 ---@param buf integer
 ---@param ns integer
 ---@param marks IterAnnotationMark[]
 ---@param width integer text area width of the window
-function M.apply(buf, ns, marks, width)
+---@param focus? string
+function M.apply(buf, ns, marks, width, focus)
     vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
 
     local by_row = {}
@@ -236,7 +240,12 @@ function M.apply(buf, ns, marks, width)
         by_row[mark.lnum] = by_row[mark.lnum] or {}
         vim.list_extend(
             by_row[mark.lnum],
-            M.lines(mark.annotation, mark.outdated, width)
+            M.lines(
+                mark.annotation,
+                mark.outdated,
+                width,
+                focus ~= nil and mark.annotation.id == focus
+            )
         )
     end
 

@@ -3,6 +3,8 @@ local Drawer = require('iter.ui.drawer')
 local editor = require('iter.annotations.editor')
 local git = require('iter.git')
 local help = require('iter.ui.help')
+local layout = require('iter.ui.layout')
+local list = require('iter.annotations.list')
 local patch = require('iter.diff.patch')
 local store = require('iter.store')
 local util = require('iter.util')
@@ -52,6 +54,27 @@ local SPACER_WINOPTS = {
     -- 'statusline' is global-local: an empty value would show the global one.
     statusline = ' ',
 }
+
+-- Id of the drawer column that lists the annotations.
+local ANNOTATIONS = 'annotations'
+
+-- Actions the key hint line shows in the Annotations column.
+local ANNOTATION_HINTS = {
+    { 'open', 'jump' },
+    { 'edit', 'edit' },
+    { 'delete', 'delete' },
+    { 'yank', 'yank' },
+    { 'column_left', 'files' },
+    { 'help', 'help' },
+}
+
+---@class IterReviewRow an item of the Annotations column
+---@field key string
+---@field progress? IterLayoutProgress set on the viewed progress row only
+---@field annotation? IterAnnotation
+---@field outdated? boolean
+---@field label? string
+---@field start? integer
 
 -- Glyph and group per viewed state in a drawer row.
 local VIEWED_MARKS = {
@@ -228,9 +251,6 @@ function Review:view_handlers()
             if file ~= nil then
                 self:toggle_viewed(file.path)
             end
-        end,
-        picker = function()
-            require('iter').annotations()
         end,
         yank = function()
             require('iter').yank()
@@ -485,53 +505,285 @@ function Review:drawer_decorator(_)
     end
 end
 
---- With files, `viewed <n> of <m> · ↻ <k> changed` in place of the change
---- summary, then `· <c> annotations · <o> outdated`, each only above 0.
+--- `<n> files` at the right edge, in place of the change summary.
 ---@param _ IterDrawer
----@param summary [string, string]
+---@param _summary [string, string]
+---@param room integer
 ---@return [string, string][]
-function Review:drawer_header(_, summary)
-    local counts = viewed.summary(self.viewed)
-    local outdated = #vim.tbl_filter(function(annotation)
-        return annotation.outdated
-    end, self.annotations)
-    local chunks = {}
+function Review:drawer_header(_, _summary, room)
+    local total = viewed.summary(self.viewed).total
+    local files =
+        string.format('%d %s ', total, total == 1 and 'file' or 'files')
 
-    if counts.total > 0 then
-        table.insert(chunks, {
-            string.format(' · viewed %d of %d', counts.viewed, counts.total),
+    return {
+        {
+            string.rep(' ', math.max(1, room - vim.fn.strdisplaywidth(files))),
             'IterDrawerHint',
-        })
+        },
+        { files, 'IterDrawerHint' },
+    }
+end
 
-        if counts.changed > 0 then
-            table.insert(chunks, {
-                string.format(' · ↻ %d changed', counts.changed),
-                'IterViewedChanged',
-            })
+--- The Annotations column: the viewed progress, then every annotation in
+--- drawer file order, review annotations last. The progress row takes the
+--- selection only while there are no annotations.
+---@param drawer IterDrawer
+---@return IterDrawerColumnSpec[]
+function Review:drawer_columns(drawer)
+    local root = drawer.changes.root
+    local order, lines = {}, {}
+
+    for _, item in ipairs(drawer:files()) do
+        table.insert(order, item.path)
+
+        if item.orig_path ~= nil then
+            table.insert(order, item.orig_path)
         end
-    else
-        table.insert(chunks, summary)
     end
 
-    if #self.annotations > 0 then
-        table.insert(chunks, {
-            string.format(
-                ' · %d %s',
-                #self.annotations,
-                #self.annotations == 1 and 'annotation' or 'annotations'
-            ),
-            'IterDrawerCount',
-        })
+    ---@type IterReviewRow[]
+    local rows = {}
+    local outdated, label_width = 0, 0
+    local groups = list.groups(self.annotations, order, function(path)
+        if lines[path] == nil then
+            lines[path] = list.file_lines(root, path) or false
+        end
+
+        return lines[path] or nil
+    end)
+
+    for _, group in ipairs(groups) do
+        for _, entry in ipairs(group.items) do
+            local label = layout.annotation_label(entry.annotation, entry.start)
+
+            table.insert(rows, {
+                key = 'annotation\0' .. entry.annotation.id,
+                annotation = entry.annotation,
+                outdated = entry.outdated,
+                label = label,
+                start = entry.start,
+            })
+            label_width = math.max(label_width, vim.fn.strdisplaywidth(label))
+
+            if entry.outdated then
+                outdated = outdated + 1
+            end
+        end
     end
 
-    if outdated > 0 then
-        table.insert(chunks, {
-            string.format(' · %d outdated', outdated),
-            'IterDrawerHint',
-        })
+    local items =
+        { { key = 'progress', progress = viewed.summary(self.viewed) } }
+    vim.list_extend(items, rows)
+
+    return {
+        {
+            id = ANNOTATIONS,
+            title = 'Annotations',
+            items = items,
+            weight = 1.5,
+            count = #rows,
+            note = outdated > 0 and (outdated .. ' outdated') or nil,
+            hints = ANNOTATION_HINTS,
+            selectable = function(item)
+                return item.annotation ~= nil or #rows == 0
+            end,
+            cell = function(line, item, first, width)
+                if item.progress ~= nil then
+                    return layout.progress_cell(
+                        line,
+                        item.progress,
+                        first,
+                        width
+                    )
+                end
+
+                return layout.annotation_cell(
+                    line,
+                    item,
+                    first,
+                    width,
+                    math.min(label_width, math.floor(width / 2))
+                )
+            end,
+        },
+    }
+end
+
+--- The files of the changes in `drawer` whose diff can place `annotation`,
+--- the side of its old version first.
+---@param drawer IterDrawer
+---@param annotation IterAnnotation
+---@return IterChange[]
+local function annotation_files(drawer, annotation)
+    local a = annotation.anchor
+    local changes = drawer.changes
+    local found = {}
+
+    if annotation.scope == 'review' or a.path == nil then
+        return found
     end
 
-    return chunks
+    local sides = a.side == 'old'
+            and a.base == 'HEAD'
+            and { 'staged', 'unstaged' }
+        or { 'unstaged', 'staged' }
+
+    for _, side in ipairs(sides) do
+        for _, item in ipairs(changes[side]) do
+            if
+                not item.dir
+                and (item.path == a.path or item.orig_path == a.path)
+            then
+                table.insert(found, item)
+            end
+        end
+    end
+
+    return found
+end
+
+--- The diff row `annotation` sits below in the file `drawer` shows, nil
+--- when it isn't placed there.
+---@param drawer IterDrawer
+---@param annotation IterAnnotation
+---@return integer?
+local function annotation_row(drawer, annotation)
+    local view = drawer.view
+
+    if not view:is_shown() then
+        return nil
+    end
+
+    for _, mark in ipairs(view.marks) do
+        if mark.annotation.id == annotation.id then
+            return mark.lnum
+        end
+    end
+
+    return nil
+end
+
+--- Show an item of the Annotations column in the diff pane: the diff of
+--- the annotation's file with the annotation focused and in view. Shown
+--- again, after a refresh, the diff cursor stays where it is. The progress
+--- row, a review annotation and one of a file outside the changes keep the
+--- pane as it is.
+---@param drawer IterDrawer
+---@param item IterReviewRow
+---@param force boolean
+function Review:drawer_preview(drawer, item, force)
+    local annotation = item.annotation
+    local files = annotation and annotation_files(drawer, annotation) or {}
+    local view = drawer.view
+    local again = drawer.previewed == item.key
+
+    if annotation == nil or #files == 0 then
+        view:set_focus(nil)
+        return
+    end
+
+    view:set_focus(annotation.id)
+
+    -- A diff where the annotation sits below a gap hides its code; the
+    -- next side may show it.
+    local lnum, placed
+
+    for _, file in ipairs(files) do
+        drawer:show(file, force)
+
+        local row = annotation_row(drawer, annotation)
+
+        if row ~= nil then
+            placed = placed or { file = file, lnum = row }
+
+            if
+                view.rows[row].kind ~= 'gap'
+                and (
+                    annotation.scope == 'file'
+                    or view.rows[row].kind ~= 'header'
+                )
+            then
+                lnum = row
+                break
+            end
+        end
+    end
+
+    if lnum == nil then
+        drawer:show(placed and placed.file or files[1], force)
+
+        if placed == nil then
+            return
+        end
+
+        lnum = placed.lnum
+    end
+
+    if again then
+        return
+    end
+
+    vim.api.nvim_win_set_cursor(view.win, { lnum, 0 })
+    vim.api.nvim_win_call(view.win, function()
+        vim.cmd('normal! zz')
+    end)
+end
+
+--- Move into the diff pane at the selected annotation. One on a file
+--- outside the changes opens in the tab the review came from, a review
+--- annotation in the editor.
+---@param item IterReviewRow
+function Review:jump_to(item)
+    local annotation = item.annotation
+
+    if annotation == nil then
+        return
+    end
+
+    if annotation.scope == 'review' then
+        self:open_editor(annotation)
+        return
+    end
+
+    local drawer = self.drawer
+    local a = annotation.anchor
+
+    if #annotation_files(drawer, annotation) == 0 then
+        local path = vim.fs.joinpath(drawer.changes.root, a.path)
+
+        if vim.uv.fs_stat(path) == nil then
+            util.warn(a.path .. ' is deleted')
+            return
+        end
+
+        self:open_file(path, item.start or a.start_line or 1)
+        return
+    end
+
+    drawer:preview(false)
+
+    local lnum = annotation_row(drawer, annotation)
+
+    if lnum ~= nil then
+        vim.api.nvim_set_current_win(self.diff_win)
+        vim.api.nvim_win_set_cursor(self.diff_win, { lnum, 0 })
+    end
+end
+
+--- Select the first row of the Annotations column and focus the drawer.
+function Review:focus_annotations()
+    local drawer = self.drawer
+    local lines = drawer:item_lines(ANNOTATIONS)
+
+    vim.api.nvim_set_current_tabpage(self.tab)
+
+    if util.is_valid_win(drawer.win) then
+        vim.api.nvim_set_current_win(drawer.win)
+    end
+
+    if #lines > 0 then
+        drawer:select(lines[1], ANNOTATIONS)
+    end
 end
 
 --- Size the spacer split to `drawer.height` of the spacer and the diff
@@ -586,9 +838,41 @@ function Review:drawer_handlers(drawer, handlers)
         end
     end
 
-    handlers.open = function()
-        drawer:enter_view()
+    ---@param fn fun(item: IterReviewRow)
+    local function on_annotation(fn)
+        return function()
+            local item = drawer:item()
+
+            if
+                drawer.column ~= ANNOTATIONS
+                or item == nil
+                or item.annotation == nil
+            then
+                util.warn('No annotation selected')
+                return
+            end
+
+            fn(item)
+        end
     end
+
+    handlers.open = function()
+        if drawer.column == ANNOTATIONS then
+            local item = drawer:item()
+
+            if item ~= nil then
+                self:jump_to(item)
+            end
+        else
+            drawer:enter_view()
+        end
+    end
+    handlers.edit = on_annotation(function(item)
+        self:open_editor(item.annotation)
+    end)
+    handlers.delete = on_annotation(function(item)
+        self:delete(item.annotation)
+    end)
     handlers.review = nil
     handlers.annotate_file = on_file(function(path)
         self:annotate_file(path)
@@ -596,9 +880,6 @@ function Review:drawer_handlers(drawer, handlers)
     handlers.viewed = on_file(function(path)
         self:toggle_viewed(path)
     end)
-    handlers.picker = function()
-        require('iter').annotations()
-    end
     handlers.yank = function()
         require('iter').yank()
     end
@@ -920,83 +1201,6 @@ function Review:open_file(path, line)
     util.edit_at(path, line)
 end
 
---- Show the diff that places `annotation` and put the cursor on its row,
---- switching to the review tab. False, and nothing switched, when the
---- annotation's file isn't among the changes.
----@param annotation IterAnnotation
----@return boolean
-function Review:show_annotation(annotation)
-    self:refresh_annotations()
-
-    if not self:select_annotation(annotation) then
-        return false
-    end
-
-    vim.api.nvim_set_current_tabpage(self.tab)
-
-    if self.drawer.view:is_shown() then
-        vim.api.nvim_set_current_win(self.diff_win)
-    end
-
-    return true
-end
-
---- Select the file `annotation` belongs to in the drawer, show its diff and
---- put the diff cursor on the annotation's row. An annotation is found in
---- the staged diff or the unstaged one, the side of its old version first.
---- False when the file isn't among the changes.
----@param annotation IterAnnotation
----@return boolean
-function Review:select_annotation(annotation)
-    local a = annotation.anchor
-    local drawer = self.drawer
-
-    if a.path == nil then
-        return false
-    end
-
-    local sides = a.side == 'old'
-            and a.base == 'HEAD'
-            and { 'staged', 'unstaged' }
-        or { 'unstaged', 'staged' }
-    local found = {}
-
-    for _, side in ipairs(sides) do
-        for lnum, row in ipairs(drawer.rows) do
-            local item = row[side]
-
-            if
-                item ~= nil
-                and not item.dir
-                and (item.path == a.path or item.orig_path == a.path)
-            then
-                table.insert(found, { lnum = lnum, side = side })
-            end
-        end
-    end
-
-    for _, target in ipairs(found) do
-        drawer:select(target.lnum, target.side)
-        drawer:preview(false)
-
-        for _, mark in ipairs(drawer.view.marks) do
-            if mark.annotation.id == annotation.id then
-                vim.api.nvim_win_set_cursor(drawer.view.win, { mark.lnum, 0 })
-                return true
-            end
-        end
-    end
-
-    if found[1] == nil then
-        return false
-    end
-
-    drawer:select(found[1].lnum, found[1].side)
-    drawer:preview(false)
-
-    return true
-end
-
 ---@param annotation table
 function Review:open_editor(annotation)
     editor.open({
@@ -1159,10 +1363,14 @@ end
 function Review:delete_annotation()
     local annotation = self:annotation_under_cursor()
 
-    if annotation == nil then
-        return
+    if annotation ~= nil then
+        self:delete(annotation)
     end
+end
 
+--- Delete `annotation` after the confirm.
+---@param annotation IterAnnotation
+function Review:delete(annotation)
     if editor.delete(self.drawer.changes.root, annotation) ~= nil then
         self:annotations_changed()
     end

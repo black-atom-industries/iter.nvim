@@ -2,7 +2,7 @@
 --- annotations with the code they sit on. `yank` copies it and offers to clear.
 
 local anchor = require('iter.annotations.anchor')
-local picker = require('iter.annotations.picker')
+local list = require('iter.annotations.list')
 local store = require('iter.store')
 local util = require('iter.util')
 
@@ -49,7 +49,7 @@ local function has_code(annotation)
         and #a.lines > 0
 end
 
----@param item IterPickerItem
+---@param item IterAnnotationItem
 ---@param lines_of fun(path: string): string[]?
 ---@return string
 local function heading(item, lines_of)
@@ -101,9 +101,7 @@ function M.text(annotations, opts)
     local out = { opts.intro, '' }
     local n = 0
 
-    for _, group in
-        ipairs(picker.groups(annotations, opts.order, opts.lines_of))
-    do
+    for _, group in ipairs(list.groups(annotations, opts.order, opts.lines_of)) do
         for _, item in ipairs(group.items) do
             n = n + 1
 
@@ -190,7 +188,7 @@ function M.yank(opts)
         intro = opts.config.options.export.intro,
         order = opts.order,
         lines_of = function(path)
-            return picker.file_lines(opts.root, path)
+            return list.file_lines(opts.root, path)
         end,
     }))
 

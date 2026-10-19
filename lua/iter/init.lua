@@ -198,62 +198,6 @@ local function open_review()
     return review ~= nil and review:is_open() and review or nil
 end
 
---- Go to `annotation`: in the review when it is open and has the annotation's
---- file among its changes, else in the file's buffer. A deleted line only
---- exists in the review, which opens for it.
----@param root string
----@param annotation IterAnnotation
-local function jump_to_annotation(root, annotation)
-    local a = annotation.anchor
-    local review = open_review()
-
-    if annotation.scope == 'review' then
-        if review ~= nil then
-            review:focus()
-        else
-            M.review()
-        end
-
-        return
-    end
-
-    local path = vim.fs.joinpath(root, a.path)
-
-    if a.side == 'old' then
-        if review == nil then
-            M.review({
-                path = path,
-                side = a.base == 'HEAD' and 'staged' or 'unstaged',
-            })
-            review = open_review()
-        end
-
-        if review == nil or not review:show_annotation(annotation) then
-            util.warn(a.path .. ' has no changes to show the old side of')
-        end
-
-        return
-    end
-
-    if review ~= nil and review:show_annotation(annotation) then
-        return
-    end
-
-    if vim.uv.fs_stat(path) == nil then
-        util.warn(a.path .. ' is deleted')
-        return
-    end
-
-    local picker = require('iter.annotations.picker')
-    local line = picker.line_of(annotation, picker.file_lines(root, a.path))
-
-    if review ~= nil then
-        review:open_file(path, line)
-    else
-        util.edit_at(path, line)
-    end
-end
-
 --- The repository the annotation commands work on, with the files of the open
 --- review in drawer order: the review's, else the current directory's.
 ---@return string root
@@ -295,41 +239,16 @@ function M.yank()
     })
 end
 
---- Open the annotation picker over the annotations of the repository: the open
---- review's, else the current directory's.
+--- Open the review tab, or switch to it, with the Annotations column of its
+--- drawer selected.
 function M.annotations()
+    M.review()
+
     local review = open_review()
-    local root, order = annotation_scope()
 
-    if root == '' then
-        util.warn('Not inside a git repository')
-        return
+    if review ~= nil then
+        review:focus_annotations()
     end
-
-    local pane = vim.api.nvim_get_current_win()
-
-    if review ~= nil and vim.api.nvim_get_current_tabpage() == review.tab then
-        pane = review.diff_win
-    end
-
-    require('iter.annotations.picker').open({
-        root = root,
-        config = M.config,
-        order = order,
-        jump = function(annotation)
-            jump_to_annotation(root, annotation)
-        end,
-        edit = function(annotation)
-            require('iter.annotations.editor').open({
-                root = root,
-                annotation = annotation,
-                config = M.config,
-                pane = pane,
-                on_save = refresh_annotations,
-            })
-        end,
-        on_change = refresh_annotations,
-    })
 end
 
 --- `review · <file> · <i>/<n>` inside the review tab, `''` elsewhere, with

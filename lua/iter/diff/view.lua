@@ -35,6 +35,7 @@ local words = require('iter.diff.words')
 ---@field annotations IterAnnotation[] stored annotations the view places on its file
 ---@field marks IterAnnotationMark[] annotations placed on the shown rows
 ---@field marks_width? integer text width the marks were wrapped to
+---@field focus? string id of the annotation drawn as focused
 ---@field new_follows boolean a staged file's index equals its worktree
 ---@field viewed? IterViewedState state the header row shows
 local View = {}
@@ -439,7 +440,28 @@ function View:render_marks()
             )
         or {}
     self.marks_width = self:text_width()
-    marks.apply(self.buf, NS_ANNOTATIONS, self.marks, self.marks_width)
+    marks.apply(
+        self.buf,
+        NS_ANNOTATIONS,
+        self.marks,
+        self.marks_width,
+        self.focus
+    )
+end
+
+--- Draw the annotation with id `id` as focused, the others as usual; nil
+--- focuses none.
+---@param id? string
+function View:set_focus(id)
+    if id == self.focus then
+        return
+    end
+
+    self.focus = id
+
+    if vim.api.nvim_buf_is_valid(self.buf) then
+        self:render_marks()
+    end
 end
 
 --- Show `annotations`, the stored ones of the repository, on the file.

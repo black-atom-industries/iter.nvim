@@ -101,6 +101,7 @@ function M.apply()
         IterDiffGap = { link = 'Folded' },
         IterDiffAnnotation = { link = 'NormalFloat' },
         IterDiffAnnotationOutdated = { link = 'Comment' },
+        IterDiffAnnotationFocus = { link = 'Visual' },
         IterAnnotationSign = { link = 'Special' },
         IterDrawerTitle = { link = 'Title' },
         IterDrawerSelected = { link = 'Visual' },

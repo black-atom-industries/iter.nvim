@@ -20,7 +20,7 @@
 ---@class IterConfirmOptions
 ---@field discard? boolean Ask before discarding changes
 
----@alias IterView 'drawer'|'review_drawer'|'diff'|'annotation'|'picker'|'help'
+---@alias IterView 'drawer'|'review_drawer'|'diff'|'annotation'|'help'
 
 ---@alias IterKeyValue string|string[]|false
 
@@ -92,7 +92,8 @@ M.keys = {
         viewed = 'v',
         mode = 'm',
         annotate_file = 'A',
-        picker = 'L',
+        edit = 'e',
+        delete = 'x',
         yank = 'y',
         close = 'q',
         help = '?',
@@ -118,7 +119,6 @@ M.keys = {
         goto_file = 'gf',
         viewed = 'v',
         mode = 'm',
-        picker = 'L',
         yank = 'y',
         close = 'q',
         help = '?',
@@ -128,14 +128,6 @@ M.keys = {
         toggle = '<C-t>',
         cancel = '<C-c>',
         close = 'q',
-    },
-    picker = {
-        next = '<C-n>',
-        prev = '<C-p>',
-        jump = '<CR>',
-        edit = '<C-e>',
-        delete = '<C-x>',
-        close = '<Esc>',
     },
     help = {
         close = { 'q', '?', '<Esc>' },

@@ -279,10 +279,7 @@ T['keymap']['actions() match the configurable keys of every view'] = function()
 
     local views = vim.tbl_keys(defaults.keys)
     table.sort(views)
-    eq(
-        views,
-        { 'annotation', 'diff', 'drawer', 'help', 'picker', 'review_drawer' }
-    )
+    eq(views, { 'annotation', 'diff', 'drawer', 'help', 'review_drawer' })
 end
 
 T['health'] = new_set()
