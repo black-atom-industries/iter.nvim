@@ -3,7 +3,6 @@ local Drawer = require('iter.ui.drawer')
 local editor = require('iter.annotations.editor')
 local git = require('iter.git')
 local help = require('iter.ui.help')
-local model = require('iter.diff.model')
 local patch = require('iter.diff.patch')
 local store = require('iter.store')
 local util = require('iter.util')
@@ -516,56 +515,6 @@ function Review:statusline()
     return 'review · ' .. file.path
 end
 
---- Line of the new version of `file` that row `lnum` stands for: its new
---- number, for a deleted line the line that took its place, for a gap its
---- first hidden line, for a hunk row its first row, for the header line 1.
----@param file IterFileDiff
----@param lnum integer
----@return integer
-local function new_line(file, lnum)
-    local row = file.rows[lnum]
-
-    if row == nil or row.kind == 'header' then
-        return 1
-    elseif row.new ~= nil then
-        return row.new
-    elseif row.kind == 'del' then
-        return model.old_line_to_new_line(file, row.old)
-    elseif row.kind == 'gap' then
-        return row.gap.new
-    end
-
-    return new_line(file, lnum + 1)
-end
-
---- The worktree line for row `lnum` of `file`. A staged line goes through
---- the unstaged diff of the same path, when there is one.
----@param changes IterChanges
----@param file IterFileDiff
----@param lnum integer
----@return integer
-local function worktree_line(changes, file, lnum)
-    local line = new_line(file, lnum)
-
-    if file.side ~= 'staged' then
-        return line
-    end
-
-    for _, item in ipairs(changes.unstaged) do
-        if item.path == file.path and not item.dir and item.code ~= '?' then
-            local source = git.file_diff(changes.root, item)
-
-            if source == nil then
-                return line
-            end
-
-            return model.old_line_to_new_line(model.build(item, source), line)
-        end
-    end
-
-    return line
-end
-
 --- Edit the file of the diff in the tab the review came from, at the
 --- worktree line of the cursor row. The review stays open.
 function Review:goto_file()
@@ -586,7 +535,10 @@ function Review:goto_file()
 
     self:open_file(
         path,
-        worktree_line(changes, file, vim.api.nvim_win_get_cursor(view.win)[1])
+        self.drawer:worktree_line(
+            file,
+            vim.api.nvim_win_get_cursor(view.win)[1]
+        )
     )
 end
 
@@ -706,8 +658,8 @@ function Review:anchor_rows(file, first, last)
     local changes = self.drawer.changes
 
     if #new_rows > 0 then
-        local start = worktree_line(changes, file, new_rows[1])
-        local stop = worktree_line(changes, file, new_rows[#new_rows])
+        local start = self.drawer:worktree_line(file, new_rows[1])
+        local stop = self.drawer:worktree_line(file, new_rows[#new_rows])
         local path = vim.fs.joinpath(changes.root, file.path)
         local ok, lines = pcall(vim.fn.readfile, path)
 

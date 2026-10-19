@@ -350,4 +350,26 @@ function M.old_line_to_new_line(file, old_line)
     return old_line + delta
 end
 
+--- Line of the new version of `file` that row `lnum` stands for: its new
+--- number, for a deleted line the line that took its place, for a gap its
+--- first hidden line, for a hunk row its first row, for the header line 1.
+---@param file IterFileDiff
+---@param lnum integer
+---@return integer
+function M.new_line(file, lnum)
+    local row = file.rows[lnum]
+
+    if row == nil or row.kind == 'header' then
+        return 1
+    elseif row.new ~= nil then
+        return row.new
+    elseif row.kind == 'del' then
+        return M.old_line_to_new_line(file, row.old)
+    elseif row.kind == 'gap' then
+        return row.gap.new
+    end
+
+    return M.new_line(file, lnum + 1)
+end
+
 return M

@@ -179,6 +179,10 @@ The status drawer (`drawer`):
 | `h` | `column_left` | Select the Unstaged column |
 | `l` | `column_right` | Select the Staged column |
 
+In the diff above the status drawer, the `expand` key (`<CR>`) on a code line
+opens the file at that line and closes the drawer; on hidden context it
+expands. A staged line lands where it is in the worktree.
+
 The drawer of the review tab (`review_drawer`):
 
 | Key | Action | Does |

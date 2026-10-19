@@ -1014,6 +1014,181 @@ T['help']['closes with the drawer'] = function()
     eq(child.api.nvim_win_is_valid(help_win), false)
 end
 
+T['preview'] = new_set({
+    hooks = {
+        pre_case = function()
+            child.stop()
+            helpers.cleanup(repo)
+
+            local a, b, c = {}, {}, {}
+            for i = 1, 30 do
+                table.insert(a, 'a' .. i)
+            end
+            for i = 1, 6 do
+                table.insert(b, 'b' .. i)
+                table.insert(c, 'c' .. i)
+            end
+            repo = helpers.create_repo({
+                ['a.txt'] = a,
+                ['b.txt'] = b,
+                ['c.txt'] = c,
+            })
+
+            -- a.txt: an added line near the top, a25 replaced, a gap between.
+            table.insert(a, 3, 'a2 new')
+            a[26] = 'a25 changed'
+            helpers.write_file(vim.fs.joinpath(repo, 'a.txt'), a)
+
+            -- b.txt: `staged` staged after b4, then an unstaged line on top.
+            table.insert(b, 5, 'staged')
+            helpers.write_file(vim.fs.joinpath(repo, 'b.txt'), b)
+            helpers.git(repo, { 'add', 'b.txt' })
+            table.insert(b, 1, 'unstaged')
+            helpers.write_file(vim.fs.joinpath(repo, 'b.txt'), b)
+
+            -- c.txt: a staged change only.
+            c[3] = 'c3 staged'
+            helpers.write_file(vim.fs.joinpath(repo, 'c.txt'), c)
+            helpers.git(repo, { 'add', 'c.txt' })
+
+            helpers.start_child(child, repo)
+            stub_ui()
+            set_pane_opts()
+        end,
+    },
+})
+
+--- Show the diff of `side path`, focus the preview and put the cursor on the
+--- first row of `kind`, with `text` when given.
+---@param side string
+---@param path string
+---@param kind string
+---@param text? string
+local function preview_cursor(side, path, kind, text)
+    open_drawer()
+    select_item(side, path)
+    wait_preview(side .. ' ' .. path)
+    child.lua(
+        [[
+        local kind, text = ...
+        local view = require('iter').drawer.view
+        vim.api.nvim_set_current_win(view.win)
+        for lnum, row in ipairs(view.rows) do
+            if row.kind == kind and (text == vim.NIL or row.text == text) then
+                vim.api.nvim_win_set_cursor(view.win, { lnum, 0 })
+                return
+            end
+        end
+        error('no ' .. kind .. ' row ' .. tostring(text))
+    ]],
+        { kind, text == nil and vim.NIL or text }
+    )
+end
+
+--- Where `<CR>` landed: drawer state, window, file, line and its text.
+---@return table
+local function landing()
+    return child.lua_get([[{
+        drawer = require('iter').drawer ~= nil,
+        pane = vim.api.nvim_get_current_win() == _G.pane,
+        name = vim.fs.basename(vim.api.nvim_buf_get_name(0)),
+        line = vim.api.nvim_win_get_cursor(0)[1],
+        text = vim.api.nvim_get_current_line(),
+    }]])
+end
+
+T['preview']['<CR> on an added row opens its line and closes the drawer'] = function()
+    preview_cursor('unstaged', 'a.txt', 'add', 'a2 new')
+    child.type_keys('<CR>')
+
+    eq(landing(), {
+        drawer = false,
+        pane = true,
+        name = 'a.txt',
+        line = 3,
+        text = 'a2 new',
+    })
+    eq(pane_opts(), PANE_OPTS)
+    eq(#child.api.nvim_list_wins(), 1)
+end
+
+T['preview']['<CR> on a context row opens its line'] = function()
+    preview_cursor('unstaged', 'a.txt', 'context', 'a5')
+    child.type_keys('<CR>')
+
+    eq(
+        landing(),
+        { drawer = false, pane = true, name = 'a.txt', line = 6, text = 'a5' }
+    )
+    eq(pane_opts(), PANE_OPTS)
+end
+
+T['preview']['<CR> on a deleted row opens the line that replaced it'] = function()
+    preview_cursor('unstaged', 'a.txt', 'del', 'a25')
+    child.type_keys('<CR>')
+
+    eq(landing(), {
+        drawer = false,
+        pane = true,
+        name = 'a.txt',
+        line = 26,
+        text = 'a25 changed',
+    })
+end
+
+T['preview']['<CR> on a staged-only row opens its line'] = function()
+    preview_cursor('staged', 'c.txt', 'add', 'c3 staged')
+    child.type_keys('<CR>')
+
+    eq(landing(), {
+        drawer = false,
+        pane = true,
+        name = 'c.txt',
+        line = 3,
+        text = 'c3 staged',
+    })
+end
+
+T['preview']['<CR> on a staged row maps through the unstaged diff'] = function()
+    preview_cursor('staged', 'b.txt', 'add', 'staged')
+    child.type_keys('<CR>')
+
+    eq(landing(), {
+        drawer = false,
+        pane = true,
+        name = 'b.txt',
+        line = 6,
+        text = 'staged',
+    })
+end
+
+T['preview']['<CR> on a gap expands it and keeps the drawer'] = function()
+    preview_cursor('unstaged', 'a.txt', 'gap')
+    local before = child.lua_get([[#require('iter').drawer.view.rows]])
+
+    child.type_keys('<CR>')
+
+    eq(child.lua_get([[require('iter').drawer ~= nil]]), true)
+    eq(child.lua_get([[#require('iter').drawer.view.rows]]) > before, true)
+    eq(
+        child.lua_get(
+            [[vim.api.nvim_get_current_win() == require('iter').drawer.view.win]]
+        ),
+        true
+    )
+end
+
+T['preview']['<CR> on a hunk row does nothing'] = function()
+    preview_cursor('unstaged', 'a.txt', 'hunk')
+    local before = child.lua_get([[#require('iter').drawer.view.rows]])
+
+    child.type_keys('<CR>')
+
+    eq(child.lua_get([[require('iter').drawer ~= nil]]), true)
+    eq(child.lua_get([[#require('iter').drawer.view.rows]]), before)
+    eq(child.lua_get('_G.notes'), {})
+end
+
 T['clean'] = new_set({
     hooks = {
         pre_case = function()

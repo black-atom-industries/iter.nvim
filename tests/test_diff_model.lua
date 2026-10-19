@@ -563,4 +563,54 @@ T['old_line_to_new_line()']['translates through hunk deltas'] = function()
     eq(model.old_line_to_new_line(file, 12), 14)
 end
 
+T['new_line()'] = new_set()
+
+T['new_line()']['maps every row kind to a new line'] = function()
+    local file = model.build(
+        { path = 'file.txt', side = 'unstaged', code = 'M' },
+        {
+            raw = {
+                'diff --git a/file.txt b/file.txt',
+                '--- a/file.txt',
+                '+++ b/file.txt',
+                '@@ -1,3 +1,3 @@',
+                ' ctx1',
+                '-rm1',
+                '+add1',
+                ' ctx2',
+                '@@ -10,2 +10,3 @@',
+                ' ctx3',
+                '+add2',
+                ' ctx4',
+            },
+            binary = false,
+        }
+    )
+    local lines = {}
+
+    for lnum, row in ipairs(file.rows) do
+        table.insert(lines, { row.kind, model.new_line(file, lnum) })
+    end
+
+    eq(lines, {
+        { 'header', 1 },
+        { 'hunk', 1 },
+        { 'context', 1 },
+        { 'del', 2 },
+        { 'add', 2 },
+        { 'context', 3 },
+        { 'hunk', 10 },
+        { 'context', 10 },
+        { 'add', 11 },
+        { 'context', 12 },
+    })
+end
+
+T['new_line()']['a gap maps to its first hidden line'] = function()
+    -- Change on line 1: hunk covers 1..4, trailing gap from line 5.
+    local file = single_change(54, 1)
+
+    eq(model.new_line(file, indexes_of(file, 'gap')[1]), 5)
+end
+
 return T

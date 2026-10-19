@@ -9,7 +9,7 @@ local words = require('iter.diff.words')
 ---@class IterDiffViewOptions
 ---@field win integer window the view borrows
 ---@field keys? table<string, string[]> resolved `keys.diff`
----@field handlers? table<string, fun()> diff actions besides `expand`
+---@field handlers? table<string, fun()> diff actions; an `expand` here replaces the view's own
 ---@field expand_step? integer
 ---@field syntax_max_lines? integer
 ---@field word_diff? boolean
@@ -158,11 +158,11 @@ function View.new(opts)
         end,
     })
 
-    self.handlers = vim.tbl_extend('force', opts.handlers or {}, {
+    self.handlers = vim.tbl_extend('force', {
         expand = function()
             self:expand()
         end,
-    })
+    }, opts.handlers or {})
     keymap.attach(self.buf, 'diff', self.keys, self.handlers)
 
     return self
