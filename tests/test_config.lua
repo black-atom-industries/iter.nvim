@@ -264,7 +264,7 @@ T['keymap']['attach() maps a multi-mode action in each mode'] = function()
             return map.desc
         end, vim.api.nvim_buf_get_keymap(_G.buf, mode))
 
-        eq(descs, { 'Save the annotation' })
+        eq(descs, { 'Save the annotation and close the float' })
     end
 
     eq(vim.api.nvim_buf_get_keymap(_G.buf, 'x'), {})

@@ -194,19 +194,19 @@ T['float']['opens in insert mode above the drawer with the key hint'] = function
     eq(config.zindex, 60)
     eq(config.relative, 'editor')
     eq(config.footer, {
-        { ' <C-s> save · <C-t> toggle · <C-c> cancel ' },
+        { ' <C-s> save & close · <C-t> toggle · <C-c> cancel ' },
     })
     eq(config.title, { { ' m.txt:3 ' } })
     eq(child.lua_get([[vim.bo.filetype]]), 'markdown')
     eq(iter_ctrl_t_maps(), 1)
 end
 
-T['float']['<C-s> saves in insert mode and keeps the float'] = function()
+T['float']['<C-s> saves in insert mode and closes the float'] = function()
     start_annotation('first')
     child.type_keys('<C-s>')
 
-    eq(editor_shown(), true)
-    eq(mode(), 'i')
+    eq(editor_shown(), false)
+    eq(mode(), 'n')
 
     local annotations = stored()
     eq(#annotations, 1)
@@ -219,21 +219,18 @@ T['float']['<C-s> saves in insert mode and keeps the float'] = function()
         end_line = 3,
         lines = { 'l3 new' },
     })
+    eq(annotation_buffers(), 0)
     eq(iter_ctrl_t_maps(), 0)
-
-    child.type_keys(' second', '<C-s>')
-
-    annotations = stored()
-    eq(#annotations, 1)
-    eq(annotations[1].body, 'first second')
+    eq(editor_augroup(), false)
 end
 
-T['float']['<C-s> saves in normal mode'] = function()
+T['float']['<C-s> saves in normal mode and closes the float'] = function()
     start_annotation('multi')
     child.type_keys('<CR>', 'line', '<Esc>', '<C-s>')
 
     eq(stored()[1].body, 'multi\nline')
-    eq(editor_shown(), true)
+    eq(editor_shown(), false)
+    eq(annotation_buffers(), 0)
 end
 
 T['float'][':w saves and :wq saves and closes'] = function()
@@ -257,7 +254,7 @@ end
 
 T['float']['the diff pane shows the saved annotation'] = function()
     start_annotation('shown')
-    child.type_keys('<C-s>', '<C-c>')
+    child.type_keys('<C-s>')
 
     helpers.wait_until(child, [[#]] .. R .. [[.drawer.view.marks == 1]])
     eq(child.lua_get(R .. [[.drawer.view.marks[1].annotation.body]]), 'shown')
@@ -395,7 +392,7 @@ T['toggle']['a disabled toggle key maps nothing globally'] = function()
         child.lua_get(
             [[vim.api.nvim_win_get_config(]] .. E .. [[.win()).footer[1][1] ]]
         ),
-        ' <C-s> save · <C-c> cancel '
+        ' <C-s> save & close · <C-c> cancel '
     )
 end
 
@@ -562,13 +559,13 @@ end
 
 T['lifecycle']['a saved annotation gives way to the next one'] = function()
     start_annotation('first')
-    child.type_keys('<C-s>', '<Esc>')
+    child.type_keys('<C-s>')
     diff_cursor('l4')
     child.type_keys('a')
     wait_editor()
     child.type_keys('second', '<C-s>')
 
-    eq(annotation_buffers(), 1)
+    eq(annotation_buffers(), 0)
     eq(
         vim.tbl_map(function(c)
             return c.body
@@ -584,7 +581,14 @@ T['anchors']['a visual range anchors its lines'] = function()
     diff_cursor('l4')
     child.type_keys('Vj', 'a')
     wait_editor()
-    child.type_keys('range', '<C-s>')
+    child.type_keys('range')
+    eq(
+        child.lua_get(
+            [[vim.api.nvim_win_get_config(]] .. E .. [[.win()).title[1][1] ]]
+        ),
+        ' m.txt:4-5 '
+    )
+    child.type_keys('<C-s>')
 
     local annotation = stored()[1]
     eq(annotation.scope, 'range')
@@ -595,12 +599,6 @@ T['anchors']['a visual range anchors its lines'] = function()
         end_line = 5,
         lines = { 'l4', 'l5' },
     })
-    eq(
-        child.lua_get(
-            [[vim.api.nvim_win_get_config(]] .. E .. [[.win()).title[1][1] ]]
-        ),
-        ' m.txt:4-5 '
-    )
 end
 
 T['anchors']['a deleted line anchors on the old side'] = function()

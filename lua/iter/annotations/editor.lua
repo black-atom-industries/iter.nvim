@@ -33,6 +33,7 @@ local M = {}
 local GROUP = 'iter.annotation'
 local HEIGHT = 6
 local GLOBAL_DESC = 'Show the draft annotation'
+local FOOTER_LABELS = { save = 'save & close' }
 
 ---@type IterEditorDraft?
 local draft = nil
@@ -68,7 +69,10 @@ local function footer_of(keys)
         local lhs = keys[action] or {}
 
         if #lhs > 0 then
-            table.insert(parts, lhs[1] .. ' ' .. action)
+            table.insert(
+                parts,
+                lhs[1] .. ' ' .. (FOOTER_LABELS[action] or action)
+            )
         end
     end
 
@@ -359,7 +363,10 @@ end
 ---@param keys table<string, string[]>
 local function attach(buf, keys)
     keymap.attach(buf, 'annotation', keys, {
-        save = save,
+        save = function()
+            vim.cmd.stopinsert()
+            vim.cmd.wq()
+        end,
         toggle = hide,
         cancel = finish,
         close = function()
