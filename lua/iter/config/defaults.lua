@@ -133,6 +133,7 @@ M.keys = {
         split = '|',
         unified = '-',
         yank = 'y',
+        focus_drawer = '<C-j>',
         close = 'q',
         help = '?',
     },

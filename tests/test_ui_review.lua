@@ -483,6 +483,25 @@ end
 
 T['diff'] = new_set()
 
+T['diff']['<C-j> in the diff pane focuses the drawer, not the spacer'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.lua('vim.api.nvim_set_current_win(' .. R .. '.diff_win)')
+
+    child.type_keys('<C-j>')
+
+    eq(
+        child.lua_get(
+            R .. '.drawer:selection_win() == vim.api.nvim_get_current_win()'
+        ),
+        true
+    )
+    eq(
+        child.lua_get(R .. '.spacer_win == vim.api.nvim_get_current_win()'),
+        false
+    )
+end
+
 T['diff'][']c and [c jump between hunks'] = function()
     open_review()
     wait_diff('unstaged a.txt')
@@ -958,6 +977,30 @@ end
 
 T['close'] = new_set()
 
+T['close']['the diff buffer keeps no <C-j> map once the review is closed'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    local view_buf = child.lua_get(R .. '.drawer.view.buf')
+    eq(
+        child.lua_get(
+            string.format(
+                [[vim.api.nvim_buf_call(%d, function() return vim.fn.maparg('<C-j>', 'n', false, true).desc end)]],
+                view_buf
+            )
+        ),
+        'Focus the drawer'
+    )
+
+    child.lua('vim.cmd.tabclose()')
+    helpers.wait_until(child, [[require('iter').current_review == nil]])
+
+    eq(
+        child.lua_get([[vim.fn.maparg('<C-j>', 'n', false, true).desc]]),
+        vim.NIL
+    )
+    eq(child.api.nvim_buf_is_valid(view_buf), false)
+end
+
 T['close']['the previous tab keeps its window options'] = function()
     set_pane_opts()
     local before = pane_opts()
@@ -1414,27 +1457,28 @@ T['hunks']['? in the diff pane lists its keys'] = function()
                     .. [[.buf, 0, -1, false))]]
             ),
             {
-                ' ]c    Next hunk',
-                ' [c    Previous hunk',
-                ' ]a    Next annotation',
-                ' [a    Previous annotation',
-                ' ]f    Next file',
-                ' [f    Previous file',
-                ' S     Stage the hunk or the selected lines',
-                ' u     Unstage the hunk or the selected lines',
-                ' a     Annotate the line or range',
-                ' A     Annotate the file',
-                ' e     Edit the annotation',
-                ' x     Delete the annotation',
-                ' <CR>  Expand the collapsed file or hidden context',
-                ' gf    Go to the line in the file',
-                ' v     Toggle viewed',
-                ' m     Toggle one file or all files',
-                ' |     Show the diff side by side',
-                ' -     Show the diff unified',
-                ' y     Copy the review',
-                ' q     Close',
-                ' ?     Show the keys',
+                ' ]c     Next hunk',
+                ' [c     Previous hunk',
+                ' ]a     Next annotation',
+                ' [a     Previous annotation',
+                ' ]f     Next file',
+                ' [f     Previous file',
+                ' S      Stage the hunk or the selected lines',
+                ' u      Unstage the hunk or the selected lines',
+                ' a      Annotate the line or range',
+                ' A      Annotate the file',
+                ' e      Edit the annotation',
+                ' x      Delete the annotation',
+                ' <CR>   Expand the collapsed file or hidden context',
+                ' gf     Go to the line in the file',
+                ' v      Toggle viewed',
+                ' m      Toggle one file or all files',
+                ' |      Show the diff side by side',
+                ' -      Show the diff unified',
+                ' y      Copy the review',
+                ' <C-j>  Focus the drawer',
+                ' q      Close',
+                ' ?      Show the keys',
             }
         )
         eq(
