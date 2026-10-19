@@ -26,6 +26,7 @@ local watch = require('iter.watch')
 ---@field drawer_rendered fun(self, drawer: IterDrawer, lines: integer) after the layout, before the buffer is written
 ---@field drawer_shown fun(self, drawer: IterDrawer) after the view showed the selection or the drawer rendered
 ---@field drawer_handlers fun(self, drawer: IterDrawer, handlers: table<string, fun()>) changes the drawer actions in place
+---@field drawer_collapsed fun(self, drawer: IterDrawer, item: IterChange): boolean in all-files mode, whether the file shows its header row alone
 
 ---@class IterDrawerOpenOptions
 ---@field pane integer window the float is anchored to
@@ -1375,7 +1376,8 @@ function Drawer:stat(item)
     )
 end
 
---- Read the diff of every file and show them in drawer order. A file whose
+--- Read the diff of every file and show them in drawer order, a file the
+--- extras collapse as its header row alone. A file whose
 --- blob ids and worktree stat are the ones read before keeps its rows
 --- without a read, as does one whose diff text is the one shown, expanded
 --- gaps included; when every file does, the view stays as it is.
@@ -1438,14 +1440,22 @@ function Drawer:load_all()
         if file then
             local new_follows = item.side == 'staged'
                 and not self:has_unstaged(item.path)
+            local collapsed = self.extras ~= nil
+                    and self.extras:drawer_collapsed(self, item)
+                or nil
             local section = view.document.sections[#entries + 1]
 
             same = same
                 and section ~= nil
                 and section.file == file
                 and section.new_follows == new_follows
+                and section.collapsed == collapsed
             self.diff_ids[k] = id
-            table.insert(entries, { file = file, new_follows = new_follows })
+            table.insert(entries, {
+                file = file,
+                new_follows = new_follows,
+                collapsed = collapsed,
+            })
         else
             same = false
         end

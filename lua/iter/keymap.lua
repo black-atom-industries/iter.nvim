@@ -56,7 +56,7 @@ local ACTIONS = {
         { 'annotate_file', 'Annotate the file' },
         { 'edit', 'Edit the annotation' },
         { 'delete', 'Delete the annotation' },
-        { 'expand', 'Expand hidden context' },
+        { 'expand', 'Expand the collapsed file or hidden context' },
         { 'goto_file', 'Go to the line in the file' },
         { 'viewed', 'Toggle viewed' },
         { 'mode', 'Toggle one file or all files' },

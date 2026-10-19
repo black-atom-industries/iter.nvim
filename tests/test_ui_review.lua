@@ -1426,7 +1426,7 @@ T['hunks']['? in the diff pane lists its keys'] = function()
                 ' A     Annotate the file',
                 ' e     Edit the annotation',
                 ' x     Delete the annotation',
-                ' <CR>  Expand hidden context',
+                ' <CR>  Expand the collapsed file or hidden context',
                 ' gf    Go to the line in the file',
                 ' v     Toggle viewed',
                 ' m     Toggle one file or all files',

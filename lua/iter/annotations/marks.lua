@@ -9,6 +9,7 @@ local util = require('iter.util')
 ---@field annotation IterAnnotation
 ---@field outdated boolean
 ---@field section? integer section of the view's document, set by the view
+---@field hidden? boolean in a collapsed section, `lnum` its header row; set by the view
 
 local M = {}
 
