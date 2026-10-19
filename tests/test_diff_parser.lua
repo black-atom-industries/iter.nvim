@@ -2,7 +2,6 @@ local parser = require('iter.ui.diff.parser')
 
 local new_set = MiniTest.new_set
 local eq = MiniTest.expect.equality
-local neq = MiniTest.expect.no_equality
 
 local T = new_set()
 
@@ -39,88 +38,6 @@ T['parse_hunk_header()']['ignores the section heading'] = function()
         { parser.parse_hunk_header('@@ -1,4 +1,4 @@ function foo()') },
         { 1, 4, 1, 4 }
     )
-end
-
-T['parse_lines()'] = new_set()
-
-T['parse_lines()']['classifies context, added and removed lines'] = function()
-    local parsed = parser.parse_lines({
-        ' context line',
-        '+added line',
-        '-removed line',
-        ' another context',
-    })
-
-    eq(#parsed, 4)
-    eq(parsed[1].kind, 'context')
-    eq(parsed[1].text, ' context line')
-    eq(parsed[1].raw_row, 1)
-    eq(parsed[2].kind, 'added')
-    eq(parsed[2].text, '+added line')
-    eq(parsed[3].kind, 'removed')
-    eq(parsed[3].text, '-removed line')
-    eq(parsed[4].kind, 'context')
-end
-
-T['parse_lines()']['classifies hunk headers'] = function()
-    local parsed = parser.parse_lines({ '@@ -1,3 +1,4 @@' })
-
-    eq(#parsed, 1)
-    eq(parsed[1].kind, 'hunk')
-    eq(parsed[1].old_number, 1)
-    eq(parsed[1].new_number, 1)
-end
-
-T['parse_lines()']['classifies diff headers'] = function()
-    local parsed = parser.parse_lines({
-        'diff --git a/file.txt b/file.txt',
-        'index abc123..def456 100644',
-        '--- a/file.txt',
-        '+++ b/file.txt',
-        'rename from old.txt',
-        'rename to new.txt',
-    })
-
-    eq(#parsed, 6)
-    for _, line in ipairs(parsed) do
-        eq(line.kind, 'header')
-    end
-end
-
-T['parse_lines()']['skips empty lines and no-newline markers'] = function()
-    local parsed = parser.parse_lines({
-        '',
-        '\\ No newline at end of file',
-        ' context',
-    })
-
-    eq(#parsed, 1)
-    eq(parsed[1].kind, 'context')
-    eq(parsed[1].text, ' context')
-end
-
-T['parse_lines()']['tracks line numbers across a hunk'] = function()
-    local parsed = parser.parse_lines({
-        '@@ -10,3 +12,4 @@',
-        ' unchanged',
-        '-removed',
-        '+added one',
-        '+added two',
-        ' more context',
-    })
-
-    local numbers = vim.tbl_map(function(line)
-        return { line.kind, line.old_number, line.new_number }
-    end, parsed)
-
-    eq(numbers, {
-        { 'hunk', 10, 12 },
-        { 'context', 10, 12 },
-        { 'removed', 11, nil },
-        { 'added', nil, 13 },
-        { 'added', nil, 14 },
-        { 'context', 12, 15 },
-    })
 end
 
 T['parse_hunks()'] = new_set()

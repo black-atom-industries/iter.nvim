@@ -310,10 +310,10 @@ T['keys']['the preview loads once after quick moves'] = function()
     open_drawer()
     wait_preview('unstaged deleted.txt')
     child.lua([[
-        local diffs = require('iter.git')
-        local file_diff = diffs.file_diff
+        local git = require('iter.git')
+        local file_diff = git.file_diff
         _G.loads = {}
-        diffs.file_diff = function(root, change)
+        git.file_diff = function(root, change)
             table.insert(_G.loads, change.path)
             return file_diff(root, change)
         end
@@ -939,6 +939,16 @@ T['header']['a narrow drawer with a long branch opens cleanly'] = function()
         chrome().header,
         'HEAD feat/a-rather-long-branch-name ↑1 · 4 unstaged · 0 staged'
     )
+
+    -- Neovim cuts a title wider than the float from the left with `<`.
+    local info =
+        child.lua_get('vim.fn.getwininfo(require("iter").drawer.win)[1]')
+    eq(info.width, 30)
+    local row = child.get_screenshot().text[info.winrow]
+    eq(
+        table.concat(row, '', info.wincol, info.wincol + info.width - 1),
+        ' <me ↑1 · 4 unstaged · 0 stage'
+    )
 end
 
 T['help'] = new_set()
@@ -1215,14 +1225,21 @@ T['refresh']['closing stops the watchers and timers'] = function()
         return counts
     end)()]]
     local before = child.lua_get(count)
+    local opened
 
-    open_drawer()
-    wait_preview('unstaged deleted.txt')
-    eq(child.lua_get(count).fs_event > before.fs_event, true)
+    for _ = 1, 3 do
+        open_drawer()
+        wait_preview('unstaged deleted.txt')
 
-    child.type_keys('q')
-    child.lua('vim.wait(300)')
-    eq(child.lua_get(count), before)
+        local now = child.lua_get(count)
+        eq(now.fs_event > before.fs_event, true)
+        opened = opened or now
+        eq(now, opened)
+
+        child.type_keys('q')
+        child.lua('vim.wait(300)')
+        eq(child.lua_get(count), before)
+    end
 end
 
 T['odd paths'] = new_set({

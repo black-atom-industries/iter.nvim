@@ -1,161 +1,58 @@
 # Roadmap
 
-Priority tiers: **P0** (must fix — gaps or debt that blocks quality),
-**P1** (should do — meaningful UX or DX improvements),
-**P2** (nice to have — polish, DX ergonomics),
-**P3** (future — explore when the time is right).
+Open and finished work. The scope and the slice plan live in
+[`docs/renovation.md`](docs/renovation.md).
 
----
+## M2
 
-## P0 — Critical
+- [ ] Stage selected lines in the diff pane.
+- [ ] Branch diff against the base branch in the review tab.
+- [ ] Unpushed column: the unpushed commits, or the last few when there is no
+      upstream. A commit shows its diff and takes comments.
+- [ ] Side-by-side diff view.
+- [ ] Continuous scroll through all changed files, toggled with `m` (slice S15
+      in `docs/renovation.md`). The `mode` action exists in the key config but
+      has no handler yet.
 
-- [x] **Diff display quality** — resolved by adopting
-      [diffs.nvim](https://github.com/barrettruth/diffs.nvim) as a hard
-      dependency instead of maintaining our own renderer:
-  - Stacked preview holds the raw unified diff; diffs.nvim provides
-    treesitter syntax inside hunks, intra-line word emphasis, and
-    colorscheme-derived colors via its documented host-plugin API.
-  - Line-number rail rendered via `statuscolumn` (display-only, colored
-    with diffs.nvim's documented rail groups).
-  - Split mode keeps native `diffthis`, with per-side winhighlight
-    remaps so the old pane reads red and the new pane green.
-  - Removed: `ui/diff/render.lua`, `ui/diff/syntax.lua`,
-    `show_line_numbers`/`show_metadata` options, `an`/`am` toggles.
-- [ ] **Untracked file/dir navigation** — untracked directories show up
-      as a single entry but can't be expanded or inspected. Need to surface
-      individual files inside untracked dirs, and allow opening/previewing
-      them. This is a core usability gap.
-- [ ] **Config directory restructuring** — the whole `lua/iter/config/`
-      tree needs a rethink:
-  - Separate `config/types.lua` for all `---@class` type definitions
-    (currently inline in defaults.lua).
-  - Fix the gap where `IterOptions` is declared but never connected as
-    the actual type of the resolved `options` table. (User-facing fields
-    are now `?`-optional for setup() input; a separate resolved-config
-    type is still missing.)
-  - Audit every config access site for type safety (LuaLS annotations).
-  - Keep the tree clean — flat or minimal nesting, one concept per file.
-- [x] **Remove vendored plenary.nvim** — replace with `mini.test` for
-      the test runner. Delete vendored copy (~20MB), update CI, `justfile`,
-      and `tests/minimal_init.lua`. Move off a deprecated dependency.
+## Later
 
-## P1 — UX & workflow
+- [ ] Show a rename as one row with both paths, like `old.lua → new.lua`.
+- [ ] User events such as `User IterRefresh` and `User IterStage`.
+- [ ] A statusline part with the branch and the number of changed files.
+      `statusline()` covers the review tab and comment drafts only.
+- [ ] Move the config `---@class` types out of `config/defaults.lua` into a
+      file of their own.
+- [ ] A key that adds the file under the cursor to `.gitignore`.
+- [ ] Configurable flags for `git diff`, as long as hunks still apply.
+- [ ] Moved-code detection and finer word diff on long lines through a binary
+      such as libvscode-diff. Needs a decision first.
+- [ ] A `zindex` option for radar.nvim's panel (in the radar.nvim repo).
+- [ ] Repo setup with `nbr-repo-setup`: release-please, `CHANGELOG.md`, agent
+      tooling, release clips recorded with `nbr-record-clip`.
+- [ ] Screenshots or clips of the drawer and the review tab in the README.
+- [ ] Test files next to the modules they test.
+- [ ] A better home for `docs/CONVENTIONS.md`: real docs, `CONTRIBUTING.md` or
+      `AGENTS.md`.
+- [ ] A Markdown formatter.
+- [ ] Evaluate the [base.nvim](https://github.com/S1M0N38/base.nvim) template.
 
-- [x] **Event-driven auto-refresh** — refresh the status window
-      automatically on any git state change, internal or external (CLI,
-      LazyGit, another Neovim instance):
-  - Watch `.git/index` with `vim.uv.fs_event` → fires on stage/unstage/commit
-  - Watch `.git/logs/HEAD` with `vim.uv.fs_event` → fires on commit, rebase,
-    merge, cherry-pick, checkout, branch switch
-  - Together these cover the full surface. No polling needed, no external
-    dependency — `vim.uv` is already in Neovim.
-  - Debounce both watchers (fs events can fire multiple times per operation).
-  - Internal iter actions already know when they complete, so they can trigger
-    a refresh directly rather than waiting for the fs event.
-  - Manual `r` refresh becomes the fallback, not the default.
-- [ ] **Rename detection** — `git status --porcelain` already flags
-      renames (`R` status), but iter currently shows them as separate
-      delete + add entries. Parse the rename pair and surface it as a
-      single "renamed" row (like `README.md → ROADMAP.md`).
-- [ ] **Iter event system** — once the auto-refresh mechanism works,
-      expose `iter.events` so users can hook into `User IterRefresh`,
-      `User IterStage`, etc. Keeps the architecture open without depending
-      on external event sources.
-- [ ] **LazyGit-style action menus** — replace flat keymaps with
-      select menus (`vim.ui.select`) for compound actions:
-  - `C` → commit options (--amend, --no-edit, --verbose, signoff, etc.)
-  - `D` → discard options (discard unstaged, discard all, clean untracked)
-  - `B` → branch operations (checkout, create, delete, rename)
-  - Prioritise the most frequent actions, avoid polluting keymap space.
-- [ ] **Keymap audit & philosophy document** — go through every mapping
-      in status, diff_stacked, diff_split, and help windows. Verify each
-      works as intended. Establish a keymap philosophy doc that captures
-      the conventions (e.g. single-char for primary actions, menus for
-      compound actions, no `a`-prefix namespace). This doc becomes the
-      reference for all future keymap decisions.
-- [ ] **Rename `a`-prefix toggles** — `aw`/`al` in diff previews (plus
-      `an` in split mode) feel unnatural after removing the namespacing
-      need. Find mnemonic single-key or menu-based alternatives.
-      (Stacked-mode `an`/`am` were removed with the diffs.nvim adoption.)
-      Layout toggle (`l`) is valuable and should stay prominent.
+## Done
 
-## P2 — DX & code quality
-
-- [ ] **Co-locate tests with source files** — move test files next to
-      the modules they test (e.g. `tests/functional/git_spec.lua` →
-      `lua/iter/git.spec.lua`). Update the test runner to discover
-      co-located specs. Move away from the separate `tests/` tree.
-- [ ] **Migrate or replace `docs/CONVENTIONS.md`** — the `docs/` folder
-      currently only contains the conventions doc, which is thin. Either
-      expand it into real documentation (usage guide, architecture, API
-      reference) or merge conventions into a more natural home (e.g.
-      `CONTRIBUTING.md` or inline in `AGENTS.md`).
-- [ ] **Expand test coverage** — add tests for:
-  - Untracked file handling (currently uncovered)
-  - Commit and push flows
-  - Filtering and search
-  - Discard operations (normal + forced)
-  - Replace-mode layout
-  - Window lifecycle edge cases (BufDelete, BufUnload, etc.)
-  - Rethink fragile default-value assertions (e.g. `assert.are.equal(0.3, height)`) —
-    prefer behavior-based tests that verify the _effect_ of a config value rather
-    than asserting specific magic numbers.
-- [x] **Remove stale `.github/workflows/test.yml`** — duplicate of
-      `tests.yml` that runs nvim directly without cloning plenary or
-      diffs.nvim, so it cannot pass. Delete it; `tests.yml` (via
-      `just test`) is the real workflow.
-- [ ] **Quick-add to `.gitignore`** — keybinding to add the file under
-      cursor to the repo's `.gitignore`.
-- [ ] **Suppress untracked dir diff notification** — once untracked
-      navigation is handled (P0), this may become moot. Otherwise debounce
-      or silence the "Diff preview not available for untracked directories"
-      warning.
-- [ ] **Config** - Configurable `git diff` command (`--detect-renames` e.g.)
-- [ ] **Fixup commit workflow** — LazyGit-style fixup: with staged changes,
-      open a commit picker (last ~25 commits, not just unpushed), select a
-      target, and:
-  - `F` → `git commit --fixup=<sha>` (create fixup commit)
-  - `S` → `git commit --fixup=<sha>` + `git rebase -i --autosquash <sha>~1`
-    (create and immediately squash in one step)
-  - Prerequisite: a proper commit list view that shows more than unpushed
-    commits — a natural base for other history-browsing features too.
-
-## P3 — Polish & exploration
-
-- [ ] **Visual commit reordering** — once the commit list exists (see fixup
-      workflow in P2), allow reordering via visual selection + move: select
-      one or more commits with `V`, cut with `d`/`x`, paste above/below with
-      `p`/`P`. Translates to `git rebase -i` under the hood, rewriting the
-      pick order. Natural follow-up to the fixup workflow.
-- [ ] **Statusline component** — expose `iter.statusline()` that returns
-      branch + dirty file counts for `vim.opt.statusline`. Lightweight,
-      no extra polling beyond what git already does.
-- [ ] **Inline hunk staging from diff preview** — stage/unstage the
-      hunk under cursor from the diff preview, like fugitive's `=` in diff
-      view. We have file-level stage/unstage; per-hunk completes the story.
-- [ ] **Add screenshots & presentation polish** — add screenshots to
-      README showing the status window, diff preview, commit editor, and
-      replace-mode layout. Makes the plugin presentable for sharing.
-- [ ] **Evaluate base.nvim rebase** — consider adopting the
-      [base.nvim](https://github.com/S1M0N38/base.nvim) template for
-      structured scaffolding, built-in testing, CI, and docs setup. Weigh
-      effort vs benefit.
-- [ ] **format** - Add formater for markdown files
-
----
-
-# Completed
-
-- [x] fix: make `=` toggle diff preview instead of always re-opening
-- [x] docs: fix key references in help and README to match actual mappings
-- [x] feat: make `o` open entry and close status window
-- [x] feat: add `status.layout = 'replace'` option (Oil-like layout)
-- [x] feat: use vsplit for commit editor in replace mode
-- [x] fix: use bufadd/bufload instead of `:edit` in replace mode
-- [x] feat: customizable keybindings (data-driven keymap tables + keymaps
-      option in setup)
-- [x] chore: rename plugin to iter.nvim (with credit to original)
-- [x] test: add test suite (diff parser, diff position, status formatting,
-      keymaps survival, CI workflow)
-- [x] fix: harden keymap lifecycle (CursorMoved group, BufEnter diff
-      remaps, close_diff cleanup)
+- [x] Status drawer: a float at the bottom of the current window with
+      Unstaged and Staged columns, a live diff preview above, file staging,
+      unstaging and discard with confirmation.
+- [x] Untracked directories expand to their files.
+- [x] Unified diff renderer in Lua: treesitter syntax, word emphasis, an old
+      and new line number rail, hidden context that expands on demand.
+- [x] Review tab with hunk staging, file and hunk jumps and `gf`.
+- [x] Auto-refresh from git index and HEAD changes, focus, writes and a poll,
+      also in linked worktrees.
+- [x] Comments on lines, ranges, deleted lines, files and the whole review, in
+      diffs and in normal buffers, saved per repository and branch and
+      re-anchored when the code moves.
+- [x] Comment float with a hideable draft, and a comment picker.
+- [x] Viewed marks that drop back when the file changes.
+- [x] Export of the review as a prompt for an agent.
+- [x] Keys per view, each one remappable or disabled, and a `?` help float.
+- [x] mini.test suite with child Neovim screenshot tests.
+- [x] `:checkhealth iter` for Neovim 0.12 and `git`.

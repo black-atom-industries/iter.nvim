@@ -7,10 +7,6 @@ local ensure_dir = function()
     vim.fn.mkdir(log_dir, 'p')
 end
 
-function M.open()
-    vim.fn.execute('vsplit ' .. log_file)
-end
-
 function M.path()
     return log_file
 end
