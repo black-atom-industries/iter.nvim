@@ -12,6 +12,7 @@ local util = require('iter.util')
 ---@field config IterConfig
 ---@field path? string absolute path of a file to select when it changed
 ---@field side? IterSide side to look for `path` on first
+---@field on_comments? fun() after a comment of the review is saved or deleted
 ---@field on_close? fun(review: IterReview)
 
 ---@class IterReview
@@ -25,6 +26,7 @@ local util = require('iter.util')
 ---@field help? IterHelp help float of the diff pane
 ---@field group integer
 ---@field closed boolean
+---@field on_comments? fun()
 ---@field on_close? fun(review: IterReview)
 local Review = {}
 Review.__index = Review
@@ -43,6 +45,8 @@ local SPACER_WINOPTS = {
     list = false,
     spell = false,
     winfixheight = true,
+    -- 'statusline' is global-local: an empty value would show the global one.
+    statusline = ' ',
 }
 
 ---@param win integer?
@@ -90,6 +94,7 @@ function Review.open(opts)
     vim.validate('opts.config', opts.config, 'table')
     vim.validate('opts.path', opts.path, 'string', true)
     vim.validate('opts.side', opts.side, 'string', true)
+    vim.validate('opts.on_comments', opts.on_comments, 'function', true)
     vim.validate('opts.on_close', opts.on_close, 'function', true)
 
     local origin_tab = vim.api.nvim_get_current_tabpage()
@@ -122,6 +127,7 @@ function Review.open(opts)
         spacer_win = spacer_win,
         buf = buf,
         closed = false,
+        on_comments = opts.on_comments,
         on_close = opts.on_close,
     }, Review)
 
@@ -134,6 +140,7 @@ function Review.open(opts)
         path = opts.path,
         side = opts.side,
         view_handlers = self:view_handlers(),
+        on_comments = opts.on_comments,
         on_close = function()
             self:close()
         end,
@@ -144,6 +151,14 @@ function Review.open(opts)
         vim.cmd.tabclose({ bang = true })
         vim.api.nvim_buf_delete(buf, { force = true })
         return nil
+    end
+
+    -- New windows copy the jumplist of the window they open from, so a jump
+    -- back would put the origin's files into the review's windows.
+    for _, win in ipairs({ diff_win, spacer_win, drawer.win }) do
+        vim.api.nvim_win_call(win, function()
+            vim.cmd.clearjumps()
+        end)
     end
 
     self.drawer = drawer
@@ -274,7 +289,12 @@ function Review:apply_hunk(kind)
         ok, err = git.apply_hunk(root, lines, kind)
     end
 
-    self.drawer:refresh()
+    -- After its last hunk the file lives on the other side; the selection
+    -- follows it there.
+    self.drawer:refresh(
+        nil,
+        { path = vim.fs.joinpath(root, file.path), side = file.side }
+    )
 
     if not ok then
         util.warn(string.format('Cannot %s the hunk: %s', kind, err))
@@ -348,6 +368,61 @@ function Review:attach()
             end
         end,
     })
+    vim.api.nvim_create_autocmd('BufWinLeave', {
+        group = self.group,
+        buffer = self.drawer.view.buf,
+        callback = function()
+            if vim.api.nvim_get_current_win() ~= self.diff_win then
+                return
+            end
+
+            local cursor = vim.api.nvim_win_get_cursor(self.diff_win)
+
+            vim.schedule(function()
+                self:take_back(cursor)
+            end)
+        end,
+    })
+end
+
+--- Show the diff in the diff pane again after another buffer took its
+--- place. A file buffer opens in the tab the review came from instead, at
+--- the line it was opened on.
+---@param cursor integer[] the diff pane's cursor before it changed
+function Review:take_back(cursor)
+    local view = self.drawer.view
+    local file = view.files[1]
+
+    if
+        self.closed
+        or not util.is_valid_win(self.diff_win)
+        or self.drawer.previewed == nil
+        or file == nil
+        or view:is_shown()
+    then
+        return
+    end
+
+    local buf = vim.api.nvim_win_get_buf(self.diff_win)
+    local line = vim.api.nvim_win_get_cursor(self.diff_win)[1]
+    local path = vim.bo[buf].buftype == '' and vim.api.nvim_buf_get_name(buf)
+        or ''
+
+    -- The scratch buffer first, so the view borrows the pane from it again.
+    vim.api.nvim_win_set_buf(self.diff_win, self.buf)
+    view:show(file)
+    vim.api.nvim_win_set_cursor(
+        self.diff_win,
+        { math.min(cursor[1], vim.api.nvim_buf_line_count(view.buf)), 0 }
+    )
+    -- The switches left jumps to the other buffer and to the scratch.
+    vim.api.nvim_win_call(self.diff_win, function()
+        vim.cmd.clearjumps()
+    end)
+
+    if path ~= '' then
+        self:open_file(path, line)
+    end
 end
 
 ---@return boolean
@@ -589,9 +664,18 @@ function Review:open_editor(comment)
         config = self.drawer.config,
         pane = self.diff_win,
         on_save = function()
-            self.drawer:refresh_comments()
+            self:comments_changed()
         end,
     })
+end
+
+--- Draw the stored comments again after this review wrote them.
+function Review:comments_changed()
+    if self.on_comments ~= nil then
+        self.on_comments()
+    else
+        self.drawer:refresh_comments()
+    end
 end
 
 --- The anchor of rows `first` to `last` of the shown diff. Rows with a new
@@ -759,7 +843,7 @@ function Review:delete_comment()
         util.warn('Cannot delete the comment: ' .. err)
     end
 
-    self.drawer:refresh_comments()
+    self:comments_changed()
 end
 
 return Review

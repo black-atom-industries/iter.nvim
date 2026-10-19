@@ -210,7 +210,7 @@ T['hashing']['equal mtime and size but another ctime or inode hash again'] = fun
     spawns = 0
 
     local real = vim.uv.fs_stat
-    local stat = real(vim.fs.joinpath(repo, 'a.txt'))
+    local stat = assert(real(vim.fs.joinpath(repo, 'a.txt')))
     local variant = 'ctime'
 
     ---@diagnostic disable-next-line: duplicate-set-field

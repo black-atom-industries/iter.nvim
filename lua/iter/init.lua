@@ -83,6 +83,24 @@ function M.status()
     })
 end
 
+--- Refresh the open review's comments after a write from outside it.
+local function refresh_review()
+    if M.current_review ~= nil and M.current_review:is_open() then
+        M.current_review.drawer:refresh_comments()
+    end
+end
+
+--- Draw the stored comments again in the review and in the buffers shown.
+local function refresh_comments()
+    refresh_review()
+
+    for _, win in ipairs(vim.api.nvim_list_wins()) do
+        require('iter.comments.marks').render_buffer(
+            vim.api.nvim_win_get_buf(win)
+        )
+    end
+end
+
 --- Open the review tab, or switch to it when it is open. An open status
 --- drawer closes first.
 ---@param target? { path: string, side?: IterSide } file to select
@@ -114,30 +132,13 @@ function M.review(target)
         config = M.config,
         path = path,
         side = target and target.side,
+        on_comments = refresh_comments,
         on_close = function(review)
             if M.current_review == review then
                 M.current_review = nil
             end
         end,
     })
-end
-
---- Refresh the open review's comments after a write from outside it.
-local function refresh_review()
-    if M.current_review ~= nil and M.current_review:is_open() then
-        M.current_review.drawer:refresh_comments()
-    end
-end
-
---- Draw the stored comments again in the review and in the buffers shown.
-local function refresh_comments()
-    refresh_review()
-
-    for _, win in ipairs(vim.api.nvim_list_wins()) do
-        require('iter.comments.marks').render_buffer(
-            vim.api.nvim_win_get_buf(win)
-        )
-    end
 end
 
 --- Open the comment float: on the cursor line or the visual range of a

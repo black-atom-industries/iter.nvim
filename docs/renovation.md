@@ -54,7 +54,7 @@ iter has two surfaces.
 - Comments and viewed marks are saved to disk per repository and branch.
 - A comment follows its line when the code moves. When the line can't be found again, the comment stays and is marked
   outdated.
-- A comment picker lists all comments grouped by file and jumps to the one picked; `]c` and `[c` move between
+- A comment picker lists all comments grouped by file and jumps to the one picked; `]a` and `[a` move between
   comments in the diff pane.
 - Each file can be marked viewed. When the file changes afterwards, by Nik or an agent, it drops back to unviewed and
   shows that it changed since it was viewed.
@@ -155,6 +155,12 @@ iter renders diffs itself in pure Lua; no binary dependency for M1.
 ### 6. Draft, inspect, plan — done
 
 The M1 plan below holds the inspection, the module sketch and the slices.
+
+### 7. M1 implementation — done, awaiting Nik's review
+
+Slices S1 to S14 are on `feat/renovation`, one commit each, plus a final fix round after a whole-implementation
+review and an end-to-end run of the drawer, review, comment, picker and export flow. S15 and the items under Later
+in `ROADMAP.md` are M2 and beyond.
 
 ## M1 plan
 
@@ -618,6 +624,4 @@ Items to fold into the scope and plan.
   - `docs-structure`: `ROADMAP.md` and `handoffs/` sit at the root.
   - `workflow`: tag-push `release.yml` and `nightly.yml`, no release-please, no `CHANGELOG.md`.
   - `dependencies`: mini.nvim is pinned in `justfile`; no upgrade skill.
-- `just lint` runs LuaLS without Neovim's runtime as a library, so its type checks are looser than an editor
-  setup with lazydev.
 - The dots spec loads iter from the main checkout; trying this branch means pointing its rtp at the worktree.

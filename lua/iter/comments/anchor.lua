@@ -67,6 +67,7 @@ function M.create(opts, lines)
     end
 
     vim.validate('lines', lines, 'table')
+    ---@cast lines string[]
 
     local start = opts.start_line
     local stop = opts.end_line or start

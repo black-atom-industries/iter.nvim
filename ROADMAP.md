@@ -35,6 +35,27 @@ Open and finished work. The scope and the slice plan live in
       `AGENTS.md`.
 - [ ] A Markdown formatter.
 - [ ] Evaluate the [base.nvim](https://github.com/S1M0N38/base.nvim) template.
+- [ ] A status drawer opened from another tab while a review is open polls the
+      repository a second time.
+- [ ] Split `ui/drawer.lua`: a pure layout module first, then the review-only
+      state into `review.lua`.
+- [ ] One copy each of `stat_key`, `is_normal_win`, the 'nohidden' guard, the
+      delete confirm and the edit-at-line helper, and one store cache instead
+      of the drawer's and the buffer marks' own.
+- [ ] Comment queries (`groups`, `file_lines`, `line_of`) in a comments query
+      module instead of `comments/picker.lua`.
+- [ ] The review header counts outdated comments by the stored flag, while
+      the picker, the export and the diff view resolve them live.
+- [ ] Help, picker and comment floats built through `ui.float`, so they follow
+      `VimResized`.
+- [ ] `diff/view.lua` reads `require('iter').config` for its defaults.
+- [ ] `git.ensure_git` prints with `vim.print` and calls `executable()` on
+      every call.
+- [ ] One rule for warning and error levels.
+- [ ] `ui/diff/parser.lua` belongs in `diff/`.
+- [ ] `keys.*.mode` is accepted without a handler until M2.
+- [ ] Selecting an untracked directory keeps the previous file's preview.
+- [ ] `:edit` in the drawer float of the review shows the file in the float.
 
 ## Done
 

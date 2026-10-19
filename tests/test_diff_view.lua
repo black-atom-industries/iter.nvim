@@ -194,6 +194,35 @@ T['renders a two-hunk file with gaps'] = function()
     helpers.expect_screenshot(child, 'diff-view-two-hunks')
 end
 
+--- Text of the header row's right-aligned marks.
+---@return string
+local function header_text()
+    return child.lua_get([[(function()
+        local ns = vim.api.nvim_create_namespace('iter.diff')
+        local parts = {}
+        for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(_G.view.buf, ns, 0, 0, { details = true })) do
+            if mark[4].virt_text_pos == 'right_align' then
+                for _, chunk in ipairs(mark[4].virt_text) do
+                    table.insert(parts, chunk[1])
+                end
+            end
+        end
+        return table.concat(parts)
+    end)()]])
+end
+
+T['the header shows a mode change'] = function()
+    vim.uv.fs_chmod(vim.fs.joinpath(repo, 'code.lua'), tonumber('755', 8))
+    helpers.git(repo, { 'checkout', '--', 'code.lua' })
+    vim.uv.fs_chmod(vim.fs.joinpath(repo, 'code.lua'), tonumber('755', 8))
+    open_view('code.lua')
+
+    eq(header_text(), 'mode 100644 → 100755  +0 −0 ')
+
+    open_view()
+    eq(header_text(), '+2 −2 ')
+end
+
 T['statuscolumn is blank on virtual lines'] = function()
     open_view()
 

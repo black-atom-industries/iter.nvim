@@ -5,8 +5,9 @@ minimal_init := justfile_directory() / "tests/minimal_init.lua"
 _default:
 	just -l
 
+# .luarc.json reads Neovim's Lua API from $VIMRUNTIME, which only nvim knows.
 lint:
-	lua-language-server --configpath={{ justfile_directory() }}/.luarc.json --check={{ justfile_directory() }}
+	VIMRUNTIME="$(nvim --clean --headless --cmd 'lua io.write(vim.env.VIMRUNTIME)' --cmd 'qa!')" lua-language-server --configpath={{ justfile_directory() }}/.luarc.json --check={{ justfile_directory() }}
 
 format:
 	stylua {{ justfile_directory() }}

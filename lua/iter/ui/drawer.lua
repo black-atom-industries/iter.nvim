@@ -29,6 +29,7 @@ local watch = require('iter.watch')
 ---@field view_win? integer window the diff view borrows, the pane by default
 ---@field view_handlers? table<string, fun()> diff view actions
 ---@field height? number float height, `drawer.height` by default
+---@field on_comments? fun() after a comment of the drawer is saved
 ---@field on_close? fun(drawer: IterDrawer)
 
 ---@class IterDrawer
@@ -62,6 +63,7 @@ local watch = require('iter.watch')
 ---@field preview_tick integer bumped per scheduled preview; only the last one runs
 ---@field group integer
 ---@field closed boolean
+---@field on_comments? fun()
 ---@field on_close? fun(drawer: IterDrawer)
 local Drawer = {}
 Drawer.__index = Drawer
@@ -553,6 +555,7 @@ function Drawer.open(opts)
     vim.validate('opts.view_win', opts.view_win, 'number', true)
     vim.validate('opts.view_handlers', opts.view_handlers, 'table', true)
     vim.validate('opts.height', opts.height, 'number', true)
+    vim.validate('opts.on_comments', opts.on_comments, 'function', true)
     vim.validate('opts.on_close', opts.on_close, 'function', true)
 
     local view_win = opts.view_win or opts.pane
@@ -564,13 +567,14 @@ function Drawer.open(opts)
 
     highlight.setup()
 
+    local context = opts.context or 'status'
+    local review = context == 'review'
     local buf = vim.api.nvim_create_buf(false, true)
     vim.bo[buf].bufhidden = 'wipe'
     vim.bo[buf].modifiable = false
     vim.bo[buf].filetype = 'iter'
-    vim.api.nvim_buf_set_name(buf, 'iter://drawer/' .. buf)
+    util.name_buf(buf, review and 'iter://review' or ('iter://drawer/' .. buf))
 
-    local context = opts.context or 'status'
     local keys_view = context == 'review' and 'review_drawer' or 'drawer'
 
     local self = setmetatable({
@@ -588,6 +592,7 @@ function Drawer.open(opts)
         expanded = {},
         preview_tick = 0,
         closed = false,
+        on_comments = opts.on_comments,
         on_close = opts.on_close,
     }, Drawer)
 
@@ -597,10 +602,14 @@ function Drawer.open(opts)
     end
 
     self.handlers = self:make_handlers()
+    -- The review's diff pane belongs to the view, so a buffer that takes its
+    -- place only hides it, and the review puts it back.
     self.view = View.new({
         win = view_win,
         keys = opts.config.keys.diff,
         handlers = opts.view_handlers,
+        name = review and 'iter://review-diff' or nil,
+        bufhidden = review and 'hide' or nil,
     })
     self.view:set_comments(self.comments)
     self.float = float.open({
@@ -1098,10 +1107,12 @@ function Drawer:resized()
     self.view:rewrap()
 end
 
---- Reload the status, keep the selection on its path and show its diff
---- afresh. A poll that finds nothing changed leaves everything as it is.
+--- Reload the status, keep the selection on its path, or select `target`
+--- when it is still there, and show its diff afresh. A poll that finds
+--- nothing changed leaves everything as it is.
 ---@param reason? IterWatchReason nil after an action of the drawer
-function Drawer:refresh(reason)
+---@param target? { path: string, side: IterSide } absolute path, side first
+function Drawer:refresh(reason, target)
     if not self:is_open() then
         return
     end
@@ -1145,7 +1156,9 @@ function Drawer:refresh(reason)
     end
 
     self:render()
-    self:restore_selection(mark)
+    self:restore_selection(
+        target and self:find_path(target.path, target.side) or mark
+    )
     self:preview(true)
 end
 
@@ -1199,7 +1212,11 @@ function Drawer:comment_file()
         config = self.config,
         pane = self.view.win,
         on_save = function()
-            self:refresh_comments()
+            if self.on_comments ~= nil then
+                self.on_comments()
+            else
+                self:refresh_comments()
+            end
         end,
     })
 end

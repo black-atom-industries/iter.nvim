@@ -346,7 +346,10 @@ T['writes']['report a store directory that cannot be made'] = function()
     local saved, err = store.put_comment(repo, comment('x'))
 
     eq(saved, nil)
-    eq(vim.startswith(err, 'Cannot create the comment store directory'), true)
+    eq(
+        vim.startswith(assert(err), 'Cannot create the comment store directory'),
+        true
+    )
 end
 
 T['writes']['give every comment its own id'] = function()

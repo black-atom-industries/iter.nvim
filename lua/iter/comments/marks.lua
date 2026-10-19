@@ -271,6 +271,8 @@ local roots = {}
 ---@type table<string, true>
 local save_warned = {}
 
+--- The store writes through a rename, so the inode changes with every
+--- write, also one that keeps the size within one mtime tick.
 ---@param path string
 ---@return string
 local function stat_key(path)
@@ -280,7 +282,13 @@ local function stat_key(path)
         return ''
     end
 
-    return string.format('%d.%d:%d', stat.mtime.sec, stat.mtime.nsec, stat.size)
+    return string.format(
+        '%d.%d:%d:%d',
+        stat.mtime.sec,
+        stat.mtime.nsec,
+        stat.size,
+        stat.ino
+    )
 end
 
 ---@param path string
