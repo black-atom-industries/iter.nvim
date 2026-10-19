@@ -615,6 +615,32 @@ function Review:attach()
             end)
         end,
     })
+    vim.api.nvim_create_autocmd('BufWinLeave', {
+        group = self.group,
+        buffer = self.drawer.buf,
+        callback = function()
+            if vim.api.nvim_get_current_win() ~= self.drawer.win then
+                return
+            end
+
+            vim.schedule(function()
+                self:take_back_drawer()
+            end)
+        end,
+    })
+end
+
+--- The file buffer that took the place of the drawer or the diff, when
+--- `win` shows one.
+---@param win integer
+---@return string? path
+---@return integer line
+function Review:file_in(win)
+    local buf = vim.api.nvim_win_get_buf(win)
+    local path = vim.bo[buf].buftype == '' and vim.api.nvim_buf_get_name(buf)
+        or ''
+
+    return path ~= '' and path or nil, vim.api.nvim_win_get_cursor(win)[1]
 end
 
 --- Show the diff in the diff pane again after another buffer took its
@@ -635,10 +661,7 @@ function Review:take_back(cursor)
         return
     end
 
-    local buf = vim.api.nvim_win_get_buf(self.diff_win)
-    local line = vim.api.nvim_win_get_cursor(self.diff_win)[1]
-    local path = vim.bo[buf].buftype == '' and vim.api.nvim_buf_get_name(buf)
-        or ''
+    local path, line = self:file_in(self.diff_win)
 
     -- The scratch buffer first, so the view borrows the pane from it again.
     vim.api.nvim_win_set_buf(self.diff_win, self.buf)
@@ -652,7 +675,33 @@ function Review:take_back(cursor)
         vim.cmd.clearjumps()
     end)
 
-    if path ~= '' then
+    if path ~= nil then
+        self:open_file(path, line)
+    end
+end
+
+--- Show the drawer in its float again after another buffer took its place,
+--- and open a file buffer in the tab the review came from instead.
+function Review:take_back_drawer()
+    local drawer = self.drawer
+
+    if
+        self.closed
+        or not util.is_valid_win(drawer.win)
+        or not vim.api.nvim_buf_is_valid(drawer.buf)
+        or vim.api.nvim_win_get_buf(drawer.win) == drawer.buf
+    then
+        return
+    end
+
+    local path, line = self:file_in(drawer.win)
+
+    vim.api.nvim_win_set_buf(drawer.win, drawer.buf)
+    vim.api.nvim_win_call(drawer.win, function()
+        vim.cmd.clearjumps()
+    end)
+
+    if path ~= nil then
         self:open_file(path, line)
     end
 end

@@ -202,7 +202,9 @@ function Drawer.open(opts)
     local context = opts.context or 'status'
     local review = context == 'review'
     local buf = vim.api.nvim_create_buf(false, true)
-    vim.bo[buf].bufhidden = 'wipe'
+    -- The review keeps the buffer when another one takes the float, and puts
+    -- it back.
+    vim.bo[buf].bufhidden = review and 'hide' or 'wipe'
     vim.bo[buf].modifiable = false
     vim.bo[buf].filetype = 'iter'
     util.name_buf(buf, review and 'iter://review' or ('iter://drawer/' .. buf))
@@ -855,7 +857,6 @@ function Drawer:stage()
     local paths = self:paths(item)
 
     if #paths == 0 then
-        util.warn('Nothing to stage')
         return
     end
 
@@ -914,7 +915,6 @@ function Drawer:discard()
     local paths = untracked and self:paths(item) or { item.path }
 
     if #paths == 0 then
-        util.warn('Nothing to discard')
         return
     end
 
@@ -1117,6 +1117,10 @@ function Drawer:close()
 
     self.float:close()
     self.view:close()
+
+    if vim.api.nvim_buf_is_valid(self.buf) then
+        vim.api.nvim_buf_delete(self.buf, { force = true })
+    end
 
     if util.is_valid_win(self.pane) then
         vim.api.nvim_set_current_win(self.pane)

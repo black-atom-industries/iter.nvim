@@ -807,6 +807,20 @@ T['switch'][':e in the diff pane opens the file in the previous tab'] = function
     eq(#child.api.nvim_list_tabpages(), 1)
 end
 
+T['switch'][':e in the drawer opens the file in the previous tab'] = function()
+    local origin = child.api.nvim_get_current_tabpage()
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.cmd('edit +2 c.txt')
+    child.lua('vim.wait(100)')
+
+    eq(goto_target(), { line = 1, text = 'c', tab = origin, name = 'c.txt' })
+    child.cmd('tablast')
+    expect_review_intact()
+    eq(child.lua_get(R .. '.drawer.view.files[1].path'), 'a.txt')
+    eq(child.v.errmsg, '')
+end
+
 T['switch'][':enew in the diff pane puts the view back'] = function()
     open_review()
     wait_diff('unstaged a.txt')
