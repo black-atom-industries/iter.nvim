@@ -408,11 +408,11 @@ T['diff view']['a refresh reads the store only when its file changed'] = functio
     open_review()
     child.lua([[
         local store = require('iter.store')
-        local load = store.load
+        local read = store.read
         _G.loads = 0
-        store.load = function(...)
+        store.read = function(...)
             _G.loads = _G.loads + 1
-            return load(...)
+            return read(...)
         end
         local d = require('iter').current_review.drawer
         d:refresh('poll')

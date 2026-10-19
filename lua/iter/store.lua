@@ -19,6 +19,16 @@ local id_count = 0
 ---@type table<string, true>
 local newer_warned = {}
 
+---@class IterStoreCache
+---@field head_path? string
+---@field head? string contents of `head_path` when `path` was resolved
+---@field path? string
+---@field stat? string stat of `path` when `data` was read, `''` when missing
+---@field data IterStoreFile
+
+---@type table<string, IterStoreCache>
+local caches = {}
+
 ---@return IterStoreFile
 local function empty()
     return { version = VERSION, annotations = {}, viewed = {} }
@@ -258,6 +268,101 @@ end
 ---@return string? error
 function M.read(path)
     return read(path)
+end
+
+---@param path string
+---@return string?
+local function read_line(path)
+    local file = io.open(path, 'r')
+
+    if file == nil then
+        return nil
+    end
+
+    local line = file:read('*l')
+    file:close()
+
+    return line
+end
+
+--- The HEAD file of the worktree at `root`, found without spawning git: in
+--- `.git/`, or in the directory a `.git` file points to.
+---@param root string
+---@return string?
+local function head_path(root)
+    local dotgit = vim.fs.joinpath(root, '.git')
+    local stat = vim.uv.fs_stat(dotgit)
+
+    if stat == nil then
+        return nil
+    end
+
+    if stat.type == 'directory' then
+        return vim.fs.joinpath(dotgit, 'HEAD')
+    end
+
+    local gitdir = (read_line(dotgit) or ''):match('^gitdir: (.+)$')
+
+    if gitdir == nil then
+        return nil
+    end
+
+    if not vim.startswith(gitdir, '/') then
+        gitdir = vim.fs.joinpath(root, gitdir)
+    end
+
+    return vim.fs.joinpath(gitdir, 'HEAD')
+end
+
+--- `load` through one cache per root, shared by every reader in this
+--- instance. The store path is resolved again only when HEAD changed (on
+--- every call without a `.git` at `root`), starting empty when it differs;
+--- the file is read again only when its stat changed, or with `fresh`. A
+--- failed read keeps what the cache holds. The result is shared: callers
+--- never change it.
+---@param root string
+---@param fresh? boolean read the file whatever its stat says
+---@return IterStoreFile
+function M.cached(root, fresh)
+    local cache = caches[root]
+
+    if cache == nil then
+        cache = { head_path = head_path(root), data = empty() }
+        caches[root] = cache
+    end
+
+    local head = cache.head_path and read_line(cache.head_path)
+
+    if cache.path == nil or cache.head_path == nil or head ~= cache.head then
+        local path = M.path(root)
+
+        if path ~= cache.path then
+            cache.data = empty()
+        end
+
+        cache.path = path
+        cache.head = head
+        cache.stat = nil
+    end
+
+    if cache.path == nil then
+        return cache.data
+    end
+
+    local stat = util.stat_key(cache.path) or ''
+
+    if not fresh and stat == cache.stat then
+        return cache.data
+    end
+
+    local data = M.read(cache.path)
+
+    if data ~= nil then
+        cache.data = data
+        cache.stat = stat
+    end
+
+    return cache.data
 end
 
 --- Re-read the store from disk, let `fn` change it in place, and write it
