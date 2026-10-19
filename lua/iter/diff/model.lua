@@ -1,4 +1,4 @@
-local parser = require('iter.ui.diff.parser')
+local parser = require('iter.diff.parser')
 
 ---@alias IterSide 'unstaged'|'staged'
 

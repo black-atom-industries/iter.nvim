@@ -386,9 +386,9 @@ T['keys']['the preview loads once after quick moves'] = function()
         local git = require('iter.git')
         local file_diff = git.file_diff
         _G.loads = {}
-        git.file_diff = function(root, change)
+        git.file_diff = function(root, change, args)
             table.insert(_G.loads, change.path)
-            return file_diff(root, change)
+            return file_diff(root, change, args)
         end
     ]])
 
@@ -1204,6 +1204,27 @@ T['help']['? lists the current keys and closes on q, ? and <Esc>'] = function()
     end
 end
 
+T['help']['stays centered when the editor is resized'] = function()
+    open_drawer()
+    child.type_keys('?')
+
+    local config = [[(function()
+        local c = vim.api.nvim_win_get_config(require('iter').drawer.help.win)
+        return { c.row, c.col, c.width, c.height }
+    end)()]]
+    local before = child.lua_get(config)
+
+    child.o.columns = child.o.columns - 20
+    child.o.lines = child.o.lines - 6
+    child.lua('vim.wait(20)')
+
+    local after = child.lua_get(config)
+    eq({ after[3], after[4] }, { before[3], before[4] })
+    eq(after[1], math.max(0, math.floor((child.o.lines - after[4]) / 2) - 1))
+    eq(after[2], math.max(0, math.floor((child.o.columns - after[3]) / 2) - 1))
+    eq(after[2] < before[2], true)
+end
+
 T['help']['closes with the drawer'] = function()
     open_drawer()
     child.type_keys('?')
@@ -1956,7 +1977,7 @@ T['refresh']['an unchanged diff keeps the preview as it is'] = function()
 end
 
 T['refresh']['closing stops the watchers and timers'] = function()
-    local count = [[(function()
+    child.lua([[_G.handle_counts = function()
         local counts = { fs_event = 0, timer = 0 }
         vim.uv.walk(function(handle)
             local kind = handle:get_type()
@@ -1965,22 +1986,40 @@ T['refresh']['closing stops the watchers and timers'] = function()
             end
         end)
         return counts
-    end)()]]
-    local before = child.lua_get(count)
+    end]])
+
+    --- The handle counts once they equal `expected`, or after two seconds
+    --- of waiting for that.
+    ---@param expected? table
+    ---@return table
+    local function counts(expected)
+        return child.lua(
+            [[
+            local expected = ...
+            vim.wait(2000, function()
+                return expected == vim.NIL
+                    or vim.deep_equal(_G.handle_counts(), expected)
+            end, 20)
+            return _G.handle_counts()
+        ]],
+            { expected or vim.NIL }
+        )
+    end
+
+    local before = counts()
     local opened
 
     for _ = 1, 3 do
         open_drawer()
         wait_preview('unstaged deleted.txt')
 
-        local now = child.lua_get(count)
+        local now = counts(opened)
         eq(now.fs_event > before.fs_event, true)
         opened = opened or now
         eq(now, opened)
 
         child.type_keys('q')
-        child.lua('vim.wait(300)')
-        eq(child.lua_get(count), before)
+        eq(counts(before), before)
     end
 end
 

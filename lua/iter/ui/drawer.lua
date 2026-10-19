@@ -75,7 +75,7 @@ local watch = require('iter.watch')
 ---@field all_files boolean the view shows every file, in the review
 ---@field all_shown boolean the view's document is the all-files one
 ---@field diff_ids? table<string, string> per file key, the blob ids and worktree stat its shown diff was read with
----@field preview_tick integer bumped per scheduled preview; only the last one runs
+---@field preview_timer? uv.uv_timer_t runs the last scheduled preview; closed with the drawer
 ---@field group integer
 ---@field closed boolean
 ---@field on_close? fun(drawer: IterDrawer)
@@ -416,7 +416,6 @@ function Drawer.open(opts)
         lnum = 1,
         layout = 'columns',
         recall = {},
-        preview_tick = 0,
         all_files = false,
         all_shown = false,
         closed = false,
@@ -460,6 +459,10 @@ function Drawer.open(opts)
     self.view = View.new({
         win = view_win,
         keys = opts.config.keys.diff,
+        expand_step = opts.config.options.diff.expand_step,
+        syntax_max_lines = opts.config.options.diff.syntax_max_lines,
+        word_diff = opts.config.options.diff.word_diff,
+        icon = opts.config.options.icons.annotation,
         handlers = view_handlers,
         bufhidden = review and 'hide' or nil,
         on_cursor = function()
@@ -903,7 +906,7 @@ function Drawer:grid(id)
             rows = self.side_rows,
             cells = self.side_cells,
             buf = self.side_buf,
-            win = self.float and self.float.side_win,
+            win = self.float.side_win,
         }
     end
 
@@ -1324,15 +1327,24 @@ function Drawer:refresh_after(ok, err, fallback)
     self:refresh()
 end
 
+--- Preview the selection after `PREVIEW_DELAY_MS`, replacing a preview
+--- scheduled before that still waits.
 function Drawer:schedule_preview()
-    self.preview_tick = self.preview_tick + 1
-    local tick = self.preview_tick
+    if self.closed then
+        return
+    end
 
-    vim.defer_fn(function()
-        if tick == self.preview_tick then
-            self:preview(false)
-        end
-    end, PREVIEW_DELAY_MS)
+    self.preview_timer = self.preview_timer or assert(vim.uv.new_timer())
+    self.preview_timer:stop()
+    self.preview_timer:start(
+        PREVIEW_DELAY_MS,
+        0,
+        vim.schedule_wrap(function()
+            if not self.closed then
+                self:preview(false)
+            end
+        end)
+    )
 end
 
 --- Show the selected file's diff in the pane, or let the extras show an
@@ -1384,7 +1396,8 @@ function Drawer:show(item, force)
     end
 
     local stat = self:stat(item)
-    local source, err = git.file_diff(self.changes.root, item)
+    local source, err =
+        git.file_diff(self.changes.root, item, self.config.options.diff.args)
 
     if source == nil then
         util.error(err, 'Cannot read the diff of ' .. item.path)
@@ -1464,7 +1477,7 @@ function Drawer:load_all()
         and view:is_shown()
         and #files == #view.document.sections
 
-    for index, item in ipairs(files) do
+    for _, item in ipairs(files) do
         local k = key(item)
         local shown = before[k]
         local id = (ids[k] or '')
@@ -1482,7 +1495,8 @@ function Drawer:load_all()
             or nil
 
         if not file then
-            local source, err = git.file_diff(root, item)
+            local source, err =
+                git.file_diff(root, item, self.config.options.diff.args)
 
             if source == nil then
                 util.error(err, 'Cannot read the diff of ' .. item.path)
@@ -1867,7 +1881,11 @@ function Drawer:worktree_line(file, row)
 
     for _, item in ipairs(self.changes.unstaged) do
         if item.path == file.path and not item.dir and item.code ~= '?' then
-            local source = git.file_diff(self.changes.root, item)
+            local source = git.file_diff(
+                self.changes.root,
+                item,
+                self.config.options.diff.args
+            )
 
             if source == nil then
                 return line
@@ -1995,6 +2013,12 @@ function Drawer:close()
 
     if self.watch ~= nil then
         self.watch:stop()
+    end
+
+    if self.preview_timer ~= nil then
+        self.preview_timer:stop()
+        self.preview_timer:close()
+        self.preview_timer = nil
     end
 
     if self.help ~= nil then

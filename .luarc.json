@@ -11,5 +11,11 @@
     "workspace.checkThirdParty": false,
     "workspace.library": [
         "$VIMRUNTIME/lua"
+    ],
+    "workspace.ignoreDir": [
+        ".vscode"
+    ],
+    "diagnostics.unusedLocalExclude": [
+        "_*"
     ]
 }

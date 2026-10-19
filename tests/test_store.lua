@@ -481,12 +481,12 @@ T['cached()']['reads again only when the file changed'] = function()
     assert(store.put_annotation(repo, annotation('first')))
     eq(bodies(store.cached(repo)), { 'first' })
 
-    local read = store.read
+    local real_read = store.read
     local reads = 0
     ---@diagnostic disable-next-line: duplicate-set-field
     store.read = function(...)
         reads = reads + 1
-        return read(...)
+        return real_read(...)
     end
 
     local ok, err = pcall(function()
@@ -502,7 +502,7 @@ T['cached()']['reads again only when the file changed'] = function()
         eq(reads, 2)
     end)
 
-    store.read = read
+    store.read = real_read
     assert(ok, err)
 end
 
@@ -534,6 +534,207 @@ T['cached()']['starts empty on a branch whose store cannot be read'] = function(
     )
 
     eq(store.cached(repo).annotations, {})
+end
+
+T['lock'] = new_set()
+
+--- Bodies of the annotations in the store file on disk.
+---@return string[]
+local function on_disk()
+    local text = read(assert(store.path(repo)))
+
+    if text == nil then
+        return {}
+    end
+
+    return bodies(vim.json.decode(text))
+end
+
+---@return string
+local function lock_path()
+    return assert(store.path(repo)) .. '.lock'
+end
+
+T['lock']['a held lock keeps the change and saves it with the next one'] = function()
+    write(lock_path(), 'another instance')
+
+    eq(assert(store.put_annotation(repo, annotation('first'))).body, 'first')
+    eq(assert(store.put_annotation(repo, annotation('second'))).body, 'second')
+    eq(on_disk(), {})
+    eq(bodies(store.cached(repo)), { 'first', 'second' })
+    eq(#warnings, 1)
+    eq(
+        warnings[1]:find('Cannot lock the annotation store', 1, true) ~= nil,
+        true
+    )
+
+    vim.uv.fs_unlink(lock_path())
+    assert(store.put_annotation(repo, annotation('third')))
+
+    eq(on_disk(), { 'first', 'second', 'third' })
+    eq(bodies(store.cached(repo)), { 'first', 'second', 'third' })
+    eq(vim.uv.fs_stat(lock_path()), nil)
+    eq(read(lock_path()), nil)
+end
+
+T['lock']['cached() keeps showing a queued change'] = function()
+    assert(store.put_annotation(repo, annotation('zero')))
+    eq(bodies(store.cached(repo)), { 'zero' })
+
+    write(lock_path(), 'another instance')
+    assert(store.put_annotation(repo, annotation('one')))
+
+    eq(bodies(store.cached(repo)), { 'one', 'zero' })
+    eq(bodies(store.cached(repo)), { 'one', 'zero' })
+    eq(bodies(store.cached(repo, true)), { 'one', 'zero' })
+    eq(on_disk(), { 'zero' })
+
+    vim.uv.fs_unlink(lock_path())
+end
+
+T['lock']['takes over a lock older than the stale timeout'] = function()
+    write(lock_path(), 'a crashed instance')
+    local old = os.time() - 60
+    assert(vim.uv.fs_utime(lock_path(), old, old))
+
+    assert(store.put_annotation(repo, annotation('first')))
+
+    eq(on_disk(), { 'first' })
+    eq(warnings, {})
+    eq(vim.uv.fs_stat(lock_path()), nil)
+end
+
+T['lock']['a stale lock that cannot be moved is waited for, not spun on'] = function()
+    write(lock_path(), 'a crashed instance')
+    local old = os.time() - 60
+    assert(vim.uv.fs_utime(lock_path(), old, old))
+
+    local real_rename = vim.uv.fs_rename
+    ---@diagnostic disable-next-line: duplicate-set-field
+    vim.uv.fs_rename = function(from, to)
+        if vim.endswith(from, '.lock') then
+            return nil, 'EBUSY: resource busy', 'EBUSY'
+        end
+
+        return real_rename(from, to)
+    end
+
+    local started = vim.uv.hrtime()
+    local ok, saved = pcall(store.put_annotation, repo, annotation('kept'))
+    local elapsed_ms = (vim.uv.hrtime() - started) / 1e6
+    vim.uv.fs_rename = real_rename
+
+    eq(ok, true)
+    eq(saved ~= nil, true)
+    eq(elapsed_ms < 5000, true)
+    eq(#warnings, 1)
+    eq(on_disk(), {})
+
+    vim.uv.fs_unlink(lock_path())
+    assert(store.put_annotation(repo, annotation('next')))
+    eq(on_disk(), { 'kept', 'next' })
+end
+
+T['lock']['leaving Neovim saves a queued change once the lock goes stale'] = function()
+    write(lock_path(), 'a slow instance')
+    local aged = os.time() - 8
+    assert(vim.uv.fs_utime(lock_path(), aged, aged))
+
+    local script = string.format(
+        [[lua local saved = require('iter.store').put_annotation(%q, {
+            scope = 'review',
+            anchor = { side = 'new' },
+            body = 'queued',
+            outdated = false,
+        })
+        local file = io.open(%q)
+        local text = file and file:read('*a') or ''
+        io.stdout:write(text:find('queued', 1, true) and 'written' or 'queued')
+        vim.cmd(saved and 'qa!' or 'cquit 1')]],
+        repo,
+        assert(store.path(repo))
+    )
+    local result = vim.system({
+        'nvim',
+        '--headless',
+        '--noplugin',
+        '-u',
+        'tests/minimal_init.lua',
+        '-c',
+        script,
+    }, { env = vim.fn.environ(), clear_env = true }):wait(30000)
+
+    eq(result.code, 0)
+    eq(result.stdout, 'queued')
+    eq(result.stderr:find('Lost', 1, true), nil)
+    eq(on_disk(), { 'queued' })
+    eq(vim.uv.fs_stat(lock_path()), nil)
+end
+
+T['lock']['is released when the change fails'] = function()
+    local ok = pcall(store.update, repo, function()
+        error('boom')
+    end)
+
+    eq(ok, false)
+    eq(vim.uv.fs_stat(lock_path()), nil)
+    assert(store.put_annotation(repo, annotation('after')))
+    eq(on_disk(), { 'after' })
+end
+
+T['lock']['leaves the lock of another instance alone'] = function()
+    assert(store.update(repo, function()
+        vim.uv.fs_unlink(lock_path())
+        write(lock_path(), 'another instance')
+    end))
+
+    eq(read(lock_path()), 'another instance')
+    vim.uv.fs_unlink(lock_path())
+end
+
+T['lock']['three instances writing at once lose no change'] = function()
+    local count = 15
+    local script = string.format(
+        [[lua local store = require('iter.store')
+        local ok = pcall(function()
+            for i = 1, %d do
+                assert(store.put_annotation(%q, {
+                    scope = 'review',
+                    anchor = { side = 'new' },
+                    body = vim.env.ITER_WRITER .. i,
+                    outdated = false,
+                }))
+            end
+        end)
+        vim.cmd(ok and 'qa!' or 'cquit 1')]],
+        count,
+        repo
+    )
+    local jobs = {}
+
+    for _, writer in ipairs({ 'a', 'b', 'c' }) do
+        local env = vim.fn.environ()
+        env.ITER_WRITER = writer
+        table.insert(
+            jobs,
+            vim.system({
+                'nvim',
+                '--headless',
+                '--noplugin',
+                '-u',
+                'tests/minimal_init.lua',
+                '-c',
+                script,
+            }, { env = env, clear_env = true })
+        )
+    end
+
+    for _, job in ipairs(jobs) do
+        eq(job:wait(30000).code, 0)
+    end
+
+    eq(#on_disk(), 3 * count)
+    eq(vim.uv.fs_stat(lock_path()), nil)
 end
 
 return T

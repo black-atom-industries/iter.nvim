@@ -919,7 +919,7 @@ T['normal buffer']['a buffer without annotations reads none of its lines'] = fun
     eq(child.lua_get('_G.line_reads') > 0, true)
 end
 
-T['normal buffer']['a failing save of moved annotations warns once'] = function()
+T['normal buffer']['a failing save of moved annotations reports once'] = function()
     seed({ ANNOTATIONS[1] })
     setup_iter()
     child.cmd('edit m.txt')
@@ -933,7 +933,7 @@ T['normal buffer']['a failing save of moved annotations warns once'] = function(
     end
 
     eq(child.lua_get('_G.notes'), {
-        { '[iter] Cannot save the moved annotations: disk full', 3 },
+        { '[iter] Cannot save the moved annotations: disk full', 4 },
     })
     eq(stored(), { 'Line annotation 1-1' })
 end
@@ -1068,6 +1068,37 @@ T['place()']['outdates new-side annotations only against the worktree'] = functi
     eq(summary(marks.place(file_diff('staged'), annotations)), { '5 found' })
 end
 
+T['place()']['reads outdated from the version the annotation follows'] = function()
+    local annotations = {
+        annotation('edited', {
+            side = 'new',
+            start_line = 2,
+            end_line = 2,
+            lines = { 'B' },
+        }),
+        annotation('base', {
+            side = 'old',
+            base = 'HEAD',
+            start_line = 2,
+            end_line = 2,
+            lines = { 'b' },
+        }),
+    }
+    ---@type IterLinesOf
+    local function lines_of(_, version)
+        return version == 'worktree' and { 'a', 'B2', 'c' } or nil
+    end
+
+    -- The index still has the text, so the staged view places it there,
+    -- but the worktree lost it; the old side reads the view's base.
+    eq(
+        summary(marks.place(file_diff('staged'), annotations, {
+            lines_of = lines_of,
+        })),
+        { '4 base', '5 edited (outdated)' }
+    )
+end
+
 T['place()']['puts what has no row on the header'] = function()
     local file = file_diff('unstaged')
     local annotations = {
@@ -1127,15 +1158,15 @@ end
 T['place()']['uses stored lines when the versions are missing'] = function()
     local file = file_diff('unstaged')
     file.old_lines, file.new_lines = nil, nil
-    local stored = annotation('stored', {
+    local kept = annotation('stored', {
         side = 'new',
         start_line = 2,
         end_line = 2,
         lines = { 'x' },
     })
-    stored.outdated = true
+    kept.outdated = true
 
-    eq(summary(marks.place(file, { stored })), { '5 stored (outdated)' })
+    eq(summary(marks.place(file, { kept })), { '5 stored (outdated)' })
 end
 
 T['place()']['places old-side annotations of a rename by its old path'] = function()

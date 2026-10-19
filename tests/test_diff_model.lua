@@ -30,7 +30,7 @@ end
 ---@param change { path: string, orig_path?: string, side: IterSide, code: string }
 ---@return IterFileDiff
 local function load(change)
-    local source, err = git.file_diff(repo, change)
+    local source, err = git.file_diff(repo, change, {})
     eq(err, nil)
 
     return model.build(change, assert(source))

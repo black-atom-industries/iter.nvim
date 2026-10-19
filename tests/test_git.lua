@@ -483,37 +483,25 @@ end
 T['file_diff()'] = new_set()
 
 ---@param args string[]
----@param fn fun()
-local function with_diff_args(args, fn)
-    local iter = require('iter')
-    local before = iter.config
-    iter.config = require('iter.config').resolve({ diff = { args = args } })
-    local ok, err = pcall(fn)
-    iter.config = before
-    assert(ok, err)
-end
-
----@param args string[]
 ---@return string[] hunk headers
 local function hunk_headers(args)
     local headers = {}
+    local source = git.file_diff(
+        repo,
+        { path = 'long.txt', side = 'unstaged', code = 'M' },
+        args
+    )
 
-    with_diff_args(args, function()
-        local source = git.file_diff(
-            repo,
-            { path = 'long.txt', side = 'unstaged', code = 'M' }
-        )
-        for _, line in ipairs(source.raw) do
-            if vim.startswith(line, '@@') then
-                table.insert(headers, line:match('^@@ .- @@'))
-            end
+    for _, line in ipairs(source.raw) do
+        if vim.startswith(line, '@@') then
+            table.insert(headers, line:match('^@@ .- @@'))
         end
-    end)
+    end
 
     return headers
 end
 
-T['file_diff()']['passes diff.args to git diff'] = function()
+T['file_diff()']['passes args to git diff'] = function()
     local lines = {}
     for i = 1, 30 do
         lines[i] = 'l' .. i
@@ -530,6 +518,40 @@ T['file_diff()']['passes diff.args to git diff'] = function()
     eq(hunk_headers({ '--histogram', '-U1' }), {
         '@@ -2,3 +2,3 @@',
         '@@ -11,3 +11,3 @@',
+    })
+end
+
+T['run()']['checks for git once and reports a missing one once'] = function()
+    local original_executable = vim.fn.executable
+    local original_notify = vim.notify
+    local checks, notes = 0, {}
+
+    package.loaded['iter.git'] = nil
+    local fresh = require('iter.git')
+
+    local ok, err = pcall(function()
+        ---@diagnostic disable-next-line: duplicate-set-field
+        vim.fn.executable = function()
+            checks = checks + 1
+            return 0
+        end
+        ---@diagnostic disable-next-line: duplicate-set-field
+        vim.notify = function(message, level)
+            table.insert(notes, { message, level })
+        end
+
+        eq(fresh.run({ 'status' }, { cwd = repo }).exit_code, 127)
+        eq(fresh.root(), '')
+    end)
+
+    vim.fn.executable = original_executable
+    vim.notify = original_notify
+    package.loaded['iter.git'] = git
+    assert(ok, err)
+
+    eq(checks, 1)
+    eq(notes, {
+        { '[iter] `git` is not executable', vim.log.levels.ERROR },
     })
 end
 

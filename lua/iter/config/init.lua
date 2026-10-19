@@ -1,17 +1,3 @@
----@class IterResolvedOptions
----@field drawer { height: number, zindex: integer, breakpoint: integer, commits: integer }
----@field diff { expand_step: integer, syntax_max_lines: integer, word_diff: boolean, args: string[] }
----@field export { intro: string }
----@field refresh { poll_ms: integer }
----@field confirm { discard: boolean, ignore: boolean }
----@field icons { annotation: string }
----@field debug boolean
-
----@class IterConfig
----@field options IterResolvedOptions
----@field keys table<IterView, table<string, string[]>> Empty list: unmapped
----@field debug boolean Whether to write debug-level logs to the iter log file
-
 local defaults = require('iter.config.defaults')
 
 local M = {}

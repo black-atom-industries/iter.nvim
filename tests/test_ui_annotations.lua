@@ -357,6 +357,29 @@ T['column']['lists every annotation in drawer order, review last'] = function()
     eq(child.v.errmsg, '')
 end
 
+T['column']['a file gone from the worktree outdates its annotations everywhere'] = function()
+    os.remove(vim.fs.joinpath(repo, 'n.txt'))
+    open_review()
+    wait_diff('unstaged n.txt')
+
+    eq(column()[1], 'Annotations (8) · 2 outdated')
+    eq(column()[3], 'n.txt:3     Rename the variable')
+    helpers.wait_until(child, R .. [[.drawer.view.marks[1] ~= nil]])
+    eq(
+        mark_groups()['outdated · Rename the variable'],
+        'IterDiffAnnotationOutdated'
+    )
+
+    local text = child.lua_get([[require('iter.export').text(
+        require('iter.store').load(vim.fn.getcwd()).annotations,
+        {
+            intro = '',
+            lines_of = require('iter.annotations.list').reader(vim.fn.getcwd()),
+        }
+    )]])
+    eq(text:find('n.txt:3 (outdated)', 1, true) ~= nil, true)
+end
+
 T['column']['dims outdated rows and titles with the outdated count'] = function()
     open_review()
 

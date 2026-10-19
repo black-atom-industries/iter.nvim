@@ -201,6 +201,25 @@ T['float']['opens in insert mode above the drawer with the key hint'] = function
     eq(iter_ctrl_t_maps(), 1)
 end
 
+T['float']['follows the pane when the editor is resized'] = function()
+    start_annotation('')
+
+    local config = [[(function()
+        local c = vim.api.nvim_win_get_config(]] .. E .. [[.win())
+        local pane = vim.api.nvim_win_get_width(]] .. R .. [[.diff_win)
+        return { c.width, pane }
+    end)()]]
+    local before = child.lua_get(config)
+    eq(before[1], before[2] - 2)
+
+    child.o.columns = child.o.columns - 30
+    child.lua('vim.wait(20)')
+
+    local after = child.lua_get(config)
+    eq(after[1], after[2] - 2)
+    eq(after[1] < before[1], true)
+end
+
 T['float']['<C-s> saves in insert mode and closes the float'] = function()
     start_annotation('first')
     child.type_keys('<C-s>')

@@ -111,7 +111,7 @@ end
 ---@param index integer
 ---@return string[]
 local function hunk_patch(change, index)
-    local raw, err = git.file_diff_bytes(repo, change)
+    local raw, err = git.file_diff_bytes(repo, change, {})
     eq(err, nil)
 
     return assert(patch.hunk(assert(raw), index))
@@ -399,7 +399,7 @@ T['apply']['the rendered diff text of a large CRLF file has no CR left'] = funct
 
     write('big.txt', join(lines, '\r\n'))
     local change = { path = 'big.txt', side = 'unstaged', code = '?' }
-    local source = assert(git.file_diff(repo, change))
+    local source = assert(git.file_diff(repo, change, {}))
 
     local with_cr = vim.tbl_filter(function(line)
         return line:find('\r', 1, true) ~= nil
@@ -410,7 +410,7 @@ T['apply']['the rendered diff text of a large CRLF file has no CR left'] = funct
     eq(
         vim.deep_equal(
             source.raw,
-            patch.text(assert(git.file_diff_bytes(repo, change)))
+            patch.text(assert(git.file_diff_bytes(repo, change, {})))
         ),
         true
     )
@@ -541,7 +541,7 @@ end
 ---@param kind 'stage'|'unstage'
 ---@return string[]?
 local function lines_patch(change, selection, kind)
-    local raw, err = git.file_diff_bytes(repo, change)
+    local raw, err = git.file_diff_bytes(repo, change, {})
     eq(err, nil)
 
     return patch.lines(assert(raw), selection, kind)

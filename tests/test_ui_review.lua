@@ -1330,7 +1330,7 @@ T['hunks']['a hunk whose file changed after the render warns and changes nothing
         end)()]])
 end
 
-T['hunks']['a hunk git apply refuses warns and changes nothing'] = function()
+T['hunks']['a hunk git apply refuses reports and changes nothing'] = function()
     open_review()
     wait_diff('unstaged a.txt')
     cursor_on('a3 changed')
@@ -1343,7 +1343,7 @@ T['hunks']['a hunk git apply refuses warns and changes nothing'] = function()
     local notes = child.lua_get('_G.notes')
     eq(#notes, 1)
     eq(vim.startswith(notes[1][1], '[iter] Cannot stage the hunk: '), true)
-    eq(notes[1][2], vim.log.levels.WARN)
+    eq(notes[1][2], vim.log.levels.ERROR)
 end
 
 T['hunks']['s stages one hunk of a CRLF file byte for byte'] = function()

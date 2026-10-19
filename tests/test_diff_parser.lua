@@ -1,4 +1,4 @@
-local parser = require('iter.ui.diff.parser')
+local parser = require('iter.diff.parser')
 
 local new_set = MiniTest.new_set
 local eq = MiniTest.expect.equality

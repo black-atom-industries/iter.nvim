@@ -2,6 +2,7 @@ local anchor = require('iter.annotations.anchor')
 local document = require('iter.diff.document')
 local highlight = require('iter.highlight')
 local keymap = require('iter.keymap')
+local list = require('iter.annotations.list')
 local marks = require('iter.annotations.marks')
 local model = require('iter.diff.model')
 local syntax = require('iter.diff.syntax')
@@ -10,11 +11,12 @@ local words = require('iter.diff.words')
 
 ---@class IterDiffViewOptions
 ---@field win integer window the view borrows
----@field keys? table<string, string[]> resolved `keys.diff`
+---@field keys table<string, string[]> resolved `keys.diff`
 ---@field handlers? table<string, fun()> diff actions; an `expand` here replaces the view's own
----@field expand_step? integer
----@field syntax_max_lines? integer
----@field word_diff? boolean
+---@field expand_step integer hidden context lines revealed per expand
+---@field syntax_max_lines integer versions longer than this get no syntax
+---@field word_diff boolean
+---@field icon string shown before each annotation, '' for none
 ---@field name? string buffer name, see `set_name`
 ---@field bufhidden? string 'bufhidden' of the buffer, `wipe` by default
 ---@field on_cursor? fun() after the cursor moved in a window of the view while it is the current one
@@ -46,12 +48,14 @@ local words = require('iter.diff.words')
 ---@field expand_step integer
 ---@field syntax_max_lines integer versions longer than this get no syntax
 ---@field word_diff boolean
+---@field icon string shown before each annotation
 ---@field generation integer bumped by every render
 ---@field decorated integer equals `generation` once the syntax requested for it is applied
 ---@field pending integer syntax requests of this generation not answered yet
 ---@field paired table<integer, true> sections whose words this render paired
 ---@field prev_buf? integer buffer the window showed before the view
 ---@field annotations IterAnnotation[] stored annotations the view places on its files
+---@field root? string repository of the annotations, whose versions decide outdated
 ---@field marks IterAnnotationMark[] annotations placed on the rows, by buffer line
 ---@field marks_drawn table<integer, true> lines whose annotations are drawn
 ---@field focus? string id of the annotation drawn as focused
@@ -138,11 +142,12 @@ end
 function View.new(opts)
     vim.validate('opts', opts, 'table')
     vim.validate('opts.win', opts.win, 'number')
-    vim.validate('opts.keys', opts.keys, 'table', true)
+    vim.validate('opts.keys', opts.keys, 'table')
     vim.validate('opts.handlers', opts.handlers, 'table', true)
-    vim.validate('opts.expand_step', opts.expand_step, 'number', true)
-    vim.validate('opts.syntax_max_lines', opts.syntax_max_lines, 'number', true)
-    vim.validate('opts.word_diff', opts.word_diff, 'boolean', true)
+    vim.validate('opts.expand_step', opts.expand_step, 'number')
+    vim.validate('opts.syntax_max_lines', opts.syntax_max_lines, 'number')
+    vim.validate('opts.word_diff', opts.word_diff, 'boolean')
+    vim.validate('opts.icon', opts.icon, 'string')
     vim.validate('opts.name', opts.name, 'string', true)
     vim.validate('opts.bufhidden', opts.bufhidden, 'string', true)
     vim.validate('opts.on_cursor', opts.on_cursor, 'function', true)
@@ -153,8 +158,6 @@ function View.new(opts)
         'function',
         true
     )
-
-    local config = require('iter').config
 
     highlight.setup()
 
@@ -167,11 +170,11 @@ function View.new(opts)
         rows = {},
         headers = {},
         width = 1,
-        keys = opts.keys or config.keys.diff,
-        expand_step = opts.expand_step or config.options.diff.expand_step,
-        syntax_max_lines = opts.syntax_max_lines
-            or config.options.diff.syntax_max_lines,
+        keys = opts.keys,
+        expand_step = opts.expand_step,
+        syntax_max_lines = opts.syntax_max_lines,
         word_diff = opts.word_diff,
+        icon = opts.icon,
         generation = 0,
         decorated = 0,
         pending = 0,
@@ -185,10 +188,6 @@ function View.new(opts)
         on_layout = opts.on_layout,
         on_pane_replaced = opts.on_pane_replaced,
     }, View)
-
-    if self.word_diff == nil then
-        self.word_diff = config.options.diff.word_diff
-    end
 
     vim.bo[self.buf].bufhidden = opts.bufhidden or 'wipe'
     vim.bo[self.buf].modifiable = false
@@ -1055,6 +1054,7 @@ end
 --- a collapsed section hidden, on its header row.
 function View:place_marks()
     local doc = self.document
+    local lines_of = self.root and list.reader(self.root)
 
     self.marks = {}
     self.marks_drawn = {}
@@ -1071,7 +1071,7 @@ function View:place_marks()
                 marks.place(
                     section.file,
                     self.annotations,
-                    { new_follows = new_follows }
+                    { new_follows = new_follows, lines_of = lines_of or nil }
                 )
             )
         do
@@ -1093,7 +1093,7 @@ end
 ---@param last integer
 function View:draw_marks(first, last)
     local panes = self:panes()
-    local icon = require('iter').config.options.icons.annotation
+    local icon = self.icon
     local by_row, order = {}, {}
 
     for _, pane in ipairs(panes) do
@@ -1196,10 +1196,13 @@ function View:set_focus(id)
     end
 end
 
---- Show `annotations`, the stored ones of the repository, on the files.
+--- Show `annotations`, the stored ones of the repository at `root`, on the
+--- files.
 ---@param annotations IterAnnotation[]
-function View:set_annotations(annotations)
+---@param root? string
+function View:set_annotations(annotations, root)
     self.annotations = annotations
+    self.root = root
 
     if vim.api.nvim_buf_is_valid(self.buf) then
         self:render_marks()

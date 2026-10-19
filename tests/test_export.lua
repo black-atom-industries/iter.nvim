@@ -90,13 +90,16 @@ local FIXTURE = {
 
 ---@param annotations table[]
 ---@param order? string[]
+---@param versions? table<string, table<string, string[]>> lines by version, then path; `FILES` as the worktree by default
 ---@return string
-local function text(annotations, order)
+local function text(annotations, order, versions)
+    versions = versions or { worktree = FILES }
+
     return export.text(annotations, {
         intro = INTRO,
         order = order,
-        lines_of = function(path)
-            return FILES[path]
+        lines_of = function(path, version)
+            return (versions[version] or {})[path]
         end,
     })
 end
@@ -148,6 +151,35 @@ T['text']['lists a fixture store in exact text'] = function()
             '   but tidy up',
         }, '\n')
     )
+end
+
+T['text']['resolves an old-side annotation against its base'] = function()
+    local annotations = {
+        {
+            id = 'moved',
+            scope = 'line',
+            body = 'Moved',
+            anchor = anchor('a.lua', 9, 9, { 'old line' }, 'old'),
+            outdated = true,
+        },
+        {
+            id = 'gone',
+            scope = 'line',
+            body = 'Gone',
+            anchor = anchor('b.lua', 3, 3, { 'was' }, 'old'),
+            outdated = false,
+        },
+    }
+    local out = text(annotations, nil, {
+        worktree = FILES,
+        HEAD = {
+            ['a.lua'] = { 'one', 'old line' },
+            ['b.lua'] = { 'one', 'two', 'three' },
+        },
+    })
+
+    eq(out:find('\n1. a.lua:2 (old side)\n', 1, true) ~= nil, true)
+    eq(out:find('\n2. b.lua:3 (old side, outdated)\n', 1, true) ~= nil, true)
 end
 
 T['text']['has no carriage returns'] = function()

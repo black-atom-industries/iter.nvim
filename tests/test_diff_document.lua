@@ -239,12 +239,12 @@ end
 T['split_lines()'] = new_set()
 
 T['split_lines()']['puts paired rows on one line, an unpaired one beside a filler'] = function()
-    local file = changed(
+    local diff = changed(
         { 'local a = 1', 'local b = 1' },
         { 'local a = 2', 'local b = 2', 'c = 4' }
     )
 
-    eq(document.split_lines(file.rows), {
+    eq(document.split_lines(diff.rows), {
         { old = 1, new = 1 },
         { old = 2, new = 2 },
         { old = 3, new = 3 },
@@ -256,9 +256,9 @@ T['split_lines()']['puts paired rows on one line, an unpaired one beside a fille
 end
 
 T['split_lines()']['an add paired after unpaired adds keeps row order'] = function()
-    local file = changed({ 'local b = 2' }, { 'print("x")', 'local b = 3' })
+    local diff = changed({ 'local b = 2' }, { 'print("x")', 'local b = 3' })
 
-    eq(document.split_lines(file.rows), {
+    eq(document.split_lines(diff.rows), {
         { old = 1, new = 1 },
         { old = 2, new = 2 },
         { old = 3, new = 3 },
@@ -339,18 +339,18 @@ T['build() split']['at() on a filler gives the row of the other side'] = functio
 end
 
 T['build() split']['a deleted line with word emphasis faces its pair'] = function()
-    local file = changed(
+    local diff = changed(
         { 'print("start")', 'local b = 2', 'local c = 5' },
         { 'local b = 3', 'return b', 'local c = 6' }
     )
 
-    require('iter.diff.words').annotate(file.rows)
+    require('iter.diff.words').annotate(diff.rows)
 
-    local doc = document.build({ { file = file } }, 'split')
+    local doc = document.build({ { file = diff } }, 'split')
     local faced = 0
 
     for _, line in ipairs(doc.lines) do
-        local del = line.old and file.rows[line.old]
+        local del = line.old and diff.rows[line.old]
 
         if del and del.kind == 'del' and del.pair ~= nil then
             eq(line.new, del.pair)
