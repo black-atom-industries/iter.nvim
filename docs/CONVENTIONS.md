@@ -78,6 +78,16 @@ the review straight to an agent pane.
   and spacer sizing as the drawer's extras (`IterDrawerExtras`). Columns the extras add come after the file columns;
   their items carry a `key`, and `Drawer:selected()` returns files only.
 - Viewed marks, annotation counts and the Annotations column show only in the review drawer.
+- iter's buffers carry `iter://` addresses as names, without buffer numbers (`iter.uri`): `BufReadCmd` on
+  `iter://*` routes a buffer `:edit` made to what its name addresses and wipes it, after giving its window the previous
+  buffer back. Each of iter's buffers is registered with the windows it belongs in and a redraw: `:edit` in one of
+  them redraws it, and one shown in another window goes back to that window's previous buffer and routes too.
+  iter's buffers stay unlisted, and a window is never handed one of them back. Addresses route only while the open
+  drawer or review is of the current directory's repository. `util.name_buf` wipes another buffer of the new name
+  unless it is a loaded buffer of iter's own (then the name stays with it), and wipes the buffer of the old name that
+  `nvim_buf_set_name` leaves behind. `SessionLoadPost` wipes `iter://` buffers that aren't iter's own.
+- The review tab carries its label in the tab variable `iter_label`; `iter.tabline` renders it for users who set
+  'tabline' to it.
 - The ahead and behind counts with the upstream's name, and the Recent commits section, show only in the status
   drawer. They count against the upstream as last fetched; iter never fetches. A poll reads HEAD and the upstream with
   one `git rev-parse`, and reads the counts (`rev-list --left-right`) and the commits (`log`) again only when either

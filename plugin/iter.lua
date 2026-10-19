@@ -30,3 +30,24 @@ end, {
     end,
     force = true,
 })
+
+local group = vim.api.nvim_create_augroup('iter.uri', { clear = true })
+
+vim.api.nvim_create_autocmd('BufReadCmd', {
+    group = group,
+    pattern = 'iter://*',
+    callback = function(args)
+        require('iter.uri').read(args.buf)
+    end,
+})
+vim.api.nvim_create_autocmd('SessionLoadPost', {
+    group = group,
+    callback = function()
+        require('iter.uri').clean()
+    end,
+})
+vim.api.nvim_create_autocmd('FileReadCmd', {
+    group = group,
+    pattern = 'iter://*',
+    callback = function() end,
+})

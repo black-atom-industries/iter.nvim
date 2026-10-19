@@ -14,7 +14,7 @@
 13| 22  22   a22                                                                   
 14| 23  23   a23                                                                   
 15| 24  24   a24                                                                   
-16|iter://review-diff [-]                                                          
+16|iter://review/a.txt [-]                                                         
 17| HEAD main                                                               4 files
 18| Unstaged (4)                                       │ Annotations (0)           
 19| M ○ a.txt                                          │ viewed □□□□□□□□ 0 of 4    

@@ -38,16 +38,50 @@ function M.stat_key(path)
     )
 end
 
---- Name `buf` `name`, or `name/<buf>` when another buffer has that name.
---- The name only labels the buffer; nothing writes it.
+--- Name `buf` `name`. Another buffer of that name that is unloaded or not
+--- one of iter's own is wiped first; one of iter's own keeps it, and `buf`
+--- its own name. A rename leaves no buffer of the old name behind, though
+--- `nvim_buf_set_name` makes one.
 ---@param buf integer
 ---@param name string
 function M.name_buf(buf, name)
-    if vim.fn.bufexists(name) == 1 then
-        name = name .. '/' .. buf
+    local old = vim.api.nvim_buf_get_name(buf)
+
+    if old == name then
+        return
     end
 
+    local other = -1
+
+    for _, b in ipairs(vim.api.nvim_list_bufs()) do
+        if b ~= buf and vim.api.nvim_buf_get_name(b) == name then
+            other = b
+        end
+    end
+
+    if other > 0 and other ~= buf then
+        if
+            vim.api.nvim_buf_is_loaded(other)
+            and require('iter.uri').owned(other)
+        then
+            return
+        end
+
+        vim.api.nvim_buf_delete(other, { force = true })
+    end
+
+    local last = vim.fn.bufnr('$')
+
     vim.api.nvim_buf_set_name(buf, name)
+
+    for alt = last + 1, vim.fn.bufnr('$') do
+        if
+            vim.api.nvim_buf_is_valid(alt)
+            and vim.api.nvim_buf_get_name(alt) == old
+        then
+            vim.api.nvim_buf_delete(alt, { force = true })
+        end
+    end
 end
 
 ---@param message string

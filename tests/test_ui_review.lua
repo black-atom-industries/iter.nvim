@@ -293,7 +293,7 @@ T['open']['the tab label and the statuslines read plainly'] = function()
     -- The default tabline names the current window's buffer, shortened.
     eq(screen_row(1):find(' i//review ', 1, true) ~= nil, true)
     child.type_keys('<CR>')
-    eq(screen_row(1):find(' i//review-diff ', 1, true) ~= nil, true)
+    eq(screen_row(1):find(' i//r/a.txt ', 1, true) ~= nil, true)
 
     local spacer = child.lua_get(R .. '.spacer_win')
     local status_row = child.fn.win_screenpos(spacer)[1]
@@ -303,7 +303,7 @@ T['open']['the tab label and the statuslines read plainly'] = function()
     local diff = child.lua_get(R .. '.diff_win')
     local diff_status = child.fn.win_screenpos(diff)[1]
         + child.api.nvim_win_get_height(diff)
-    eq(vim.startswith(screen_row(diff_status), 'iter://review-diff'), true)
+    eq(vim.startswith(screen_row(diff_status), 'iter://review/a.txt'), true)
 end
 
 T['open']['opening twice gives one tab'] = function()
@@ -759,7 +759,7 @@ T['goto']['the spacer and the view buffer are hermetic'] = function()
         child.lua_get(
             [[vim.api.nvim_buf_get_name(]] .. R .. [[.drawer.view.buf)]]
         ),
-        'iter://review-diff'
+        'iter://review/a.txt'
     )
     eq(child.lua_get('vim.bo[' .. R .. '.drawer.view.buf].buftype'), 'nofile')
 end
@@ -2279,6 +2279,656 @@ T['flow']['status, review, annotation, annotations column, yank and close leave 
     )
     eq(child.lua_get('_G.notes'), {})
     eq(child.v.errmsg, '')
+end
+
+T['uri'] = new_set()
+
+--- `:edit` the URI `name`, escaped as a command line needs it.
+---@param name string
+local function edit_uri(name)
+    child.cmd('edit ' .. vim.fn.fnameescape(name))
+end
+
+--- Wait until the review is open and focused in its tab.
+local function wait_routed()
+    helpers.wait_until(
+        child,
+        R
+            .. [[ ~= nil and ]]
+            .. R
+            .. [[.drawer.win ~= nil and vim.api.nvim_get_current_tabpage() == ]]
+            .. R
+            .. [[.tab]]
+    )
+end
+
+--- Names of the buffers whose name starts with `iter://`, sorted.
+---@return string[]
+local function iter_names()
+    return child.lua_get([[(function()
+        local names = {}
+        for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+            local name = vim.api.nvim_buf_get_name(buf)
+            if vim.startswith(name, 'iter://') then
+                table.insert(names, name)
+            end
+        end
+        table.sort(names)
+        return names
+    end)()]])
+end
+
+T['uri'][':edit iter://review opens the tab and wipes its own buffer'] = function()
+    child.cmd('edit a.txt')
+    local origin = child.api.nvim_get_current_tabpage()
+
+    edit_uri('iter://review')
+    wait_routed()
+    wait_diff('unstaged a.txt')
+
+    eq(#child.api.nvim_list_tabpages(), 2)
+    eq(
+        child.lua_get(R .. '.drawer.win == vim.api.nvim_get_current_win()'),
+        true
+    )
+    eq(
+        child.lua_get(
+            [[vim.fs.basename(vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(vim.api.nvim_tabpage_get_win(]]
+                .. origin
+                .. [[))))]]
+        ),
+        'a.txt'
+    )
+    eq(iter_names(), {
+        'iter://review',
+        'iter://review#annotations',
+        'iter://review/a.txt',
+    })
+    eq(child.lua_get('_G.notes'), {})
+    eq(child.v.errmsg, '')
+end
+
+T['uri'][':edit iter://review/<path>#L<n> puts the cursor on that line'] = function()
+    edit_uri('iter://review/a.txt#L3')
+    wait_routed()
+    wait_diff('unstaged a.txt')
+
+    eq(child.api.nvim_get_current_win(), child.lua_get(R .. '.diff_win'))
+    eq(cursor_row(), 'add a3 changed')
+    eq(child.lua_get(R .. '.drawer.view:row().new'), 3)
+
+    -- Unstaged before Staged: b.txt's worktree line 5 is `staged`.
+    edit_uri('iter://review/b.txt#L5')
+    wait_diff('unstaged b.txt')
+    eq(selected(), 'unstaged b.txt')
+    eq(cursor_row(), 'context staged')
+    eq(child.lua_get(R .. '.drawer.view:row().new'), 5)
+    eq(#child.api.nvim_list_tabpages(), 2)
+    eq(child.lua_get('_G.notes'), {})
+end
+
+T['uri']['a line in a collapsed file shows the file whole'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.lua(R .. ":toggle_viewed('a.txt')")
+    child.lua(R .. ':toggle_mode()')
+    helpers.wait_until(
+        child,
+        R .. '.drawer.view.document.sections[1].collapsed == true'
+    )
+
+    edit_uri('iter://review/a.txt#L25')
+    helpers.wait_until(child, R .. '.drawer.view:row().new == 25')
+    eq(cursor_row(), 'add a25 changed')
+    eq(
+        child.lua_get(R .. '.drawer.view.document.sections[1].collapsed'),
+        vim.NIL
+    )
+end
+
+T['uri'][':edit from another tab switches to the review'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.cmd('tabnew')
+    child.cmd('edit c.txt')
+
+    local other = child.api.nvim_get_current_tabpage()
+    local bufs = #child.api.nvim_list_bufs()
+
+    -- The drawer's buffer has this name: the window gets c.txt back.
+    edit_uri('iter://review')
+    wait_routed()
+    eq(
+        child.lua_get(
+            [[vim.fs.basename(vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(vim.api.nvim_tabpage_get_win(]]
+                .. other
+                .. [[))))]]
+        ),
+        'c.txt'
+    )
+
+    -- So does the diff pane's.
+    child.api.nvim_set_current_tabpage(other)
+    edit_uri('iter://review/a.txt#L25')
+    wait_routed()
+    eq(child.api.nvim_get_current_win(), child.lua_get(R .. '.diff_win'))
+    eq(cursor_row(), 'add a25 changed')
+
+    child.api.nvim_set_current_tabpage(other)
+    edit_uri('iter://review/a.txt')
+    wait_routed()
+    eq(
+        child.lua_get(
+            [[vim.fs.basename(vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(vim.api.nvim_tabpage_get_win(]]
+                .. other
+                .. [[))))]]
+        ),
+        'c.txt'
+    )
+
+    eq(#child.api.nvim_list_tabpages(), 3)
+    eq(#child.api.nvim_list_bufs(), bufs)
+    eq(child.lua_get('_G.notes'), {})
+    eq(child.v.errmsg, '')
+end
+
+T['uri'][':edit inside the review tab keeps its panes'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+
+    -- From the diff pane.
+    cursor_on('a3 changed')
+    edit_uri('iter://review/b.txt#L1')
+    wait_diff('unstaged b.txt')
+    eq(child.api.nvim_get_current_win(), child.lua_get(R .. '.diff_win'))
+    eq(cursor_row(), 'add top1')
+
+    -- From the drawer.
+    child.lua('vim.api.nvim_set_current_win(' .. R .. '.drawer.win)')
+    edit_uri('iter://review/a.txt#L25')
+    wait_diff('unstaged a.txt')
+    eq(cursor_row(), 'add a25 changed')
+    eq(
+        child.lua_get(
+            [[vim.api.nvim_win_get_buf(]]
+                .. R
+                .. [[.drawer.win) == ]]
+                .. R
+                .. [[.drawer.buf]]
+        ),
+        true
+    )
+    eq(
+        child.lua_get(
+            [[vim.api.nvim_win_get_buf(]]
+                .. R
+                .. [[.diff_win) == ]]
+                .. R
+                .. [[.drawer.view.buf]]
+        ),
+        true
+    )
+    eq(#child.api.nvim_list_tabpages(), 2)
+    eq(child.lua_get('_G.notes'), {})
+    eq(child.v.errmsg, '')
+end
+
+T['uri'][':edit in an iter window draws it again'] = function()
+    child.o.columns = 120
+    open_review()
+    wait_diff('unstaged a.txt')
+
+    local drawer = child.lua_get(
+        'vim.api.nvim_buf_get_lines(' .. R .. '.drawer.buf, 0, -1, false)'
+    )
+    local diff = child.lua_get(
+        'vim.api.nvim_buf_get_lines(' .. R .. '.drawer.view.buf, 0, -1, false)'
+    )
+
+    child.cmd('edit')
+    eq(
+        child.lua_get(
+            'vim.api.nvim_buf_get_lines(' .. R .. '.drawer.buf, 0, -1, false)'
+        ),
+        drawer
+    )
+    eq(selected(), 'unstaged a.txt')
+
+    cursor_on('a3 changed')
+    child.cmd('edit')
+    eq(
+        child.lua_get(
+            'vim.api.nvim_buf_get_lines('
+                .. R
+                .. '.drawer.view.buf, 0, -1, false)'
+        ),
+        diff
+    )
+    eq(child.api.nvim_get_current_win(), child.lua_get(R .. '.diff_win'))
+
+    local side = R .. '.drawer.side_buf'
+    local annotations = child.lua_get(
+        'vim.api.nvim_buf_get_lines(' .. side .. ', 0, -1, false)'
+    )
+
+    child.lua('vim.api.nvim_set_current_win(' .. R .. '.drawer.win)')
+    child.type_keys('l')
+    child.cmd('edit')
+    eq(
+        child.lua_get(
+            'vim.api.nvim_buf_get_lines(' .. side .. ', 0, -1, false)'
+        ),
+        annotations
+    )
+
+    -- The draft keeps its unsaved text.
+    cursor_on('a3 changed')
+    child.type_keys('a')
+    helpers.wait_until(child, [[require('iter.annotations.editor').is_shown()]])
+    child.type_keys('kept', '<Esc>')
+    child.cmd('edit!')
+    eq(child.lua_get('vim.api.nvim_buf_get_lines(0, 0, -1, false)'), { 'kept' })
+    eq(child.lua_get('vim.bo.modified'), true)
+
+    eq(#child.api.nvim_list_tabpages(), 2)
+    eq(child.v.errmsg, '')
+end
+
+T['uri'][':edit iter://status opens the status drawer'] = function()
+    child.cmd('edit a.txt')
+    edit_uri('iter://status')
+    helpers.wait_until(
+        child,
+        [[require('iter').drawer ~= nil and require('iter').drawer.win ~= nil]]
+    )
+
+    eq(
+        child.lua_get([[vim.api.nvim_buf_get_name(require('iter').drawer.buf)]]),
+        'iter://status'
+    )
+    helpers.wait_until(child, [[require('iter').drawer.view.files[1] ~= nil]])
+    eq(
+        child.lua_get(
+            [[vim.api.nvim_buf_get_name(require('iter').drawer.view.buf)]]
+        ),
+        'iter://status/a.txt'
+    )
+    eq(#child.api.nvim_list_tabpages(), 1)
+    eq(
+        child.lua_get([[vim.fs.basename(vim.api.nvim_buf_get_name(
+            vim.api.nvim_win_get_buf(require('iter').drawer.pane)))]]),
+        'a.txt'
+    )
+    eq(child.v.errmsg, '')
+end
+
+T['uri'][':edit from the status drawer windows'] = function()
+    local function open_status()
+        child.cmd('Iter')
+        helpers.wait_until(
+            child,
+            [[require('iter').drawer ~= nil and require('iter').drawer.view.files[1] ~= nil]]
+        )
+        child.lua(
+            [[vim.api.nvim_set_current_win(require('iter').drawer.view.win)]]
+        )
+    end
+
+    local open =
+        [[require('iter').drawer ~= nil and require('iter').drawer:is_open()]]
+
+    child.cmd('edit a.txt')
+
+    -- The drawer's buffer and a new one each take the diff pane, which
+    -- closes the drawer; the address opens it again.
+    open_status()
+    edit_uri('iter://status')
+    helpers.wait_until(child, open)
+    eq(
+        child.lua_get(
+            [[vim.fs.basename(vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(require('iter').drawer.pane)))]]
+        ),
+        'a.txt'
+    )
+
+    child.lua([[require('iter').drawer:close()]])
+    open_status()
+    edit_uri('iter://status/b.txt')
+    helpers.wait_until(child, open)
+    helpers.wait_until(
+        child,
+        [[require('iter').drawer.view.files[1] ~= nil and require('iter').drawer.view.files[1].path == 'b.txt']]
+    )
+    eq(
+        child.lua_get(
+            [[vim.fs.basename(vim.api.nvim_buf_get_name(require('iter').drawer.view.prev_buf))]]
+        ),
+        'a.txt'
+    )
+
+    -- From the drawer's float to the review.
+    child.lua([[require('iter').drawer:focus()]])
+    edit_uri('iter://review/a.txt#L3')
+    wait_routed()
+    helpers.wait_until(child, R .. '.drawer.view:row().new == 3')
+    eq(cursor_row(), 'add a3 changed')
+    eq(child.lua_get([[require('iter').drawer]]), vim.NIL)
+    eq(child.v.errmsg, '')
+end
+
+T['uri']['#all and #annotations pick the view, all/ and annotations/ are files'] = function()
+    helpers.write_file(vim.fs.joinpath(repo, 'all'), { 'x' })
+    helpers.write_file(vim.fs.joinpath(repo, 'annotations'), { 'y' })
+    child.o.columns = 120
+
+    edit_uri('iter://review/all')
+    wait_routed()
+    wait_diff('unstaged all')
+    edit_uri('iter://review/annotations')
+    wait_diff('unstaged annotations')
+    eq(child.lua_get(R .. '.drawer.all_files'), false)
+
+    edit_uri('iter://review#all')
+    helpers.wait_until(child, R .. '.drawer.all_files')
+    edit_uri('iter://review#annotations')
+    helpers.wait_until(child, R .. [[.drawer.column == 'annotations']])
+    eq(child.lua_get('_G.notes'), {})
+    eq(child.v.errmsg, '')
+end
+
+T['uri']['open_uri() routes without escaping'] = function()
+    child.cmd('edit a.txt')
+    child.lua([[require('iter').open_uri('iter://review/a.txt#L25')]])
+    wait_routed()
+    helpers.wait_until(child, R .. '.drawer.view:row().new == 25')
+    eq(cursor_row(), 'add a25 changed')
+    eq(child.lua_get('_G.notes'), {})
+end
+
+T['uri'][':edit from the split left pane'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    cursor_on('a3 changed')
+    child.type_keys('|')
+    helpers.wait_until(child, R .. '.drawer.view.old ~= nil')
+    child.lua('vim.api.nvim_set_current_win(' .. R .. '.drawer.view.old.win)')
+
+    edit_uri('iter://review/b.txt')
+    wait_diff('unstaged b.txt')
+    child.lua('vim.wait(100)')
+
+    eq(
+        child.fn.execute('messages'):find('Invalid buffer', 1, true) ~= nil,
+        false
+    )
+    eq(#child.api.nvim_list_tabpages(), 2)
+    eq(child.lua_get('_G.notes'), {})
+    eq(child.v.errmsg, '')
+end
+
+--- Names of the listed buffers.
+---@return string[]
+local function listed()
+    return child.lua_get([[vim.tbl_map(function(info)
+        return info.name
+    end, vim.fn.getbufinfo({ buflisted = 1 }))]])
+end
+
+T['uri'][':edit from the status drawer float'] = function()
+    child.cmd('edit a.txt')
+    child.cmd('Iter')
+    helpers.wait_until(
+        child,
+        [[require('iter').drawer ~= nil and require('iter').drawer.view.files[1] ~= nil]]
+    )
+
+    local open =
+        [[require('iter').drawer ~= nil and require('iter').drawer:is_open()]]
+
+    edit_uri('iter://status/b.txt')
+    helpers.wait_until(
+        child,
+        open
+            .. [[ and require('iter').drawer.view.files[1] ~= nil and require('iter').drawer.view.files[1].path == 'b.txt']]
+    )
+
+    edit_uri('iter://status/nope.txt')
+    helpers.wait_until(child, [[#_G.notes == 1]])
+    helpers.wait_until(child, open)
+    eq(child.lua_get('_G.notes'), {
+        { '[iter] nope.txt is not in the changes', vim.log.levels.WARN },
+    })
+
+    edit_uri('iter://bogus')
+    helpers.wait_until(child, [[#_G.notes == 2]])
+    child.lua('vim.wait(100)')
+
+    eq(
+        child.fn.execute('messages'):find('Invalid buffer', 1, true) ~= nil,
+        false
+    )
+    eq(child.lua_get(open), false)
+    eq(vim.tbl_map(vim.fs.basename, listed()), { 'a.txt' })
+    eq(child.v.errmsg, '')
+end
+
+T['uri']['iter buffers stay unlisted and out of :bnext'] = function()
+    child.cmd('edit c.txt')
+    child.cmd('edit a.txt')
+    open_review()
+    wait_diff('unstaged a.txt')
+
+    child.cmd('edit')
+    cursor_on('a3 changed')
+    child.cmd('edit')
+    child.cmd('tabedit iter://review')
+    wait_routed()
+
+    eq(vim.tbl_map(vim.fs.basename, listed()), { 'c.txt', 'a.txt' })
+
+    child.cmd('tabfirst')
+    for _ = 1, 4 do
+        child.cmd('bnext')
+        child.lua('vim.wait(50)')
+        eq(
+            child.lua_get(
+                [[vim.startswith(vim.api.nvim_buf_get_name(0), 'iter://')]]
+            ),
+            false
+        )
+    end
+    eq(child.v.errmsg, '')
+end
+
+T['uri']['stale buffers with iter names give way'] = function()
+    -- E37 leaves an unloaded buffer of the name.
+    child.o.hidden = false
+    child.cmd('edit a.txt')
+    child.lua([[vim.api.nvim_buf_set_lines(0, 0, 1, false, { 'mod' })]])
+    child.lua([[pcall(vim.cmd.edit, 'iter://review')]])
+    child.cmd('edit!')
+    open_review()
+    eq(
+        child.lua_get('vim.api.nvim_buf_get_name(' .. R .. '.drawer.buf)'),
+        'iter://review'
+    )
+
+    -- A restored session leaves no buffer of iter's.
+    cursor_on('a3 changed')
+    local session = vim.fn.tempname()
+    child.cmd('mksession! ' .. vim.fn.fnameescape(session))
+    eq(
+        table
+            .concat(vim.fn.readfile(session), '\n')
+            :find('iter://review/a.txt', 1, true) ~= nil,
+        true
+    )
+    child.stop()
+    helpers.start_child(child, repo)
+    stub_ui()
+    child.cmd('source ' .. vim.fn.fnameescape(session))
+    child.lua('vim.wait(100)')
+
+    eq(
+        vim.tbl_filter(function(name)
+            return vim.startswith(name, 'iter://')
+        end, listed()),
+        {}
+    )
+    eq(
+        child.lua_get([[#vim.tbl_filter(function(b)
+            return vim.startswith(vim.api.nvim_buf_get_name(b), 'iter://')
+        end, vim.api.nvim_list_bufs())]]),
+        0
+    )
+    vim.fn.delete(session)
+end
+
+T['uri']['an open review of another repository stays as it is'] = function()
+    local other = helpers.create_repo({ ['x.txt'] = { 'x' } })
+
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.cmd('tabfirst')
+    child.cmd('cd ' .. vim.fn.fnameescape(other))
+    local tab = child.api.nvim_get_current_tabpage()
+
+    edit_uri('iter://review/a.txt#L3')
+    helpers.wait_until(child, '#_G.notes == 1')
+
+    eq(child.api.nvim_get_current_tabpage(), tab)
+    eq(child.lua_get('_G.notes'), {
+        {
+            '[iter] The open review is of ' .. repo .. ', not of ' .. other,
+            vim.log.levels.WARN,
+        },
+    })
+    helpers.cleanup(other)
+end
+
+T['uri']['a path outside the changes opens the review and warns once'] = function()
+    edit_uri('iter://review/a1.txt#L2')
+    wait_routed()
+
+    eq(child.lua_get('_G.notes'), {
+        { '[iter] a1.txt is not in the changes', vim.log.levels.WARN },
+    })
+end
+
+T['uri']['buffer names are stable and carry no numbers'] = function()
+    child.o.columns = 120
+    open_review()
+    wait_diff('unstaged a.txt')
+    eq(iter_names(), {
+        'iter://review',
+        'iter://review#annotations',
+        'iter://review/a.txt',
+    })
+
+    local bufs = #child.api.nvim_list_bufs()
+
+    select_item('unstaged', 'b.txt')
+    wait_diff('unstaged b.txt')
+    select_item('staged', 'b.txt')
+    wait_diff('staged b.txt')
+    eq(iter_names(), {
+        'iter://review',
+        'iter://review#annotations',
+        'iter://review/b.txt',
+    })
+
+    child.lua('vim.api.nvim_set_current_win(' .. R .. '.diff_win)')
+    child.type_keys('m')
+    eq(
+        child.lua_get('vim.api.nvim_buf_get_name(' .. R .. '.drawer.view.buf)'),
+        'iter://review#all'
+    )
+    child.type_keys('|')
+    helpers.wait_until(child, R .. '.drawer.view.old ~= nil')
+    eq(
+        child.lua_get(
+            'vim.api.nvim_buf_get_name(' .. R .. '.drawer.view.old.buf)'
+        ),
+        'iter://review#all#old'
+    )
+    child.type_keys('-')
+    eq(#child.api.nvim_list_bufs(), bufs)
+
+    cursor_on('a3 changed')
+    child.type_keys('a')
+    helpers.wait_until(child, [[require('iter.annotations.editor').is_shown()]])
+    eq(
+        child.lua_get(
+            [[vim.api.nvim_buf_get_name(require('iter.annotations.editor').win() and vim.api.nvim_win_get_buf(require('iter.annotations.editor').win()))]]
+        ),
+        'iter://annotation'
+    )
+    eq(child.v.errmsg, '')
+end
+
+T['uri']['uri() names the diff cursor and opens there again'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    eq(child.lua_get([[require('iter').uri()]]), vim.NIL)
+
+    cursor_on('a3 changed')
+    eq(child.lua_get([[require('iter').uri()]]), 'iter://review/a.txt#L3')
+
+    -- A staged line carries its worktree line.
+    select_item('staged', 'b.txt')
+    wait_diff('staged b.txt')
+    cursor_on('b2')
+
+    local uri = child.lua_get([[require('iter').uri()]])
+
+    eq(uri, 'iter://review/b.txt#L4')
+
+    child.lua('vim.api.nvim_set_current_win(' .. R .. '.drawer.win)')
+    edit_uri(uri)
+    wait_diff('unstaged b.txt')
+    eq(cursor_row(), 'context b2')
+
+    -- A line in hidden context shows it.
+    edit_uri('iter://review/b.txt#L9')
+    helpers.wait_until(child, R .. '.drawer.view:row().new == 9')
+    eq(cursor_row(), 'context b6')
+end
+
+T['uri']['the tab label reads iter review'] = function()
+    child.o.columns = 120
+    child.o.showtabline = 2
+    child.o.tabline = [[%!v:lua.require'iter'.tabline()]]
+    open_review()
+    wait_diff('unstaged a.txt')
+
+    eq(child.lua_get('vim.t.iter_label'), 'iter review')
+
+    -- Two normal windows: the diff pane and the spacer.
+    eq(screen_row(1):find(' 2 iter review ', 1, true) ~= nil, true)
+    child.type_keys('<CR>')
+    eq(screen_row(1):find(' 2 iter review ', 1, true) ~= nil, true)
+    child.lua('vim.api.nvim_set_current_win(' .. R .. '.drawer.win)')
+    child.type_keys('l')
+    eq(
+        child.api.nvim_get_current_win(),
+        child.lua_get(R .. '.drawer.float.side_win')
+    )
+    eq(screen_row(1):find(' 2 iter review ', 1, true) ~= nil, true)
+
+    helpers.expect_screenshot(child, 'review-tabline')
+
+    -- The left pane of the split layout, where uri() names the new line a
+    -- deleted line lands on.
+    cursor_on('a3 changed')
+    child.type_keys('|')
+    helpers.wait_until(child, R .. '.drawer.view.old ~= nil')
+    child.lua([[
+        local old = require('iter').current_review.drawer.view.old
+        vim.api.nvim_set_current_win(old.win)
+        vim.fn.search('^a3$')
+    ]])
+    eq(screen_row(1):find(' 3 iter review ', 1, true) ~= nil, true)
+    eq(child.lua_get([[require('iter').uri()]]), 'iter://review/a.txt#L3')
 end
 
 return T

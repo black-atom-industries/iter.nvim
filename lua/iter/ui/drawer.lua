@@ -8,6 +8,7 @@ local keymap = require('iter.keymap')
 local layout = require('iter.ui.layout')
 local model = require('iter.diff.model')
 local render = require('iter.ui.render')
+local uri = require('iter.uri')
 local util = require('iter.util')
 local View = require('iter.diff.view')
 local watch = require('iter.watch')
@@ -392,7 +393,7 @@ function Drawer.open(opts)
     vim.bo[buf].bufhidden = review and 'hide' or 'wipe'
     vim.bo[buf].modifiable = false
     vim.bo[buf].filetype = 'iter'
-    util.name_buf(buf, review and 'iter://review' or ('iter://drawer/' .. buf))
+    util.name_buf(buf, uri.of(context))
 
     local keys_view = context == 'review' and 'review_drawer' or 'drawer'
 
@@ -427,7 +428,17 @@ function Drawer.open(opts)
         vim.bo[self.side_buf].bufhidden = 'hide'
         vim.bo[self.side_buf].modifiable = false
         vim.bo[self.side_buf].filetype = 'iter'
-        util.name_buf(self.side_buf, 'iter://review-annotations')
+        util.name_buf(self.side_buf, uri.of(context) .. '#annotations')
+    end
+
+    self:own(buf, function(win)
+        return win == self.win
+    end)
+
+    if self.side_buf ~= nil then
+        self:own(self.side_buf, function(win)
+            return self.float ~= nil and win == self.float.side_win
+        end)
     end
 
     local view_handlers = vim.tbl_extend('force', opts.view_handlers or {}, {
@@ -450,7 +461,6 @@ function Drawer.open(opts)
         win = view_win,
         keys = opts.config.keys.diff,
         handlers = view_handlers,
-        name = review and 'iter://review-diff' or nil,
         bufhidden = review and 'hide' or nil,
         on_cursor = function()
             self:follow_view()
@@ -616,11 +626,23 @@ function Drawer:attach()
             end)
         end,
     })
+    -- The status drawer's buffer goes when another buffer takes the float.
+    vim.api.nvim_create_autocmd('BufWipeout', {
+        group = self.group,
+        buffer = self.buf,
+        callback = function()
+            vim.schedule(function()
+                self:close()
+            end)
+        end,
+    })
 end
 
 ---@return boolean
 function Drawer:is_open()
-    return not self.closed and util.is_valid_win(self.win)
+    return not self.closed
+        and util.is_valid_win(self.win)
+        and vim.api.nvim_buf_is_valid(self.buf)
 end
 
 --- Read the status afresh, keeping open directories open, then the extras.
@@ -830,8 +852,36 @@ function Drawer:footer()
     )
 end
 
---- Let the extras follow what the view shows.
+--- Mark `buf` as the drawer's, shown in the windows `owns` accepts.
+---@param buf integer
+---@param owns fun(win: integer): boolean
+function Drawer:own(buf, owns)
+    uri.own(buf, {
+        owns = owns,
+        reload = function()
+            if not self:is_open() then
+                return
+            end
+
+            local mark = self:mark()
+
+            self:render()
+            self:restore_selection(mark)
+        end,
+    })
+end
+
+--- Name the view after what it shows, `iter://<context>/<path>` or in
+--- all-files mode `iter://review#all`, and let the extras follow it.
 function Drawer:shown()
+    local file = self.view.files[1]
+
+    if self.all_files then
+        self.view:set_name(uri.of(self.context) .. '#all')
+    elseif file ~= nil then
+        self.view:set_name(uri.of(self.context, file.path))
+    end
+
     if self.extras ~= nil then
         self.extras:drawer_shown(self)
     end
@@ -1859,6 +1909,23 @@ function Drawer:open_review()
 
     self:close()
     require('iter').review(target)
+end
+
+--- Select the file at `path`, relative to the root, and show its diff;
+--- warn when it isn't in the changes.
+---@param path string
+function Drawer:reveal(path)
+    local at = self:find_path(vim.fs.joinpath(self.changes.root, path))
+    local item = at and self.rows[at.lnum][at.side]
+
+    if item == nil or item.dir then
+        util.warn(path .. ' is not in the changes')
+        return
+    end
+
+    ---@cast at -nil
+    self:select(at.lnum, at.side)
+    self:preview(false)
 end
 
 --- Files in drawer order, directories left out.

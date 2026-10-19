@@ -117,6 +117,38 @@ T['can_leave()'] = function()
     })
 end
 
+T['name_buf()'] = function()
+    local buf = vim.api.nvim_create_buf(false, true)
+    local other = vim.api.nvim_create_buf(false, true)
+    local count = #vim.api.nvim_list_bufs()
+
+    util.name_buf(buf, 'iter://test/a')
+    util.name_buf(buf, 'iter://test/b')
+    eq(vim.api.nvim_buf_get_name(buf), 'iter://test/b')
+    eq(vim.fn.bufexists('iter://test/a'), 0)
+    eq(#vim.api.nvim_list_bufs(), count)
+
+    -- iter's own buffer keeps its name.
+    require('iter.uri').own(buf, {
+        owns = function()
+            return false
+        end,
+        reload = function() end,
+    })
+    util.name_buf(other, 'iter://test/b')
+    eq(vim.api.nvim_buf_get_name(other), '')
+
+    -- Any other buffer of the name is wiped.
+    local stale = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_name(stale, 'iter://test/c')
+    util.name_buf(other, 'iter://test/c')
+    eq(vim.api.nvim_buf_get_name(other), 'iter://test/c')
+    eq(vim.api.nvim_buf_is_valid(stale), false)
+
+    vim.api.nvim_buf_delete(buf, { force = true })
+    vim.api.nvim_buf_delete(other, { force = true })
+end
+
 T['edit_at()'] = function()
     local path = vim.fn.resolve(vim.fn.tempname())
     vim.fn.writefile({ 'a', 'b', 'c' }, path)

@@ -1,5 +1,5 @@
 --|---------|---------|---------|---------|---------|---------|---------|---------|---------|---------|---------|---------|
-01| [No Name]  4 i//review-annotations                                                                                    X
+01| [No Name]  4 i//review#annotations                                                                                    X
 02|          M m.txt                                                                   ○ not viewed  +1 −2 · 5 annotations 
 03|          ▎ 󰆉 Needs a test                                                                                              
 04|          @@ -1,11 +1,10 @@                                                                                             
@@ -19,7 +19,7 @@
 18|  9   8   l9                                                                                                            
 19| 10   9   l10                                                                                                           
 20|          ▎ 󰆉 outdated · Stale remark                                                                                   
-21|iter://review-diff [-]                                                                                                  
+21|iter://review/m.txt [-]                                                                                                 
 22| HEAD main                                                                                                       2 files
 23| Unstaged (1)                                                                  │ Annotations (8) · 1 outdated           
 24| M ○ n.txt                                                                 [1] │ viewed □□□□□□□□ 0 of 2                 

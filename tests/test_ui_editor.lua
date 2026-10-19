@@ -146,7 +146,7 @@ end
 ---@return integer
 local function annotation_buffers()
     return child.lua_get([[#vim.tbl_filter(function(b)
-        return vim.api.nvim_buf_get_name(b):match('^iter://annotation/') ~= nil
+        return vim.api.nvim_buf_get_name(b):match('^iter://annotation$') ~= nil
     end, vim.api.nvim_list_bufs())]])
 end
 
@@ -471,7 +471,7 @@ for _, command in ipairs({ 'bunload!', 'bdelete!', 'bwipeout!' }) do
 
             child.cmd(command .. ' ' .. child.lua_get([[(function()
                         for _, b in ipairs(vim.api.nvim_list_bufs()) do
-                            if vim.api.nvim_buf_get_name(b):match('^iter://annotation/') then
+                            if vim.api.nvim_buf_get_name(b):match('^iter://annotation$') then
                                 return b
                             end
                         end
