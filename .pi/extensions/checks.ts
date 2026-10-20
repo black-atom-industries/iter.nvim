@@ -1,5 +1,5 @@
 /**
- * checks.ts — Project-local extension for flux.nvim
+ * checks.ts — Project-local extension for iter.nvim
  *
  * Hooks every write tool call and runs:
  *   1. just format   (stylua auto-format)

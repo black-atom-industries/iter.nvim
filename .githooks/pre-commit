@@ -2,4 +2,4 @@
 set -e
 
 cd "$(git rev-parse --show-toplevel)"
-just checks
+just format-check lint

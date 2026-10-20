@@ -1,36 +1,36 @@
 ## About the plugin
 
-This is a Neovim plugin, written in Lua, for Git staging and code review: a status drawer, and a review tab with annotations, viewed marks and an export for agents.
+This is a Neovim plugin, written in Lua, for Git staging and code review: a status drawer, and a review tab with
+annotations, viewed marks and an export for agents.
 
-## Working on a new issue
+Scope, architecture and Lua conventions live in `docs/CONVENTIONS.md`. Read it before changing code.
 
-- Create a new branch for the issue following conventional naming (e.g. feat/new-feat, fix/fixing-this, etc.).
-- Do not change to a new branch unless you are already in the main branch. If you are not in the main branch, ask what to do about the branch before anything else.
-- Plan the implementation regarding the issue motivation.
-- Follow the code structure:
-    - Create a new file if the implementation does not fit in any of the current files or if splitting into more files is necessary because the code handles a very specific functionality.
-    - Do not over-split code. Long files are okay. Long files that handle more functionalities than what it should, no.
-- Write the code.
-- Format the code.
-- Commit only when indicated. Never push.
+## Working on an issue
 
-Open work lives in GitHub issues, milestone `v1`. Scope and architecture rules live in `docs/CONVENTIONS.md`.
+- Open work lives in GitHub issues, milestone `v1`.
+- Plan the implementation from the issue's motivation before writing code.
+- Start a conventional branch (`feat/...`, `fix/...`) only from `main`. On any other branch, ask what to do about the
+  branch before anything else.
+- Create a new file when the code fits no current file or handles one very specific job. Long files are fine; a file
+  that handles more than its job is not.
+- Commit only when told, through the `repo-commit` skill. Never push.
 
 ## Tests
 
-- Use `mini.test` (from mini.nvim) for creating/managing tests: https://github.com/echasnovski/mini.nvim/blob/main/TESTING.md
-- There should be:
-    - Functional tests: only for functions that are part of each module's API. Do NOT create tests for local functions
-    - UI tests: drive a child Neovim and check windows, buffers and screenshots, ensuring the UI is shown as expected during and after the execution of the plugin.
-- Use temporary directories as git repositories for testing, do not use real repositories.
+- Tests use [mini.test](https://github.com/echasnovski/mini.nvim/blob/main/TESTING.md).
+- New behavior gets both kinds of test: functional tests and UI tests.
+- Functional tests cover only the functions in a module's API, never local functions.
+- UI tests drive a child Neovim and check windows, buffers and screenshots during and after the plugin runs.
+- Git repositories in tests are temporary directories, never real repositories.
+- Run the suite as `CI=1 just test`. Without `CI`, a missing screenshot reference is written instead of failing.
 
-## Formatting
+## Skills
 
-Use `stylua` for formatting.
+- `repo-commit`: any commit.
+- `repo-release` and `repo-changelog`: preparing or merging the release-please PR.
+- `repo-dep-upgrades`: bumping the pinned mini.nvim or the npm devDependencies.
 
----
+## Designs
 
-For coding conventions, structure, and project practices, see `docs/CONVENTIONS.md`.
-
-All UI designs live in the "iter.nvim" Design canvas artifact
-(https://claude.ai/artifact/N3QkZ8nf9AuZvRTnR3geRQ), one page per milestone. Create and iterate designs there.
+All UI designs live in the "iter.nvim" Design canvas artifact (https://claude.ai/artifact/N3QkZ8nf9AuZvRTnR3geRQ), one
+page per milestone. Create and iterate designs there.

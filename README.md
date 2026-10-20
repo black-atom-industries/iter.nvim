@@ -174,16 +174,16 @@ vim.o.statusline = '%f %m%=%{v:lua.require("iter").statusline()} '
 iter's buffers are named with `iter://` addresses, and `:edit` of one opens
 what it names, in the repository of the current directory:
 
-| Address | Opens |
-| ------- | ----- |
-| `iter://status` | The status drawer, or focuses it |
-| `iter://status/<path>` | The status drawer with `<path>` selected |
-| `iter://review` | The review tab, or switches to it |
-| `iter://review/<path>` | The review tab with `<path>` selected, Unstaged before Staged |
+| Address                     | Opens                                                                                                              |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `iter://status`             | The status drawer, or focuses it                                                                                   |
+| `iter://status/<path>`      | The status drawer with `<path>` selected                                                                           |
+| `iter://review`             | The review tab, or switches to it                                                                                  |
+| `iter://review/<path>`      | The review tab with `<path>` selected, Unstaged before Staged                                                      |
 | `iter://review/<path>#L<n>` | The same, with the cursor in the diff on the row of worktree line `n`, showing hidden context and a collapsed file |
-| `iter://review#all` | The review tab in all-files mode |
-| `iter://review#annotations` | The review tab on its Annotations column |
-| `iter://annotation` | The hidden annotation draft |
+| `iter://review#all`         | The review tab in all-files mode                                                                                   |
+| `iter://review#annotations` | The review tab on its Annotations column                                                                           |
+| `iter://annotation`         | The hidden annotation draft                                                                                        |
 
 A path outside the changes opens the drawer or the review with a warning.
 While the open drawer or review belongs to another repository than the
@@ -233,10 +233,10 @@ A custom tabline can read the label with `vim.t[tab].iter_label` (or
 
 iter fires `User` autocmds with the repository root and the paths in `data`:
 
-| Pattern | When | `data` |
-| ------- | ---- | ------ |
-| `IterRefresh` | A drawer or review refresh read the status, after an action or when the files changed | `root`, `paths`: every changed path, a file on both sides once |
-| `IterStage` | A stage, unstage or discard succeeded, of files, hunks or lines | `root`, `paths`: the paths acted on, `action`: `'stage'`, `'unstage'` or `'discard'` |
+| Pattern       | When                                                                                  | `data`                                                                               |
+| ------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `IterRefresh` | A drawer or review refresh read the status, after an action or when the files changed | `root`, `paths`: every changed path, a file on both sides once                       |
+| `IterStage`   | A stage, unstage or discard succeeded, of files, hunks or lines                       | `root`, `paths`: the paths acted on, `action`: `'stage'`, `'unstage'` or `'discard'` |
 
 ```lua
 vim.api.nvim_create_autocmd('User', {
@@ -324,20 +324,20 @@ require('iter').setup({
 
 The status drawer (`drawer`):
 
-| Key | Action | Does |
-| --- | ------ | ---- |
-| `<CR>` | `open` | Open the file and close the drawer |
-| `s` | `stage` | Stage or unstage the file |
-| `u` | `unstage` | Unstage the file |
-| `d` | `discard` | Discard changes in the file |
-| `I` | `ignore` | Add the untracked file to .gitignore |
-| `r` | `review` | Open the review tab |
-| `q` | `close` | Close |
-| `?` | `help` | Show the keys |
-| `<C-d>` | `scroll_down` | Scroll the diff down |
-| `<C-u>` | `scroll_up` | Scroll the diff up |
-| `h` | `column_left` | Select the column to the left |
-| `l` | `column_right` | Select the column to the right |
+| Key     | Action         | Does                                 |
+| ------- | -------------- | ------------------------------------ |
+| `<CR>`  | `open`         | Open the file and close the drawer   |
+| `s`     | `stage`        | Stage or unstage the file            |
+| `u`     | `unstage`      | Unstage the file                     |
+| `d`     | `discard`      | Discard changes in the file          |
+| `I`     | `ignore`       | Add the untracked file to .gitignore |
+| `r`     | `review`       | Open the review tab                  |
+| `q`     | `close`        | Close                                |
+| `?`     | `help`         | Show the keys                        |
+| `<C-d>` | `scroll_down`  | Scroll the diff down                 |
+| `<C-u>` | `scroll_up`    | Scroll the diff up                   |
+| `h`     | `column_left`  | Select the column to the left        |
+| `l`     | `column_right` | Select the column to the right       |
 
 In the diff above the status drawer, the `expand` key (`<CR>`) on a code line
 opens the file at that line and closes the drawer; on hidden context it
@@ -345,54 +345,54 @@ expands. A staged line lands where it is in the worktree.
 
 The drawer of the review tab (`review_drawer`):
 
-| Key | Action | Does |
-| --- | ------ | ---- |
-| `<CR>` | `open` | Open the diff, or jump to the annotation |
-| `s` | `stage` | Stage or unstage the file |
-| `u` | `unstage` | Unstage the file |
-| `d` | `discard` | Discard changes in the file |
-| `I` | `ignore` | Add the untracked file to .gitignore |
-| `v` | `viewed` | Toggle viewed |
-| `m` | `mode` | Toggle one file or all files |
-| `\|` | `split` | Show the diff side by side |
-| `-` | `unified` | Show the diff unified |
-| `A` | `annotate_file` | Annotate the file |
-| `e` | `edit` | Edit the annotation |
-| `x` | `delete` | Delete the annotation |
-| `y` | `yank` | Copy the review |
-| `q` | `close` | Close |
-| `?` | `help` | Show the keys |
-| `<C-d>` | `scroll_down` | Scroll the diff down |
-| `<C-u>` | `scroll_up` | Scroll the diff up |
-| `h` | `column_left` | Select the column to the left |
-| `l` | `column_right` | Select the column to the right |
+| Key     | Action          | Does                                     |
+| ------- | --------------- | ---------------------------------------- |
+| `<CR>`  | `open`          | Open the diff, or jump to the annotation |
+| `s`     | `stage`         | Stage or unstage the file                |
+| `u`     | `unstage`       | Unstage the file                         |
+| `d`     | `discard`       | Discard changes in the file              |
+| `I`     | `ignore`        | Add the untracked file to .gitignore     |
+| `v`     | `viewed`        | Toggle viewed                            |
+| `m`     | `mode`          | Toggle one file or all files             |
+| `\|`    | `split`         | Show the diff side by side               |
+| `-`     | `unified`       | Show the diff unified                    |
+| `A`     | `annotate_file` | Annotate the file                        |
+| `e`     | `edit`          | Edit the annotation                      |
+| `x`     | `delete`        | Delete the annotation                    |
+| `y`     | `yank`          | Copy the review                          |
+| `q`     | `close`         | Close                                    |
+| `?`     | `help`          | Show the keys                            |
+| `<C-d>` | `scroll_down`   | Scroll the diff down                     |
+| `<C-u>` | `scroll_up`     | Scroll the diff up                       |
+| `h`     | `column_left`   | Select the column to the left            |
+| `l`     | `column_right`  | Select the column to the right           |
 
 The diff pane of the review tab (`diff`):
 
-| Key | Action | Does |
-| --- | ------ | ---- |
-| `]c` | `next_hunk` | Next hunk |
-| `[c` | `prev_hunk` | Previous hunk |
-| `]a` | `next_annotation` | Next annotation |
-| `[a` | `prev_annotation` | Previous annotation |
-| `]f` | `next_file` | Next file |
-| `[f` | `prev_file` | Previous file |
-| `s` | `stage` | Stage the hunk or the selected lines (normal and visual mode) |
-| `u` | `unstage` | Unstage the hunk or the selected lines (normal and visual mode) |
-| `a` | `annotate` | Annotate the line or range (normal and visual mode) |
-| `A` | `annotate_file` | Annotate the file |
-| `e` | `edit` | Edit the annotation |
-| `x` | `delete` | Delete the annotation |
-| `<CR>` | `expand` | Expand the collapsed file or hidden context |
-| `gf` | `goto_file` | Go to the line in the file |
-| `v` | `viewed` | Toggle viewed |
-| `m` | `mode` | Toggle one file or all files |
-| `\|` | `split` | Show the diff side by side |
-| `-` | `unified` | Show the diff unified |
-| `y` | `yank` | Copy the review |
-| `<C-j>` | `focus_drawer` | Focus the drawer |
-| `q` | `close` | Close |
-| `?` | `help` | Show the keys |
+| Key     | Action            | Does                                                            |
+| ------- | ----------------- | --------------------------------------------------------------- |
+| `]c`    | `next_hunk`       | Next hunk                                                       |
+| `[c`    | `prev_hunk`       | Previous hunk                                                   |
+| `]a`    | `next_annotation` | Next annotation                                                 |
+| `[a`    | `prev_annotation` | Previous annotation                                             |
+| `]f`    | `next_file`       | Next file                                                       |
+| `[f`    | `prev_file`       | Previous file                                                   |
+| `s`     | `stage`           | Stage the hunk or the selected lines (normal and visual mode)   |
+| `u`     | `unstage`         | Unstage the hunk or the selected lines (normal and visual mode) |
+| `a`     | `annotate`        | Annotate the line or range (normal and visual mode)             |
+| `A`     | `annotate_file`   | Annotate the file                                               |
+| `e`     | `edit`            | Edit the annotation                                             |
+| `x`     | `delete`          | Delete the annotation                                           |
+| `<CR>`  | `expand`          | Expand the collapsed file or hidden context                     |
+| `gf`    | `goto_file`       | Go to the line in the file                                      |
+| `v`     | `viewed`          | Toggle viewed                                                   |
+| `m`     | `mode`            | Toggle one file or all files                                    |
+| `\|`    | `split`           | Show the diff side by side                                      |
+| `-`     | `unified`         | Show the diff unified                                           |
+| `y`     | `yank`            | Copy the review                                                 |
+| `<C-j>` | `focus_drawer`    | Focus the drawer                                                |
+| `q`     | `close`           | Close                                                           |
+| `?`     | `help`            | Show the keys                                                   |
 
 The review drawer has two columns: the files on the left, Unstaged above
 Staged, and Annotations on the right in a window of its own that stays in
@@ -464,12 +464,12 @@ switches to. The status drawer's diff stays unified.
 
 The annotation float (`annotation`). `:w` saves and keeps the float open; `:wq` and `<C-s>` save and close it.
 
-| Key | Action | Does |
-| --- | ------ | ---- |
-| `<C-s>` | `save` | Save the annotation and close the float (normal and insert mode) |
-| `<C-t>` | `toggle` | Hide or show the draft (normal and insert mode) |
-| `<C-c>` | `cancel` | Drop the draft (normal and insert mode) |
-| `q` | `close` | Close a saved annotation |
+| Key     | Action   | Does                                                             |
+| ------- | -------- | ---------------------------------------------------------------- |
+| `<C-s>` | `save`   | Save the annotation and close the float (normal and insert mode) |
+| `<C-t>` | `toggle` | Hide or show the draft (normal and insert mode)                  |
+| `<C-c>` | `cancel` | Drop the draft (normal and insert mode)                          |
+| `q`     | `close`  | Close a saved annotation                                         |
 
 While a draft is hidden, `<C-t>` in normal mode shows it again from any
 buffer. A `<C-t>` mapping of your own comes back once the draft is gone.
@@ -491,39 +491,39 @@ event fires (the usual place, in the colorscheme file) and they win.
 "Derived from" lists the first group found with that colour, then the
 fallback. Row backgrounds blend the diff colour 60 % towards `Normal`.
 
-| Group | Colours | Derived from |
-| ----- | ------- | ------------ |
-| `IterStage` | Staged files in the drawer | fg of `Added`, `String` |
-| `IterUnstage` | Unstaged files in the drawer | fg of `Removed`, `Error` |
-| `IterUntracked` | Untracked files | fg of `DiagnosticInfo`, `Directory`, `Identifier` |
-| `IterIgnored` | Ignored files | fg of `Comment` |
-| `IterConflict` | Files with merge conflicts | fg of `DiagnosticError`, `ErrorMsg`, `Error` |
-| `IterHead` | Branch name in the drawer | fg of `Identifier`, `Keyword` |
-| `IterUnpushed` | Unpushed commits and the ahead count | fg of `Constant`, `Number` |
-| `IterBehind` | Behind count | fg of `Removed`, `Error` |
-| `IterViewed` | Viewed marks and progress | fg of `Added`, `String` |
-| `IterViewedChanged` | Files changed since viewed | fg of `DiagnosticWarn`, `WarningMsg`, `Constant` |
-| `IterDrawer` | Drawer text | link to `Normal` |
-| `IterDrawerTitle` | Drawer titles | link to `Title` |
-| `IterDrawerSelected` | Selected drawer row | link to `Visual` |
-| `IterDrawerKey` | Key hints | link to `Special` |
-| `IterDrawerHint` | Dimmed drawer text | link to `Comment` |
-| `IterDrawerCount` | Counts in section titles | link to `Special` |
-| `IterDiffAdd` | Added line rows | bg of `DiffAdd`, blended with `Normal` |
-| `IterDiffDelete` | Deleted line rows | bg of `DiffDelete`, blended with `Normal` |
-| `IterDiffAddText` | Changed words in added lines | bg of `DiffAdd` |
-| `IterDiffDeleteText` | Changed words in deleted lines | bg of `DiffDelete` |
-| `IterDiffAddNr` | Line number of added lines | fg of `diffAdded`, `Added`, `DiffAdd`; bg as `IterDiffAdd` |
-| `IterDiffDeleteNr` | Line number of deleted lines | fg of `diffRemoved`, `Removed`, `DiffDelete`; bg as `IterDiffDelete` |
-| `IterDiffNr` | Line number of context lines | link to `LineNr` |
-| `IterDiffHeader` | File headers in the diff | link to `Title` |
-| `IterDiffHunk` | Hunk headers and stats | link to `Comment` |
-| `IterDiffGap` | Collapsed unchanged lines | link to `Folded` |
-| `IterDiffFiller` | Filler rows beside a one-sided change | link to `NonText` |
-| `IterDiffAnnotation` | Annotation text | link to `NormalFloat` |
-| `IterDiffAnnotationOutdated` | Annotation whose lines changed | link to `Comment` |
-| `IterDiffAnnotationFocus` | Focused annotation | link to `Visual` |
-| `IterAnnotationSign` | Annotation sign in the gutter | link to `Special` |
+| Group                        | Colours                               | Derived from                                                         |
+| ---------------------------- | ------------------------------------- | -------------------------------------------------------------------- |
+| `IterStage`                  | Staged files in the drawer            | fg of `Added`, `String`                                              |
+| `IterUnstage`                | Unstaged files in the drawer          | fg of `Removed`, `Error`                                             |
+| `IterUntracked`              | Untracked files                       | fg of `DiagnosticInfo`, `Directory`, `Identifier`                    |
+| `IterIgnored`                | Ignored files                         | fg of `Comment`                                                      |
+| `IterConflict`               | Files with merge conflicts            | fg of `DiagnosticError`, `ErrorMsg`, `Error`                         |
+| `IterHead`                   | Branch name in the drawer             | fg of `Identifier`, `Keyword`                                        |
+| `IterUnpushed`               | Unpushed commits and the ahead count  | fg of `Constant`, `Number`                                           |
+| `IterBehind`                 | Behind count                          | fg of `Removed`, `Error`                                             |
+| `IterViewed`                 | Viewed marks and progress             | fg of `Added`, `String`                                              |
+| `IterViewedChanged`          | Files changed since viewed            | fg of `DiagnosticWarn`, `WarningMsg`, `Constant`                     |
+| `IterDrawer`                 | Drawer text                           | link to `Normal`                                                     |
+| `IterDrawerTitle`            | Drawer titles                         | link to `Title`                                                      |
+| `IterDrawerSelected`         | Selected drawer row                   | link to `Visual`                                                     |
+| `IterDrawerKey`              | Key hints                             | link to `Special`                                                    |
+| `IterDrawerHint`             | Dimmed drawer text                    | link to `Comment`                                                    |
+| `IterDrawerCount`            | Counts in section titles              | link to `Special`                                                    |
+| `IterDiffAdd`                | Added line rows                       | bg of `DiffAdd`, blended with `Normal`                               |
+| `IterDiffDelete`             | Deleted line rows                     | bg of `DiffDelete`, blended with `Normal`                            |
+| `IterDiffAddText`            | Changed words in added lines          | bg of `DiffAdd`                                                      |
+| `IterDiffDeleteText`         | Changed words in deleted lines        | bg of `DiffDelete`                                                   |
+| `IterDiffAddNr`              | Line number of added lines            | fg of `diffAdded`, `Added`, `DiffAdd`; bg as `IterDiffAdd`           |
+| `IterDiffDeleteNr`           | Line number of deleted lines          | fg of `diffRemoved`, `Removed`, `DiffDelete`; bg as `IterDiffDelete` |
+| `IterDiffNr`                 | Line number of context lines          | link to `LineNr`                                                     |
+| `IterDiffHeader`             | File headers in the diff              | link to `Title`                                                      |
+| `IterDiffHunk`               | Hunk headers and stats                | link to `Comment`                                                    |
+| `IterDiffGap`                | Collapsed unchanged lines             | link to `Folded`                                                     |
+| `IterDiffFiller`             | Filler rows beside a one-sided change | link to `NonText`                                                    |
+| `IterDiffAnnotation`         | Annotation text                       | link to `NormalFloat`                                                |
+| `IterDiffAnnotationOutdated` | Annotation whose lines changed        | link to `Comment`                                                    |
+| `IterDiffAnnotationFocus`    | Focused annotation                    | link to `Visual`                                                     |
+| `IterAnnotationSign`         | Annotation sign in the gutter         | link to `Special`                                                    |
 
 ### Files
 
@@ -533,29 +533,29 @@ repository share them. The log is `stdpath('state')/iter/iter.log`.
 
 ## Development
 
-The project pins its tools in `mise.toml`: `lua-language-server`, `stylua`
-and `just`. Install [mise](https://mise.jdx.dev/), then run `mise install`.
+The project pins its tools in `mise.toml`: `lua-language-server`, `stylua`,
+`just` and Node. Install [mise](https://mise.jdx.dev/), then run
+`mise install` and `npm ci` (Vite+, which formats the Markdown).
 
 ```bash
 just checks        # lint, format-check and test
 just lint          # lua-language-server --check against Neovim's Lua API
-just format        # format all Lua files with stylua
+just format        # format Lua with stylua and Markdown with vp fmt
 just format-check  # check formatting only
 just test          # run the whole test suite
 just test-file tests/test_git.lua  # run one test file
 ```
 
-To run the checks before every commit:
-
-```bash
-git config core.hooksPath .githooks
-```
+Once per clone, `just git-config` points Git at the hooks in `.githooks/`:
+format and lint checks before every commit, `just checks` before every push.
 
 ### Testing
 
 Tests use [mini.test](https://github.com/echasnovski/mini.nvim/blob/main/TESTING.md).
 `just test` clones mini.nvim at a pinned commit into the gitignored `deps/`
 folder and runs the suite headless. It exits non-zero on any failure.
+`just bump-mini` moves that pin to mini.nvim's latest commit and runs the
+suite against it.
 
 Test files are `tests/test_*.lua`. `tests/helpers.lua` creates temporary git
 repositories with fixtures and starts a child Neovim with the plugin loaded.
