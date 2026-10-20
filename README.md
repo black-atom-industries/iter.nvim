@@ -107,6 +107,8 @@ In the drawer, `j` and `k` move through the files and the window above shows
 the diff. `<CR>` opens the file there and closes the drawer. `r` opens the
 review tab. `?` lists the keys of the current view.
 
+![The status drawer: moving through the files previews each diff, s stages a file, ? lists the keys](docs/assets/drawer.webp)
+
 A rename or copy reads `old → new` on one row. In a narrow column the old
 path is cut first, so the end of the new path stays in view.
 
@@ -393,6 +395,8 @@ The diff pane of the review tab (`diff`):
 | `<C-j>` | `focus_drawer`    | Focus the drawer                                                |
 | `q`     | `close`           | Close                                                           |
 | `?`     | `help`            | Show the keys                                                   |
+
+![The review tab: moving through the files, a annotates a line, v marks the file viewed, the Annotations column lists the annotation](docs/assets/review.webp)
 
 The review drawer has two columns: the files on the left, Unstaged above
 Staged, and Annotations on the right in a window of its own that stays in
