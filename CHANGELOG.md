@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.3.0](https://github.com/black-atom-industries/iter.nvim/compare/v0.2.0...v0.3.0) (2026-10-20)
+
+
+### Features
+
+* keep the diff layout across the status drawer and the review ([6120a09](https://github.com/black-atom-industries/iter.nvim/commit/6120a092a7d213fc2d977567f234aecdf15d723a))
+* **review:** r marks and moves on, R removes the reviewed mark ([31ad184](https://github.com/black-atom-industries/iter.nvim/commit/31ad1846e120848bccac660d5b9c9b4722bf9ea0))
+* **review:** Unstaged and Staged side by side in wide drawers ([530ca24](https://github.com/black-atom-industries/iter.nvim/commit/530ca24a2e0c219e252ff06a08f6de437d406c18))
+
+
+### Documentation
+
+* README banner for light and dark themes ([e621acf](https://github.com/black-atom-industries/iter.nvim/commit/e621acfbd1d5acf1d31a2192f3da90dbfbf070fc))
+* README contents as a nested list ([2f3e983](https://github.com/black-atom-industries/iter.nvim/commit/2f3e9830f65e1227a36426fb1022faadd553c7a8))
+* README contents, annotations outside iter in their own section ([7c1d3f4](https://github.com/black-atom-industries/iter.nvim/commit/7c1d3f425c18a5d8934a14820620fdba2b81b3d1))
+
 ## [0.2.0](https://github.com/black-atom-industries/iter.nvim/compare/v0.1.0...v0.2.0) (2026-10-20)
 
 ### Highlights
