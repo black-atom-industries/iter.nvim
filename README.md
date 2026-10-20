@@ -103,13 +103,27 @@ plugin manager must not delay it until the first `:Iter`.
 :Iter review   " open the review tab, or switch to it
 ```
 
-`?` lists the keys of the view you are in. Two mappings worth adding:
+`?` lists the keys of the view you are in. iter maps keys only in its own
+buffers, so annotating from a file buffer takes mappings of your own:
 
 ```lua
-vim.keymap.set({ 'n', 'x' }, '<leader>a', function()
-    require('iter').annotate()
-end, { desc = 'Annotate' })
+local iter = require('iter')
 
+vim.keymap.set({ 'n', 'x' }, '<leader>aa', function()
+    iter.annotate()
+end, { desc = 'Annotate the line or selection' })
+vim.keymap.set('n', '<leader>af', function()
+    iter.annotate({ scope = 'file' })
+end, { desc = 'Annotate the file' })
+vim.keymap.set('n', '<leader>ar', function()
+    iter.annotate({ scope = 'review' })
+end, { desc = 'Annotate the review' })
+vim.keymap.set('n', '<leader>al', iter.annotations, { desc = 'List the annotations' })
+```
+
+And iter's part of a statusline:
+
+```lua
 vim.o.statusline = "%f %m%=%{v:lua.require'iter'.statusline()} "
 ```
 
@@ -338,6 +352,7 @@ iter.setup(opts)                     -- see Configuration
 iter.status()                        -- same as :Iter status
 iter.review()                        -- same as :Iter review
 iter.annotate()                      -- annotate the cursor line or the visual range
+iter.annotate({ scope = 'file' })    -- annotate the current buffer's file
 iter.annotate({ scope = 'review' })  -- annotate the whole review
 iter.annotations()                   -- open the review on its Annotations column
 iter.yank()                          -- copy the review as a prompt

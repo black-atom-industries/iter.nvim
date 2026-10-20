@@ -896,6 +896,25 @@ T['api']['annotate() takes a visual range'] = function()
     eq(stored()[1].anchor.end_line, 5)
 end
 
+T['api']["annotate({ scope = 'file' }) annotates the buffer's file"] = function()
+    child.cmd('edit m.txt')
+    child.lua([[require('iter').annotate({ scope = 'file' })]])
+    wait_editor()
+    child.type_keys('whole file', '<C-s>')
+
+    eq(stored()[1].scope, 'file')
+    eq(stored()[1].anchor, { path = 'm.txt', side = 'new' })
+    eq(stored()[1].body, 'whole file')
+end
+
+T['api']["annotate({ scope = 'file' }) outside a repo file warns"] = function()
+    child.cmd('enew')
+    child.lua([[require('iter').annotate({ scope = 'file' })]])
+
+    eq(editor_shown(), false)
+    eq(notes(), { '[iter] Not a file in a git repository' })
+end
+
 T['api']['annotate() outside a repo file warns'] = function()
     child.cmd('enew')
     child.lua([[require('iter').annotate()]])

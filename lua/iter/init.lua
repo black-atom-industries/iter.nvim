@@ -135,8 +135,9 @@ function M.review(target)
 end
 
 --- Open the annotation float: on the cursor line or the visual range of a
---- repo file's buffer, or with `scope = 'review'` on the whole review.
----@param opts? { scope?: 'review' }
+--- repo file's buffer, with `scope = 'file'` on that file, or with
+--- `scope = 'review'` on the whole review.
+---@param opts? { scope?: 'file'|'review' }
 function M.annotate(opts)
     vim.validate('opts', opts, 'table', true)
     opts = opts or {}
@@ -167,6 +168,19 @@ function M.annotate(opts)
 
     if target == nil then
         util.warn('Not a file in a git repository')
+        return
+    end
+
+    if opts.scope == 'file' then
+        editor.open({
+            root = target.root,
+            annotation = {
+                scope = 'file',
+                anchor = { path = target.path, side = 'new' },
+            },
+            config = M.config,
+            on_save = refresh_review,
+        })
         return
     end
 
