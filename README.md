@@ -429,6 +429,11 @@ in the drawer stages it. An untracked file's diff header reads `untracked · +n`
 In the review tab the header also shows the file's reviewed state and its
 number of annotations, for an untracked file only when it has any.
 
+`r` marks the file reviewed and moves on to the next file in drawer order
+that is not reviewed: its header at the top of the pane, the cursor on its
+first change, the drawer selection on it, and the focus where it was. `r` on
+a reviewed file unmarks it and stays.
+
 `m`, in the diff pane or the review drawer, shows every file of the review
 in one buffer, in drawer order: Unstaged, then Staged, each file under its
 header with a blank line between files. A file on both sides shows twice.

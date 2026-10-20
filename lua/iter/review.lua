@@ -256,7 +256,7 @@ function Review:view_handlers()
             local file = self:shown_file()
 
             if file ~= nil then
-                self:toggle_reviewed(file.path)
+                self:toggle_reviewed(file.path, file)
             end
         end,
         mode = function()
@@ -1115,7 +1115,7 @@ function Review:drawer_handlers(drawer, handlers)
         self:annotate_file(path)
     end)
     handlers.reviewed = on_file(function(path)
-        self:toggle_reviewed(path)
+        self:toggle_reviewed(path, drawer:selected())
     end)
     handlers.yank = function()
         require('iter').yank()
@@ -1134,10 +1134,13 @@ function Review:refresh_annotations()
 end
 
 --- Toggle the reviewed mark of `path` and refresh. In all-files mode a file
---- marked reviewed collapses.
+--- marked reviewed collapses. With `from`, the file the mark was set on, a
+--- file marked reviewed moves on to the next file in drawer order that is
+--- not reviewed.
 ---@param path string
-function Review:toggle_reviewed(path)
-    local _, err = reviewed.toggle(self.drawer.changes.root, path)
+---@param from? IterChange|IterFileDiff
+function Review:toggle_reviewed(path, from)
+    local state, err = reviewed.toggle(self.drawer.changes.root, path)
 
     if err ~= nil then
         util.error('Cannot toggle reviewed: ' .. err)
@@ -1146,7 +1149,73 @@ function Review:toggle_reviewed(path)
 
     self.expanded[path] = nil
 
+    local order = self.drawer:files()
+
     self:refresh_annotations()
+
+    if state ~= 'reviewed' or from == nil then
+        return
+    end
+
+    local after = false
+
+    for _, item in ipairs(order) do
+        if
+            after
+            and item.path ~= path
+            and self.reviewed[item.path] ~= 'reviewed'
+        then
+            self:advance_to(item)
+            return
+        end
+
+        after = after or document.key(item) == document.key(from)
+    end
+end
+
+--- Select `item` and show it with its header at the top of the diff pane
+--- and the cursor on its first change, or on the header without one. Focus
+--- stays where it is.
+---@param item IterChange
+function Review:advance_to(item)
+    local drawer = self.drawer
+    local at = drawer:find_path(
+        vim.fs.joinpath(drawer.changes.root, item.path),
+        item.side
+    )
+
+    if at == nil then
+        return
+    end
+
+    drawer:select(at.lnum, at.side)
+    drawer:preview(false)
+
+    local view = drawer.view
+    local index = document.find(view.document, document.key(item))
+
+    if index == nil then
+        return
+    end
+
+    local section = view.document.sections[index]
+
+    view:reveal(section.first, 'top')
+
+    for row, file_row in ipairs(section.file.rows) do
+        if file_row.kind == 'add' or file_row.kind == 'del' then
+            local lnum = document.line_of(view.document, index, row)
+
+            if lnum ~= nil then
+                local active = view:active()
+
+                vim.api.nvim_win_set_cursor(active.win, { lnum, 0 })
+                view:sync(active)
+            end
+
+            return
+        end
+    end
 end
 
 --- Open the help float with the diff pane's keys, or close it.

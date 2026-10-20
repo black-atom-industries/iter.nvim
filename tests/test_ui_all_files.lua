@@ -772,7 +772,7 @@ local function header_right(index)
     )
 end
 
-T['collapse']['v collapses the file to its header, v again expands it'] = function()
+T['collapse']['r collapses the file to its header, r on the header expands it'] = function()
     open_all()
     cursor_on('b20x')
     child.type_keys('r')
@@ -791,10 +791,11 @@ T['collapse']['v collapses the file to its header, v again expands it'] = functi
         'c',
         'cx',
     })
-    eq(cursor_row(), 'header b.txt')
-    eq(selected(), 'unstaged b.txt')
+    eq(cursor_row(), 'del c')
+    eq(selected(), 'unstaged c.txt')
     eq(header_right(2):find('✓ reviewed', 1, true) ~= nil, true)
 
+    cursor_on('b.txt', 'header')
     child.type_keys('r')
     helpers.wait_until(child, 'not ' .. collapsed(2))
 
@@ -885,7 +886,7 @@ T['collapse']['<CR> on a collapsed header expands it and keeps it reviewed'] = f
     eq(child.lua_get(collapsed(2)), vim.NIL)
     child.type_keys('r')
     helpers.wait_until(child, collapsed(2))
-    eq(cursor_row(), 'header b.txt')
+    eq(cursor_row(), 'del c')
 end
 
 T['collapse']['<CR> expands a file on both sides at once'] = function()
