@@ -5,3 +5,5 @@ diffs.nvim/
 /node_modules
 /.claude/worktrees/
 /.claude/settings.local.json
+/docs/.DS_Store
+/.DS_Store
