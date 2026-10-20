@@ -64,6 +64,7 @@ emphasized, old and new line numbers, and hidden context that `<CR>` expands.
 `m` shows every file in one scroll and `|` shows old and new side by side.
 
 `r` marks a file reviewed and moves on to the next file you haven't reviewed.
+On a reviewed file it just moves on, and `R` removes the mark.
 A reviewed file that changes again turns `↻`, so the next pass shows what
 moved. In all-files mode a reviewed file collapses to its header.
 
@@ -275,7 +276,8 @@ The review drawer (`review_drawer`):
 | `u`     | `unstage`       | Unstage the file                         |
 | `d`     | `discard`       | Discard changes in the file              |
 | `I`     | `ignore`        | Add the untracked file to .gitignore     |
-| `r`     | `reviewed`      | Toggle reviewed                          |
+| `r`     | `reviewed`      | Mark reviewed and go to the next file    |
+| `R`     | `unreviewed`    | Remove the reviewed mark                 |
 | `m`     | `mode`          | Toggle one file or all files             |
 | `\|`    | `split`         | Show the diff side by side               |
 | `-`     | `unified`       | Show the diff unified                    |
@@ -308,7 +310,8 @@ The diff pane (`diff`), in the review tab and above the status drawer:
 | `x`     | `delete`          | Delete the annotation                                           |
 | `<CR>`  | `expand`          | Expand the collapsed file or hidden context                     |
 | `gf`    | `goto_file`       | Go to the line in the file                                      |
-| `r`     | `reviewed`        | Toggle reviewed                                                 |
+| `r`     | `reviewed`        | Mark reviewed and go to the next file                           |
+| `R`     | `unreviewed`      | Remove the reviewed mark                                        |
 | `m`     | `mode`            | Toggle one file or all files                                    |
 | `\|`    | `split`           | Show the diff side by side                                      |
 | `-`     | `unified`         | Show the diff unified                                           |

@@ -67,20 +67,30 @@ T['states()']['a file without a record is unreviewed'] = function()
     eq(states({ 'a.txt' }), { ['a.txt'] = 'unreviewed' })
 end
 
-T['states()']['toggle marks reviewed and the second toggle unreviews'] = function()
-    eq(reviewed.toggle(repo, 'a.txt'), 'reviewed')
+T['states()']['set marks reviewed and set off removes the mark'] = function()
+    eq(reviewed.set(repo, 'a.txt', true), true)
     eq(states({ 'a.txt', 'b.txt' }), {
         ['a.txt'] = 'reviewed',
         ['b.txt'] = 'unreviewed',
     })
 
-    eq(reviewed.toggle(repo, 'a.txt'), 'unreviewed')
+    eq(reviewed.set(repo, 'a.txt', false), true)
     eq(states({ 'a.txt' }), { ['a.txt'] = 'unreviewed' })
     eq(assert(store.load(repo)).reviewed, {})
 end
 
+T['states()']['setting a reviewed file again keeps its record'] = function()
+    reviewed.set(repo, 'a.txt', true)
+    store.update(repo, function(data)
+        data.reviewed['a.txt'].at = 1
+    end)
+
+    eq(reviewed.set(repo, 'a.txt', true), true)
+    eq(assert(store.load(repo)).reviewed['a.txt'].at, 1)
+end
+
 T['states()']['the record holds git hash-object of the worktree file'] = function()
-    reviewed.toggle(repo, 'a.txt')
+    reviewed.set(repo, 'a.txt', true)
 
     local expected = vim.trim(helpers.git(repo, { 'hash-object', 'a.txt' }))
     local record = assert(store.load(repo)).reviewed['a.txt']
@@ -90,22 +100,22 @@ T['states()']['the record holds git hash-object of the worktree file'] = functio
 end
 
 T['states()']['an edit turns reviewed into changed'] = function()
-    reviewed.toggle(repo, 'a.txt')
+    reviewed.set(repo, 'a.txt', true)
     write('a.txt', { 'one', 'two', 'three' })
 
     eq(states({ 'a.txt' }), { ['a.txt'] = 'changed' })
 end
 
-T['states()']['toggling a changed file views the new content'] = function()
-    reviewed.toggle(repo, 'a.txt')
+T['states()']['setting a changed file marks the new content'] = function()
+    reviewed.set(repo, 'a.txt', true)
     write('a.txt', { 'one', 'two', 'three' })
 
-    eq(reviewed.toggle(repo, 'a.txt'), 'reviewed')
+    eq(reviewed.set(repo, 'a.txt', true), true)
     eq(states({ 'a.txt' }), { ['a.txt'] = 'reviewed' })
 end
 
 T['states()']['an edit back to the reviewed content is reviewed again'] = function()
-    reviewed.toggle(repo, 'a.txt')
+    reviewed.set(repo, 'a.txt', true)
     write('a.txt', { 'other' })
     eq(states({ 'a.txt' }), { ['a.txt'] = 'changed' })
 
@@ -115,7 +125,7 @@ end
 
 T['states()']['staging keeps a file reviewed'] = function()
     write('a.txt', { 'one', 'two', 'three' })
-    reviewed.toggle(repo, 'a.txt')
+    reviewed.set(repo, 'a.txt', true)
 
     helpers.git(repo, { 'add', 'a.txt' })
     eq(states({ 'a.txt' }), { ['a.txt'] = 'reviewed' })
@@ -128,7 +138,7 @@ T['states()']['a deleted file is reviewed with the hash deleted'] = function()
     vim.fn.delete(vim.fs.joinpath(repo, 'b.txt'))
 
     eq(states({ 'b.txt' }), { ['b.txt'] = 'unreviewed' })
-    eq(reviewed.toggle(repo, 'b.txt'), 'reviewed')
+    eq(reviewed.set(repo, 'b.txt', true), true)
     eq(assert(store.load(repo)).reviewed['b.txt'].hash, 'deleted')
     eq(states({ 'b.txt' }), { ['b.txt'] = 'reviewed' })
 
@@ -137,14 +147,14 @@ T['states()']['a deleted file is reviewed with the hash deleted'] = function()
 end
 
 T['states()']['a file deleted after it was reviewed is changed'] = function()
-    reviewed.toggle(repo, 'b.txt')
+    reviewed.set(repo, 'b.txt', true)
     vim.fn.delete(vim.fs.joinpath(repo, 'b.txt'))
 
     eq(states({ 'b.txt' }), { ['b.txt'] = 'changed' })
 end
 
 T['states()']['paths with spaces and non-ASCII characters hash'] = function()
-    eq(reviewed.toggle(repo, 'sp ace/ü.txt'), 'reviewed')
+    eq(reviewed.set(repo, 'sp ace/ü.txt', true), true)
     write('sp ace/ü.txt', { 'odd', 'more' })
 
     eq(states({ 'sp ace/ü.txt', 'a.txt' }), {
@@ -154,7 +164,7 @@ T['states()']['paths with spaces and non-ASCII characters hash'] = function()
 end
 
 T['states()']['records survive a new module instance'] = function()
-    reviewed.toggle(repo, 'a.txt')
+    reviewed.set(repo, 'a.txt', true)
 
     package.loaded['iter.reviewed'] = nil
     reviewed = require('iter.reviewed')
@@ -165,7 +175,7 @@ end
 T['hashing'] = new_set()
 
 T['hashing']['one batch for all files, none while stat is unchanged'] = function()
-    reviewed.toggle(repo, 'a.txt')
+    reviewed.set(repo, 'a.txt', true)
     spawns = 0
 
     states({ 'a.txt', 'b.txt', 'sp ace/ü.txt' })

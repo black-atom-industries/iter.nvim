@@ -256,7 +256,14 @@ function Review:view_handlers()
             local file = self:shown_file()
 
             if file ~= nil then
-                self:toggle_reviewed(file.path, file)
+                self:mark_reviewed(file.path, file)
+            end
+        end,
+        unreviewed = function()
+            local file = self:shown_file()
+
+            if file ~= nil then
+                self:unmark_reviewed(file.path)
             end
         end,
         mode = function()
@@ -1115,7 +1122,10 @@ function Review:drawer_handlers(drawer, handlers)
         self:annotate_file(path)
     end)
     handlers.reviewed = on_file(function(path)
-        self:toggle_reviewed(path, drawer:selected())
+        self:mark_reviewed(path, drawer:selected())
+    end)
+    handlers.unreviewed = on_file(function(path)
+        self:unmark_reviewed(path)
     end)
     handlers.yank = function()
         require('iter').yank()
@@ -1133,17 +1143,16 @@ function Review:refresh_annotations()
     self.drawer:refresh()
 end
 
---- Toggle the reviewed mark of `path` and refresh. In all-files mode a file
---- marked reviewed collapses. With `from`, the file the mark was set on, a
---- file marked reviewed moves on to the next file in drawer order that is
---- not reviewed.
+--- Mark `path` reviewed and refresh. In all-files mode the file collapses.
+--- With `from`, the file the mark was set on, the selection moves on to the
+--- next file in drawer order that is not reviewed.
 ---@param path string
 ---@param from? IterChange|IterFileDiff
-function Review:toggle_reviewed(path, from)
-    local state, err = reviewed.toggle(self.drawer.changes.root, path)
+function Review:mark_reviewed(path, from)
+    local _, err = reviewed.set(self.drawer.changes.root, path, true)
 
     if err ~= nil then
-        util.error('Cannot toggle reviewed: ' .. err)
+        util.error('Cannot mark reviewed: ' .. err)
         return
     end
 
@@ -1153,7 +1162,7 @@ function Review:toggle_reviewed(path, from)
 
     self:refresh_annotations()
 
-    if state ~= 'reviewed' or from == nil then
+    if from == nil then
         return
     end
 
@@ -1171,6 +1180,20 @@ function Review:toggle_reviewed(path, from)
 
         after = after or document.key(item) == document.key(from)
     end
+end
+
+--- Remove the reviewed mark of `path` and refresh. The selection stays.
+---@param path string
+function Review:unmark_reviewed(path)
+    local _, err = reviewed.set(self.drawer.changes.root, path, false)
+
+    if err ~= nil then
+        util.error('Cannot unmark reviewed: ' .. err)
+        return
+    end
+
+    self.expanded[path] = nil
+    self:refresh_annotations()
 end
 
 --- Select `item` and show it with its header at the top of the diff pane

@@ -149,30 +149,31 @@ function M.states(root, paths, records)
     return states
 end
 
---- Mark `path` reviewed at its current content, or unreviewed when it is
---- reviewed already. The state is the one the file has now.
+--- Mark `path` reviewed at its current content (`on`), or remove its mark.
+--- A file reviewed at its current content keeps its record.
 ---@param root string
 ---@param path string
----@return IterReviewedState? state
+---@param on boolean
+---@return boolean? ok
 ---@return string? error
-function M.toggle(root, path)
-    local hash = M.hashes(root, { path }, true)[path]
+function M.set(root, path, on)
+    local hash
 
-    if hash == nil then
-        return nil, 'Cannot hash ' .. path
+    if on then
+        hash = M.hashes(root, { path }, true)[path]
+
+        if hash == nil then
+            return nil, 'Cannot hash ' .. path
+        end
     end
-
-    local state
 
     local _, err = store.update(root, function(data)
         local record = data.reviewed[path]
 
-        if record ~= nil and record.hash == hash then
+        if not on then
             data.reviewed[path] = nil
-            state = 'unreviewed'
-        else
+        elseif record == nil or record.hash ~= hash then
             data.reviewed[path] = { hash = hash, at = os.time() }
-            state = 'reviewed'
         end
     end)
 
@@ -180,7 +181,7 @@ function M.toggle(root, path)
         return nil, err
     end
 
-    return state
+    return true
 end
 
 ---@param states table<string, IterReviewedState>

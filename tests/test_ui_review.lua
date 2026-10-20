@@ -415,7 +415,7 @@ T['drawer']['j moves and the diff follows; r is the mark'] = function()
     eq(selected(), 'unstaged b.txt')
     eq(
         child.lua_get([[vim.fn.maparg('r', 'n', false, true).desc]]),
-        'Toggle reviewed'
+        'Mark reviewed and go to the next file'
     )
     eq(child.lua_get([[vim.fn.maparg('q', 'n', false, true).desc]]), 'Close')
 end
@@ -1554,7 +1554,8 @@ T['hunks']['? in the diff pane lists its keys'] = function()
                 ' x      Delete the annotation',
                 ' <CR>   Expand the collapsed file or hidden context',
                 ' gf     Go to the line in the file',
-                ' r      Toggle reviewed',
+                ' r      Mark reviewed and go to the next file',
+                ' R      Remove the reviewed mark',
                 ' m      Toggle one file or all files',
                 ' |      Show the diff side by side',
                 ' -      Show the diff unified',
@@ -1777,7 +1778,7 @@ T['reviewed']['the header has no ahead count'] = function()
     eq(drawer_header(), 'HEAD main 4 files')
 end
 
-T['reviewed']['r in the drawer toggles the selected file'] = function()
+T['reviewed']['r in the drawer marks the selected file, R unmarks it'] = function()
     open_review()
     wait_diff('unstaged a.txt')
 
@@ -1792,14 +1793,16 @@ T['reviewed']['r in the drawer toggles the selected file'] = function()
     eq(diff_header(), '✓ reviewed  +2 −2 · 0 annotations ')
     eq(child.lua_get('_G.notes'), {})
 
-    child.type_keys('r')
+    child.type_keys('R')
     wait_state('a.txt', 'unreviewed')
+
+    eq(selected(), 'unstaged a.txt')
 
     eq(progress(), 'reviewed □□□□□□□□ 0 of 4')
     eq(diff_header(), '○ not reviewed  +2 −2 · 0 annotations ')
 end
 
-T['reviewed']['r in the diff pane toggles the shown file'] = function()
+T['reviewed']['r in the diff pane marks the shown file, R unmarks it'] = function()
     open_review()
     wait_diff('unstaged a.txt')
     child.type_keys('<CR>')
@@ -1817,9 +1820,10 @@ T['reviewed']['r in the diff pane toggles the shown file'] = function()
     eq(drawer_rows()[8], 'M ○ b.txt')
 
     child.lua('vim.api.nvim_set_current_win(' .. R .. '.diff_win)')
-    child.type_keys('r')
+    child.type_keys('R')
     wait_state('a.txt', 'unreviewed')
     eq(diff_header(), '○ not reviewed  +2 −2 · 0 annotations ')
+    eq(selected(), 'unstaged a.txt')
 end
 
 T['reviewed']['v in the diff pane is visual mode and marks nothing'] = function()
@@ -2076,7 +2080,7 @@ end
 T['reviewed']['r skips files already reviewed'] = function()
     open_review()
     wait_diff('unstaged a.txt')
-    child.lua(R .. ":toggle_reviewed('b.txt')")
+    child.lua(R .. ":mark_reviewed('b.txt')")
 
     child.type_keys('r')
     wait_diff('unstaged c.txt')
@@ -2085,12 +2089,23 @@ T['reviewed']['r skips files already reviewed'] = function()
     eq(cursor_row(), 'add c')
 end
 
-T['reviewed']['r on a reviewed file unmarks it and stays'] = function()
+T['reviewed']['r on a reviewed file keeps the mark and moves on'] = function()
     open_review()
     wait_diff('unstaged a.txt')
-    child.lua(R .. ":toggle_reviewed('a.txt')")
+    child.lua(R .. ":mark_reviewed('a.txt')")
 
     child.type_keys('r')
+    wait_diff('unstaged b.txt')
+
+    eq(selected(), 'unstaged b.txt')
+    eq(drawer_rows()[2], 'M ✓ a.txt')
+end
+
+T['reviewed']['R on a file without a mark changes nothing'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+
+    child.type_keys('R')
 
     eq(selected(), 'unstaged a.txt')
     eq(drawer_rows()[2], 'M ○ a.txt')
@@ -2574,7 +2589,7 @@ end
 T['uri']['a line in a collapsed file shows the file whole'] = function()
     open_review()
     wait_diff('unstaged a.txt')
-    child.lua(R .. ":toggle_reviewed('a.txt')")
+    child.lua(R .. ":mark_reviewed('a.txt')")
     child.lua(R .. ':toggle_mode()')
     helpers.wait_until(
         child,

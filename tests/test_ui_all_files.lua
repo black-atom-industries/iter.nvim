@@ -630,7 +630,7 @@ end
 
 T['reviewed'] = new_set()
 
-T['reviewed']['r toggles the file under the cursor'] = function()
+T['reviewed']['r marks the file under the cursor'] = function()
     open_all()
     cursor_on('cx')
     child.type_keys('r')
@@ -737,7 +737,7 @@ T['collapse'] = new_set()
 ---@param path string
 local function mark_reviewed(path)
     child.lua(
-        [[require('iter.reviewed').toggle(vim.fn.getcwd(), ...)]],
+        [[require('iter.reviewed').set(vim.fn.getcwd(), ..., true)]],
         { path }
     )
 end
@@ -772,7 +772,7 @@ local function header_right(index)
     )
 end
 
-T['collapse']['r collapses the file to its header, r on the header expands it'] = function()
+T['collapse']['r collapses the file to its header, R on the header expands it'] = function()
     open_all()
     cursor_on('b20x')
     child.type_keys('r')
@@ -796,7 +796,7 @@ T['collapse']['r collapses the file to its header, r on the header expands it'] 
     eq(header_right(2):find('✓ reviewed', 1, true) ~= nil, true)
 
     cursor_on('b.txt', 'header')
-    child.type_keys('r')
+    child.type_keys('R')
     helpers.wait_until(child, 'not ' .. collapsed(2))
 
     eq(vim.list_contains(pane_lines(), 'b20x'), true)
@@ -804,7 +804,7 @@ T['collapse']['r collapses the file to its header, r on the header expands it'] 
     eq(child.lua_get(R .. ".reviewed['b.txt']"), 'unreviewed')
 end
 
-T['collapse']['r in the drawer collapses and expands the selected file'] = function()
+T['collapse']['r in the drawer collapses the selected file, R expands it'] = function()
     open_all()
     select_item('unstaged', 'c.txt')
     child.type_keys('r')
@@ -818,7 +818,7 @@ T['collapse']['r in the drawer collapses and expands the selected file'] = funct
         true
     )
 
-    child.type_keys('r')
+    child.type_keys('R')
     helpers.wait_until(child, 'not ' .. collapsed(3))
     eq(
         vim.list_slice(pane_lines(), #pane_lines() - 3),
@@ -880,8 +880,8 @@ T['collapse']['<CR> on a collapsed header expands it and keeps it reviewed'] = f
     eq(cursor_row(), 'header b.txt')
     eq(child.lua_get(R .. ".reviewed['b.txt']"), 'reviewed')
 
-    -- r twice: unreviewed, then reviewed and collapsed again.
-    child.type_keys('r')
+    -- R unmarks it, r marks it and collapses it again.
+    child.type_keys('R')
     helpers.wait_until(child, R .. [[.reviewed['b.txt'] == 'unreviewed']])
     eq(child.lua_get(collapsed(2)), vim.NIL)
     child.type_keys('r')
