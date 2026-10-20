@@ -270,10 +270,10 @@ function Review:view_handlers()
             self:toggle_mode()
         end,
         split = function()
-            self.drawer.view:set_layout('split')
+            self.drawer:set_layout('split')
         end,
         unified = function()
-            self.drawer.view:set_layout('unified')
+            self.drawer:set_layout('unified')
         end,
         yank = function()
             require('iter').yank()

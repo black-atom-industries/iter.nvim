@@ -827,6 +827,44 @@ T['drawer']['| and - in the drawer switch the pane and keep the focus'] = functi
     eq(footer():find('| split', 1, true) ~= nil, true)
 end
 
+T['drawer']['| in the status drawer carries over to the review'] = function()
+    local D = [[require('iter').drawer]]
+    child.cmd('Iter')
+    helpers.wait_until(
+        child,
+        D .. [[ ~= nil and ]] .. D .. [[.view:is_shown()]]
+    )
+
+    child.type_keys('|')
+    helpers.wait_until(child, D .. [[.view.old ~= nil]])
+    open_review()
+
+    helpers.wait_until(child, R .. [[.drawer.view.old ~= nil]])
+    eq(child.lua_get(R .. [[.drawer.view.layout]]), 'split')
+    eq(#left_lines(), #right_lines())
+end
+
+T['drawer']['- in the review carries over to the status drawer'] = function()
+    local D = [[require('iter').drawer]]
+    open_review()
+    child.type_keys('|')
+    helpers.wait_until(child, R .. [[.drawer.view.old ~= nil]])
+    child.type_keys('q')
+    child.cmd('Iter')
+    helpers.wait_until(
+        child,
+        D .. [[ ~= nil and ]] .. D .. [[.view.old ~= nil]]
+    )
+
+    child.type_keys('-')
+    helpers.wait_until(child, D .. [[.view.old == nil]])
+    child.type_keys('q')
+    open_review()
+
+    eq(child.lua_get(R .. [[.drawer.view.layout]]), 'unified')
+    eq(child.lua_get(R .. [[.drawer.view.old == nil]]), true)
+end
+
 T['drawer']['selecting another file shows it on both sides'] = function()
     helpers.write_file(vim.fs.joinpath(repo, 'g.lua'), { 'local g = 1' })
     git_out({ 'add', 'g.lua' })

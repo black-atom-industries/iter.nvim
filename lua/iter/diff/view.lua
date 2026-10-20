@@ -19,6 +19,7 @@ local words = require('iter.diff.words')
 ---@field icon string shown before each annotation, '' for none
 ---@field name? string buffer name, see `set_name`
 ---@field bufhidden? string 'bufhidden' of the buffer, `wipe` by default
+---@field layout? IterDocLayout layout the view starts in, `unified` by default
 ---@field on_cursor? fun() after the cursor moved in a window of the view while it is the current one
 ---@field on_layout? fun() after the layout changed
 ---@field on_pane_replaced? fun(buf: integer, line: integer) after another buffer took the old side's window, with that buffer and its cursor line; the pane is back in a window of its own
@@ -151,6 +152,7 @@ function View.new(opts)
     vim.validate('opts.icon', opts.icon, 'string')
     vim.validate('opts.name', opts.name, 'string', true)
     vim.validate('opts.bufhidden', opts.bufhidden, 'string', true)
+    vim.validate('opts.layout', opts.layout, 'string', true)
     vim.validate('opts.on_cursor', opts.on_cursor, 'function', true)
     vim.validate('opts.on_layout', opts.on_layout, 'function', true)
     vim.validate(
@@ -166,7 +168,7 @@ function View.new(opts)
         buf = vim.api.nvim_create_buf(false, true),
         win = opts.win,
         document = document.build({}),
-        layout = 'unified',
+        layout = opts.layout or 'unified',
         files = {},
         rows = {},
         headers = {},

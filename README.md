@@ -62,6 +62,8 @@ The review tab holds the whole review: the review drawer below, the diff
 above. iter draws the diff itself, with treesitter syntax, the changed words
 emphasized, old and new line numbers, and hidden context that `<CR>` expands.
 `m` shows every file in one scroll and `|` shows old and new side by side.
+The status drawer and the review keep the layout you picked last, for the
+whole Neovim session.
 
 `r` marks a file reviewed and moves on to the next file you haven't reviewed.
 On a reviewed file it just moves on, and `R` removes the mark.

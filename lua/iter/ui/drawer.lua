@@ -87,6 +87,10 @@ Drawer.MIN_LINES = 5
 
 local SELECTED_NS = vim.api.nvim_create_namespace('iter.drawer.selected')
 local PREVIEW_DELAY_MS = 50
+-- The diff layout chosen last in any drawer; a new drawer starts in it, so
+-- the choice holds for the Neovim session.
+---@type IterDocLayout
+local diff_layout = 'unified'
 -- Width share of the stacked file columns beside the extras' columns.
 local FILES_WEIGHT = 3
 -- Diff rows that stand for a line of the file.
@@ -452,10 +456,10 @@ function Drawer.open(opts)
             self:set_all_files(not self.all_files)
         end
         view_handlers.split = function()
-            self.view:set_layout('split')
+            self:set_layout('split')
         end
         view_handlers.unified = function()
-            self.view:set_layout('unified')
+            self:set_layout('unified')
         end
     end
 
@@ -470,6 +474,7 @@ function Drawer.open(opts)
         icon = opts.config.options.icons.annotation,
         handlers = view_handlers,
         bufhidden = review and 'hide' or nil,
+        layout = diff_layout,
         on_cursor = function()
             self:follow_view()
         end,
@@ -563,10 +568,10 @@ function Drawer:make_handlers()
             self:set_all_files(not self.all_files)
         end,
         split = function()
-            self.view:set_layout('split')
+            self:set_layout('split')
         end,
         unified = function()
-            self.view:set_layout('unified')
+            self:set_layout('unified')
         end,
         close = act('close'),
         help = act('toggle_help'),
@@ -1664,6 +1669,13 @@ function Drawer:set_all_files(on)
         self:load_all()
         self:shown()
     end
+end
+
+--- Show diffs in `doc_layout`, here and in every drawer opened after.
+---@param doc_layout IterDocLayout
+function Drawer:set_layout(doc_layout)
+    diff_layout = doc_layout
+    self.view:set_layout(doc_layout)
 end
 
 --- Select the file under the cursor of the all-files view in the drawer,

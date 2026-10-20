@@ -29,7 +29,7 @@ the review straight to an agent pane.
   The view keeps its own window for the new side and opens the old side's pane left of it, with `scrollbind` and
   `cursorbind`; both have the same lines, and an annotation's `virt_lines` on one side get blank `virt_lines` of the
   same height on the other. Moves the code makes go through `View:sync()`, since the binds follow only the current
-  window. Only the review tab offers the split layout.
+  window.
 - A patch of selected lines (`patch.lines`) writes each change group in pair order, the split layout's: a deleted
   line next to the added line it pairs with, so a staged or unstaged line goes next to its partner, which stays unless the selection takes it too.
 - A document of several files decorates per viewport: syntax, word emphasis and annotation `virt_lines` for the lines
