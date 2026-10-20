@@ -2,6 +2,32 @@
 
 ## [0.2.0](https://github.com/black-atom-industries/iter.nvim/compare/v0.1.0...v0.2.0) (2026-10-20)
 
+### Highlights
+
+#### Annotate a file from any buffer
+
+`annotate({ scope = 'file' })` annotates the current buffer's file, the same annotation `A` makes in the review. iter
+still maps nothing outside its own buffers, so the README's Quick start has a recipe for all four:
+
+```lua
+local iter = require('iter')
+
+vim.keymap.set({ 'n', 'x' }, '<leader>aa', function()
+    iter.annotate()
+end, { desc = 'Annotate the line or selection' })
+vim.keymap.set('n', '<leader>af', function()
+    iter.annotate({ scope = 'file' })
+end, { desc = 'Annotate the file' })
+vim.keymap.set('n', '<leader>ar', function()
+    iter.annotate({ scope = 'review' })
+end, { desc = 'Annotate the review' })
+vim.keymap.set('n', '<leader>al', iter.annotations, { desc = 'List the annotations' })
+```
+
+#### Fixes
+
+Switching between unified and side by side, or from all files back to one, keeps the file header where it was. Before,
+it could end up one line above the window.
 
 ### Features
 
