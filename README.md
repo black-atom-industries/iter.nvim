@@ -14,14 +14,25 @@ fugitive for that.
 
 ## Contents
 
-- [The loop](#the-loop): [see what changed](#see-what-changed), [review](#review), [annotate](#annotate),
-  [hand back](#hand-back)
+- [The loop](#the-loop)
+  - [See what changed](#see-what-changed)
+  - [Review](#review)
+  - [Annotate](#annotate)
+  - [Hand back](#hand-back)
 - [Install](#install)
 - [Quick start](#quick-start)
 - [Annotations outside iter](#annotations-outside-iter)
-- [Reference](#reference): [status drawer](#status-drawer), [review tab](#review-tab), [keys](#keys),
-  [configuration](#configuration), [Lua API](#lua-api), [addresses](#addresses), [tab label](#tab-label),
-  [events](#events), [highlight groups](#highlight-groups), [files](#files)
+- [Reference](#reference)
+  - [Status drawer](#status-drawer)
+  - [Review tab](#review-tab)
+  - [Keys](#keys)
+  - [Configuration](#configuration)
+  - [Lua API](#lua-api)
+  - [Addresses](#addresses)
+  - [Tab label](#tab-label)
+  - [Events](#events)
+  - [Highlight groups](#highlight-groups)
+  - [Files](#files)
 - [Development](#development)
 - [Credits](#credits)
 
