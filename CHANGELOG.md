@@ -2,6 +2,49 @@
 
 ## 0.1.0 (2026-10-20)
 
+### Highlights
+
+iter is a review loop for Neovim. You or an agent change code, you review it in iter, annotate what needs work, and hand
+the annotations back as a prompt. 0.1.0 is the first release of the renovated plugin.
+
+#### Review tab
+
+`:Iter review`, or `r` in the status drawer, opens a tab for the whole review. iter draws the diff itself, with treesitter
+syntax, the changed words emphasized and context that expands on `<CR>`. `m` shows every file in one scroll, `|` puts old
+and new side by side, and `s` and `u` stage hunks or only the selected lines.
+
+`r` marks a file reviewed and moves on to the next one, its header at the top and the cursor on its first change. A
+reviewed file that changes again turns `↻`.
+
+![The review tab: a annotates a line, r marks the file reviewed and moves on, the Annotations column lists the annotation](https://raw.githubusercontent.com/black-atom-industries/iter.nvim/v0.1.0/docs/assets/changelog/0.1.0-review.webp)
+
+![All files: m shows every file, r collapses each reviewed file and moves to the next, | shows the diff side by side](https://raw.githubusercontent.com/black-atom-industries/iter.nvim/v0.1.0/docs/assets/changelog/0.1.0-layouts.webp)
+
+#### Annotations and the agent prompt
+
+`a` annotates a line or a range and `A` a file. Annotations also show in normal file buffers, follow their code when it
+moves and turn outdated when it is gone. The Annotations column of the review drawer lists them all, and `y` copies the
+review as a prompt: an intro, then every annotation with its `file:line` and the code it is on.
+
+```lua
+vim.keymap.set({ 'n', 'x' }, '<leader>a', function()
+    require('iter').annotate()
+end, { desc = 'Annotate' })
+```
+
+#### Status drawer
+
+`:Iter` opens a drawer at the bottom of the window with Unstaged and Staged side by side and the diff of the selection
+above. The header shows the branch and how far it is ahead and behind its upstream, and the recent commits sit under the
+files. `s`, `u`, `d` and `I` stage, unstage, discard and ignore whole files.
+
+![The status drawer: moving through the files previews each diff, s stages a file, ? lists the keys](https://raw.githubusercontent.com/black-atom-industries/iter.nvim/v0.1.0/docs/assets/changelog/0.1.0-drawer.webp)
+
+#### Fits into your setup
+
+Every view has an `iter://` address, `statusline()` and `tabline()` label the review, and `IterRefresh` and `IterStage`
+events fire after reads and stage actions. Keys are remappable per view, `diff.args` passes flags to `git diff`, and the
+`Iter*` highlight groups derive from your colorscheme unless it defines them.
 
 ### Features
 
@@ -70,5 +113,3 @@
 * README clips of the drawer and the review tab ([c914850](https://github.com/black-atom-industries/iter.nvim/commit/c914850eebcc0499665fc345ec8a1fae2ebccbe8)), closes [#13](https://github.com/black-atom-industries/iter.nvim/issues/13)
 * **renovation:** add the M1 inspection, module sketch and slice plan ([c8c174a](https://github.com/black-atom-industries/iter.nvim/commit/c8c174ab42547e53231ccaf4c6c7f29fe69c31d3))
 * **renovation:** record the pure Lua renderer decision ([f724972](https://github.com/black-atom-industries/iter.nvim/commit/f7249724ab40a36975fffd65b00ea73a4bff1e86))
-
-## Changelog
