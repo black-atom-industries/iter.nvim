@@ -510,6 +510,34 @@ T['keys']['<C-j> in the preview focuses the drawer; the map leaves with it'] = f
     eq(child.api.nvim_buf_is_valid(view_buf), false)
 end
 
+T['keys']['m, | and - switch the preview from the drawer and the pane'] = function()
+    open_drawer()
+    wait_preview('unstaged deleted.txt')
+
+    local D = [[require('iter').drawer]]
+    local sections = D .. [[.view.document.sections]]
+
+    child.type_keys('m')
+    helpers.wait_until(child, '#' .. sections .. ' > 1')
+    eq(child.lua_get(D .. [[.all_files]]), true)
+
+    child.type_keys('|')
+    eq(child.lua_get(D .. [[.view.layout]]), 'split')
+    helpers.expect_screenshot(child, 'drawer-all-files-split')
+
+    child.type_keys('-')
+    eq(child.lua_get(D .. [[.view.layout]]), 'unified')
+
+    child.lua([[vim.api.nvim_set_current_win(require('iter').drawer.view.win)]])
+    child.type_keys('|')
+    eq(child.lua_get(D .. [[.view.layout]]), 'split')
+    child.type_keys('-')
+    eq(child.lua_get(D .. [[.view.layout]]), 'unified')
+    child.type_keys('m')
+    eq(child.lua_get(D .. [[.all_files]]), false)
+    eq(child.lua_get('#' .. sections), 1)
+end
+
 T['stage'] = new_set()
 
 T['stage']['s stages a file and keeps the selection on the nearest row'] = function()
@@ -997,8 +1025,11 @@ local function chrome()
     return result
 end
 
+-- At 80 columns the hint drops the keys that do not fit.
 local HINT =
     's stage  u unstage  d discard  I ignore  <CR> open  r review  ? help'
+local HINT_WIDE =
+    's stage  u unstage  d discard  I ignore  <CR> open  r review  m all files  | split  ? help'
 
 ---@param options string Lua table passed to setup()
 local function setup(options)
@@ -1035,7 +1066,7 @@ T['header']['the hint follows remapped keys'] = function()
 
     eq(
         chrome().hint,
-        'S stage  u unstage  I ignore  <CR> open  r review  ? help'
+        'S stage  u unstage  I ignore  <CR> open  r review  m all files  | split  ? help'
     )
 end
 
@@ -1194,6 +1225,9 @@ T['help']['? lists the current keys and closes on q, ? and <Esc>'] = function()
             ' u      Unstage the file',
             ' I      Add the untracked file to .gitignore',
             ' r      Open the review tab',
+            ' m      Toggle one file or all files',
+            ' |      Show the diff side by side',
+            ' -      Show the diff unified',
             ' q      Close',
             ' ?      Show the keys',
             ' <C-d>  Scroll the diff down',
@@ -1570,7 +1604,7 @@ T['commits']['pins the recent commits under the files'] = function()
         strip_state(),
         { strip = true, focusable = false, stacked = true, height = 2 }
     )
-    eq(chrome().hint, HINT)
+    eq(chrome().hint, HINT_WIDE)
 
     helpers.expect_screenshot(child, 'drawer-recent-commits')
 end
@@ -1694,7 +1728,7 @@ T['commits']['drawer.commits = 0 opens no section window'] = function()
     eq(#drawer_lines(), 2)
     eq(strip_state().strip, false)
     eq(chrome().header, 'HEAD main  ↑2 ↓1  origin/main  1 change')
-    eq(chrome().hint, HINT)
+    eq(chrome().hint, HINT_WIDE)
 end
 
 T['commits']['stacked, the section stays pinned at the bottom'] = function()

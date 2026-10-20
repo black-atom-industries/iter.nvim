@@ -335,6 +335,9 @@ The status drawer (`drawer`):
 | `d`     | `discard`      | Discard changes in the file          |
 | `I`     | `ignore`       | Add the untracked file to .gitignore |
 | `r`     | `review`       | Open the review tab                  |
+| `m`     | `mode`         | Toggle one file or all files         |
+| `\|`    | `split`        | Show the diff side by side           |
+| `-`     | `unified`      | Show the diff unified                |
 | `q`     | `close`        | Close                                |
 | `?`     | `help`         | Show the keys                        |
 | `<C-d>` | `scroll_down`  | Scroll the diff down                 |
@@ -344,7 +347,8 @@ The status drawer (`drawer`):
 
 In the diff above the status drawer, the `expand` key (`<CR>`) on a code line
 opens the file at that line and closes the drawer; on hidden context it
-expands. A staged line lands where it is in the worktree.
+expands. A staged line lands where it is in the worktree. The diff's `mode`,
+`split` and `unified` keys work there as in the review.
 
 The drawer of the review tab (`review_drawer`):
 
