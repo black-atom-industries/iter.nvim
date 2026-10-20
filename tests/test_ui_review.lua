@@ -2343,6 +2343,80 @@ T['files']['entering either window selects there and a resize keeps the focus'] 
     eq(child.lua_get(state), 'files unstaged')
 end
 
+--- The drawer line that holds the title `title`, trimmed.
+---@param title string
+---@return string?
+local function drawer_line_with(title)
+    return child.lua_get([[(function(title)
+        for _, line in ipairs(vim.api.nvim_buf_get_lines(]] .. R .. [[.drawer.buf, 0, -1, false)) do
+            if line:find(title, 1, true) then
+                return vim.trim(line)
+            end
+        end
+        return vim.NIL
+    end)(...)]], { title })
+end
+
+T['files']['from the wide breakpoint Unstaged and Staged sit side by side'] = function()
+    child.o.columns = 180
+    open_review()
+    wait_diff('unstaged a.txt')
+
+    eq(child.lua_get(R .. '.drawer.wide'), true)
+    eq(
+        drawer_line_with('Unstaged (4)'):find('Staged (1)', 1, true) ~= nil,
+        true
+    )
+    eq(
+        child
+            .lua_get(
+                [[vim.api.nvim_buf_get_lines(]]
+                    .. R
+                    .. [[.drawer.side_buf, 0, 1, false)[1] ]]
+            )
+            :find('Annotations (0)', 1, true) ~= nil,
+        true
+    )
+    helpers.expect_screenshot(child, 'review-wide')
+end
+
+T['files']['in the wide layout h and l step through Unstaged, Staged and Annotations'] = function()
+    child.o.columns = 180
+    open_review()
+    wait_diff('unstaged a.txt')
+
+    child.type_keys('l')
+    wait_diff('staged b.txt')
+    eq(selected(), 'staged b.txt')
+
+    child.type_keys('j')
+    eq(selected(), 'staged b.txt')
+
+    child.type_keys('l')
+    eq(child.lua_get(R .. '.drawer.column'), 'annotations')
+
+    child.type_keys('h', 'h')
+    wait_diff('unstaged a.txt')
+    eq(selected(), 'unstaged a.txt')
+end
+
+T['files']['drawer.wide_breakpoint sets where the file columns go side by side'] = function()
+    setup([[{ drawer = { wide_breakpoint = 200 } }]])
+    child.o.columns = 180
+    open_review()
+    wait_diff('unstaged a.txt')
+
+    eq(child.lua_get(R .. '.drawer.wide'), false)
+    eq(drawer_line_with('Unstaged (4)'):find('Staged', 1, true), nil)
+
+    child.o.columns = 200
+    helpers.wait_until(child, R .. '.drawer.wide == true')
+    eq(
+        drawer_line_with('Unstaged (4)'):find('Staged (1)', 1, true) ~= nil,
+        true
+    )
+end
+
 T['files']['crossing the breakpoint opens and closes the Annotations window'] = function()
     child.o.columns = 120
     open_review()

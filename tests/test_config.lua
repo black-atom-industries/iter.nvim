@@ -15,10 +15,13 @@ T['resolve()'] = new_set()
 T['resolve()']['returns the defaults without options'] = function()
     local resolved = config.resolve()
 
-    eq(
-        resolved.options.drawer,
-        { height = 0.3, zindex = 40, breakpoint = 80, commits = 3 }
-    )
+    eq(resolved.options.drawer, {
+        height = 0.3,
+        zindex = 40,
+        breakpoint = 80,
+        wide_breakpoint = 160,
+        commits = 3,
+    })
     eq(resolved.options.diff, {
         expand_step = 20,
         syntax_max_lines = 20000,
@@ -45,10 +48,13 @@ T['resolve()']['merges partial options with the defaults'] = function()
         debug = true,
     })
 
-    eq(
-        resolved.options.drawer,
-        { height = 0.5, zindex = 40, breakpoint = 80, commits = 3 }
-    )
+    eq(resolved.options.drawer, {
+        height = 0.5,
+        zindex = 40,
+        breakpoint = 80,
+        wide_breakpoint = 160,
+        commits = 3,
+    })
     eq(resolved.options.confirm.discard, false)
     eq(resolved.debug, true)
 end

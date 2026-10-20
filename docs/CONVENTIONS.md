@@ -77,7 +77,7 @@ the review straight to an agent pane.
 - The drawer's lines come from `iter.ui.layout`: pure functions from a list of column specs and the width to render
   lines, side by side at `drawer.breakpoint` and wider, stacked below it. A stack (`IterLayoutStack`) puts several
   specs as titled sections in one column; the review drawer's columns layout stacks Unstaged above Staged beside the
-  Annotations column, and `h` and `l` step between those columns, each keeping its last selection. There
+  Annotations column, below `drawer.wide_breakpoint` (from it they sit side by side), and `h` and `l` step between those columns, each keeping its last selection. There
   `layout.split` gives the Annotations column a layout of its own, shown in the float's side window (`IterFloatSide`):
   a focusable window over the right of the float's text rows at `drawer.zindex + 1`, with its own buffer, so the file
   list scrolls alone. The float opens, moves and closes it; the drawer closes when it is closed from outside, and

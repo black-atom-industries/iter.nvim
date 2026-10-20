@@ -196,8 +196,9 @@ iter warns and opens nothing.
 
 The review drawer has the files on the left, Unstaged above Staged, and the
 Annotations column on the right in a window of its own that stays put while
-the files scroll. `h` and `l` switch between them; in narrow windows the three
-stack and `h` and `l` step through them.
+the files scroll. `h` and `l` switch between them. In wide windows Unstaged and
+Staged sit side by side; in narrow windows the three stack. In both `h` and `l`
+step through them.
 
 The Annotations column starts with the progress (`reviewed ■■■□□□□□ 3 of 8`,
 then `· ↻ n` for files changed since they were reviewed), then every
@@ -343,6 +344,7 @@ require('iter').setup({
         height = 0.3,     -- fraction of the window height
         zindex = 40,      -- float stacking order; help and annotation floats sit above it
         breakpoint = 80,  -- drawer width below which the columns stack
+        wide_breakpoint = 160, -- review drawer width from which Unstaged and Staged sit side by side
         commits = 3,      -- recent commits the status drawer lists, 0 hides them
     },
     diff = {

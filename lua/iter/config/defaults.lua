@@ -10,6 +10,7 @@ M.options = {
         height = 0.3,
         zindex = 40,
         breakpoint = 80,
+        wide_breakpoint = 160,
         commits = 3,
     },
     diff = {

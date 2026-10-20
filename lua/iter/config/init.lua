@@ -15,6 +15,7 @@ local SCHEMA = {
         height = 'number',
         zindex = 'integer',
         breakpoint = 'integer',
+        wide_breakpoint = 'integer',
         commits = 'integer',
     },
     diff = {

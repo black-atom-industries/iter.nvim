@@ -69,6 +69,7 @@ local watch = require('iter.watch')
 ---@field column string id of the selected column
 ---@field lnum integer selected line
 ---@field layout IterLayoutMode
+---@field wide boolean whether the width reaches `drawer.wide_breakpoint` in the columns layout
 ---@field recall table<string, IterDrawerMark> per stop, by its first column id, the selection it had when left
 ---@field previewed? string key of the item the view shows, or of the extras' item that showed it
 ---@field previewed_stat? string worktree stat of that item when it was read, of every file in all-files mode
@@ -162,10 +163,12 @@ function Drawer:column_ids(first, all)
 end
 
 --- Whether the file columns share one column, Unstaged above Staged: in
---- the review's columns layout.
+--- the review's columns layout below `drawer.wide_breakpoint`.
 ---@return boolean
 function Drawer:files_stacked()
-    return self.context == 'review' and self.layout == 'columns'
+    return self.context == 'review'
+        and self.layout == 'columns'
+        and not self.wide
 end
 
 --- The columns `h` and `l` step between, left to right, each a list of
@@ -415,6 +418,7 @@ function Drawer.open(opts)
         column = 'unstaged',
         lnum = 1,
         layout = 'columns',
+        wide = false,
         recall = {},
         all_files = false,
         all_shown = false,
@@ -783,9 +787,15 @@ function Drawer:render()
 
     self.extra = self.extras and self.extras:drawer_columns(self) or {}
     self.layout = layout.mode(width, self.config.options.drawer.breakpoint)
+    self.wide = self.layout == 'columns'
+        and width >= self.config.options.drawer.wide_breakpoint
 
     if self:files_stacked() then
         columns = { { sections = columns, weight = FILES_WEIGHT } }
+    elseif self.context == 'review' and self.layout == 'columns' then
+        for _, column in ipairs(columns) do
+            column.weight = FILES_WEIGHT / #columns
+        end
     end
 
     vim.list_extend(columns, self.extra)
@@ -794,7 +804,11 @@ function Drawer:render()
 
     if #self:ordered() == 0 and #self.extra == 0 then
         built = layout.message('Working tree clean')
-    elseif self:files_stacked() and self.side_buf ~= nil then
+    elseif
+        self.context == 'review'
+        and self.layout == 'columns'
+        and self.side_buf ~= nil
+    then
         side = layout.split(columns, width)
         built = side.left
     elseif self.layout == 'columns' then
@@ -1149,12 +1163,15 @@ function Drawer:follow_cursor(win)
 
     if self.layout == 'stacked' then
         ids = self:column_ids(nil, true)
-    elseif self.split then
-        ids = win == self.float.side_win
-                and vim.tbl_map(function(column)
-                    return column.id
-                end, self.extra)
-            or self:column_ids()
+    elseif self.split and win == self.float.side_win then
+        ids = vim.tbl_map(function(column)
+            return column.id
+        end, self.extra)
+    elseif
+        self.split
+        and (self:files_stacked() or self:extra_column(self.column) ~= nil)
+    then
+        ids = self:column_ids()
     else
         ids = self:stop_of(self.column)
     end

@@ -7,6 +7,7 @@
 ---@field height? number Fraction of the pane height, in (0, 1]
 ---@field zindex? integer
 ---@field breakpoint? integer Drawer width below which the columns stack
+---@field wide_breakpoint? integer Drawer width from which the review drawer shows Unstaged and Staged side by side
 ---@field commits? integer Recent commits the status drawer lists, 0 hides them
 
 ---@class IterDiffOptions
@@ -43,7 +44,7 @@
 ---@field debug? boolean
 
 ---@class IterResolvedOptions
----@field drawer { height: number, zindex: integer, breakpoint: integer, commits: integer }
+---@field drawer { height: number, zindex: integer, breakpoint: integer, wide_breakpoint: integer, commits: integer }
 ---@field diff { expand_step: integer, syntax_max_lines: integer, word_diff: boolean, args: string[] }
 ---@field export { intro: string }
 ---@field refresh { poll_ms: integer }
