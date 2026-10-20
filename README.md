@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.svg">
+  <img alt="iter.nvim: review, annotate, hand back, repeat" src="docs/assets/banner-light.svg">
+</picture>
+
 # iter.nvim
 
 Iterate on code changes in Neovim: review, annotate, hand back, repeat.
