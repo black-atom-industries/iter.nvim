@@ -7,7 +7,8 @@
 #### Annotate a file from any buffer
 
 `annotate({ scope = 'file' })` annotates the current buffer's file, the same annotation `A` makes in the review. iter
-still maps nothing outside its own buffers, so the README's Quick start has a recipe for all four:
+still maps nothing outside its own buffers, so the README's
+[Annotations outside iter](https://github.com/black-atom-industries/iter.nvim#annotations-outside-iter) has a recipe:
 
 ```lua
 local iter = require('iter')
@@ -15,12 +16,15 @@ local iter = require('iter')
 vim.keymap.set({ 'n', 'x' }, '<leader>aa', function()
     iter.annotate()
 end, { desc = 'Annotate the line or selection' })
+
 vim.keymap.set('n', '<leader>af', function()
     iter.annotate({ scope = 'file' })
 end, { desc = 'Annotate the file' })
+
 vim.keymap.set('n', '<leader>ar', function()
     iter.annotate({ scope = 'review' })
 end, { desc = 'Annotate the review' })
+
 vim.keymap.set('n', '<leader>al', iter.annotations, { desc = 'List the annotations' })
 ```
 

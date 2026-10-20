@@ -12,6 +12,19 @@ fugitive for that.
 
 ![The review tab: moving through the files, a annotates a line, r marks the file reviewed and moves on, the Annotations column lists the annotation](docs/assets/review.webp)
 
+## Contents
+
+- [The loop](#the-loop): [see what changed](#see-what-changed), [review](#review), [annotate](#annotate),
+  [hand back](#hand-back)
+- [Install](#install)
+- [Quick start](#quick-start)
+- [Annotations outside iter](#annotations-outside-iter)
+- [Reference](#reference): [status drawer](#status-drawer), [review tab](#review-tab), [keys](#keys),
+  [configuration](#configuration), [Lua API](#lua-api), [addresses](#addresses), [tab label](#tab-label),
+  [events](#events), [highlight groups](#highlight-groups), [files](#files)
+- [Development](#development)
+- [Credits](#credits)
+
 ## The loop
 
 ### See what changed
@@ -103,29 +116,38 @@ plugin manager must not delay it until the first `:Iter`.
 :Iter review   " open the review tab, or switch to it
 ```
 
-`?` lists the keys of the view you are in. iter maps keys only in its own
-buffers, so annotating from a file buffer takes mappings of your own:
+`?` lists the keys of the view you are in.
+
+## Annotations outside iter
+
+iter maps keys only in its own buffers. To annotate from any buffer of a file
+in the repository, map the API yourself:
 
 ```lua
 local iter = require('iter')
 
+-- The cursor line, or the visual selection
 vim.keymap.set({ 'n', 'x' }, '<leader>aa', function()
     iter.annotate()
 end, { desc = 'Annotate the line or selection' })
+
+-- The whole file
 vim.keymap.set('n', '<leader>af', function()
     iter.annotate({ scope = 'file' })
 end, { desc = 'Annotate the file' })
+
+-- The whole review
 vim.keymap.set('n', '<leader>ar', function()
     iter.annotate({ scope = 'review' })
 end, { desc = 'Annotate the review' })
+
+-- Open the review on its Annotations column
 vim.keymap.set('n', '<leader>al', iter.annotations, { desc = 'List the annotations' })
 ```
 
-And iter's part of a statusline:
-
-```lua
-vim.o.statusline = "%f %m%=%{v:lua.require'iter'.statusline()} "
-```
+Line and range annotations show in the buffer, as a sign on the line and the
+text below it. File and review annotations show in the review and in the
+export.
 
 ## Reference
 
@@ -374,6 +396,10 @@ repository it returns `<branch> · <n>` with n the changed files, and `''`
 outside one. A hidden annotation draft adds `draft annotation`. It never runs
 git: a cache per repository refreshes on writes, focus, directory changes and
 shell commands.
+
+```lua
+vim.o.statusline = "%f %m%=%{v:lua.require'iter'.statusline()} "
+```
 
 `uri()` returns `iter://review/<path>#L<n>` for the cursor in the review's
 diff, with the worktree line of the cursor row, and `nil` elsewhere. Save it
