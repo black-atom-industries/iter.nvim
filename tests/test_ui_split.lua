@@ -321,6 +321,25 @@ T['split']['| and - are idempotent and - restores one pane'] = function()
     eq(statusline(), 'review · f.lua · 1/1')
 end
 
+T['split']['- keeps the file header at the top of the window'] = function()
+    open_review()
+    split()
+    cursor_on('right', 'local v = 3 + 0')
+    child.lua([[vim.fn.winrestview({ topline = 1 })]])
+
+    child.type_keys('-')
+    helpers.wait_until(child, R .. [[.drawer.view.old == nil]])
+
+    local view = child.lua_get([[(function()
+        local r = ]] .. R .. [[
+        local v = vim.api.nvim_win_call(r.diff_win, vim.fn.winsaveview)
+        local line = vim.api.nvim_buf_get_lines(r.drawer.view.buf, v.lnum - 1, v.lnum, true)[1]
+        return { v.topline, line }
+    end)()]])
+
+    eq(view, { 1, 'local v = 3 + 0' })
+end
+
 T['split']['- from the left window moves into the right one'] = function()
     open_review()
     split()

@@ -1403,10 +1403,11 @@ end
 --- when it has another; the split layout opens the old side left of it.
 --- The window's own options are saved the first time and come back as soon
 --- as the view leaves it. The file under the cursor stays under it near its
---- row when `doc` shows it again; else the cursor starts at the top.
+--- row when `doc` shows it again, and so does the row at the top of the
+--- window while it belongs to that file; else the cursor starts at the top.
 ---@param doc IterDocument
 function View:show_document(doc)
-    local cursor, view, before, row, position
+    local cursor, view, before, row, position, top_row
 
     if doc.layout ~= self.layout then
         doc = document.build(doc.sections, self.layout)
@@ -1422,6 +1423,14 @@ function View:show_document(doc)
 
         if before ~= nil and row == nil then
             row = #before.file.rows
+        end
+
+        local top_section
+        top_section, top_row =
+            document.at(self.document, view.topline, active.side)
+
+        if top_section ~= before then
+            top_row = nil
         end
     end
 
@@ -1461,7 +1470,11 @@ function View:show_document(doc)
     local active = self:active()
 
     if lnum and cursor ~= nil and view ~= nil then
-        local topline = math.max(1, view.topline + lnum - cursor[1])
+        local top = top_row
+            and before
+            and restored_line(doc, before, top_row, position --[[@as integer]])
+        local topline = top and top <= lnum and top
+            or math.max(1, view.topline + lnum - cursor[1])
 
         vim.api.nvim_win_call(active.win, function()
             vim.fn.winrestview({
