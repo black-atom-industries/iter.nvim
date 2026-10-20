@@ -1,58 +1,72 @@
 # iter.nvim
 
-> **iter** /ˈɪtɛr/, Latin: _journey, path, road, march_
->
-> Your code's journey through version control.
+Iterate on code changes in Neovim: review, annotate, hand back, repeat.
 
-A Git staging and code review tool for Neovim.
+Whether the changes are yours or an agent's, iter is the review half of the
+loop. You read the diff, stage what is ready, annotate what is not, and copy
+the annotations out as a prompt. When the code changes again, iter shows what
+is new since your last pass.
 
-## Features
-
-- **Status drawer:** a float at the bottom of the current window with Unstaged
-  and Staged side by side (stacked in narrow windows). The window above shows
-  the diff of the selected file as you move.
-- **Branch at a glance** in the status drawer: the header shows the branch,
-  how far it is ahead of (`↑`) and behind (`↓`) its upstream and the
-  upstream's name; pinned under the files, the last commits with `↑` on those
-  not pushed yet.
-- **Stage, unstage, discard** whole files. New files are listed one by one
-  among the others. Discard asks first, names the paths, and never touches the
-  index or ignored files.
-- **Renames** read `old → new` on one row.
-- **Ignore** an untracked file or directory: `I` appends it to the
-  `.gitignore` at the root, after a confirm.
-- **Review tab:** a tab page for the whole review. One file's diff at a time,
-  or every file in one scroll, with hunk jumps, file jumps and `gf` to the
-  source line.
-- **Hunk staging** in the review diff, applied exactly like `git add -p`.
-- **Diff rendering** in Lua: treesitter syntax, word emphasis on changed lines,
-  old and new line numbers, hidden context that expands on demand.
-- **Annotations** on a line, a range, a deleted line, a file or the whole review,
-  in the review diff and in normal file buffers. Annotations follow their code
-  when it moves and turn outdated when it is gone.
-- **Annotations column** in the review drawer: every annotation in drawer
-  order with the reviewed progress on top. Moving onto one shows it in the diff;
-  jump, edit and delete from there.
-- **Reviewed marks** per file that drop back when the file changes afterwards.
-- **Export:** copy all annotations as a prompt for an agent, then clear them if
-  you like.
-- **Saved per repository and branch**, shared by linked worktrees.
-- **Auto refresh** on index and HEAD changes, focus and writes.
-- **Keys per view**, each one remappable or disabled, with a `?` help float.
-
-iter does not commit, push or pull. Use a Git plugin such as mini.git or
+iter does not commit, push or pull. Keep a Git plugin such as mini.git or
 fugitive for that.
 
-## Requirements
+![The review tab: moving through the files, a annotates a line, r marks the file reviewed and moves on, the Annotations column lists the annotation](docs/assets/review.webp)
 
-- Neovim 0.12 or newer
-- `git` on `PATH`
+## The loop
 
-Run `:checkhealth iter` to check both.
+### See what changed
 
-## Installation
+`:Iter` opens the status drawer, a float at the bottom of the current window.
+Unstaged and Staged sit side by side, stacked in narrow windows, and the
+window above shows the diff of the selected file as you move. The header shows
+the branch and how far it is ahead (`↑`) and behind (`↓`) its upstream, and
+the last commits are pinned under the files.
 
-### vim.pack
+`s`, `u` and `d` stage, unstage and discard whole files, and `I` adds an
+untracked path to `.gitignore`. `r` opens the review.
+
+![The status drawer: moving through the files previews each diff, s stages a file, ? lists the keys](docs/assets/drawer.webp)
+
+### Review
+
+The review tab holds the whole review: the review drawer below, the diff
+above. iter draws the diff itself, with treesitter syntax, the changed words
+emphasized, old and new line numbers, and hidden context that `<CR>` expands.
+`m` shows every file in one scroll and `|` shows old and new side by side.
+
+`r` marks a file reviewed and moves on to the next file you haven't reviewed.
+A reviewed file that changes again turns `↻`, so the next pass shows what
+moved. In all-files mode a reviewed file collapses to its header.
+
+Stage as you go: `s` and `u` take the hunk under the cursor, or in visual
+mode only the selected lines, applied like `git add -p`.
+
+### Annotate
+
+`a` annotates the line or the visual range, `A` the whole file. Annotations
+also work in normal file buffers through `require('iter').annotate()`. They
+follow their code when it moves and turn outdated when it is gone.
+
+The Annotations column of the review drawer lists every annotation, with the
+reviewed progress on top. Moving onto one shows it in the diff, `<CR>` jumps
+there, `e` edits and `x` deletes.
+
+### Hand back
+
+`y` copies the review as a prompt for an agent: an intro, then every
+annotation with its `file:line` and the code it is on. iter then asks whether
+to clear the annotations, and the next round starts.
+
+Annotations and reviewed marks are saved per repository and branch, and
+linked worktrees share them. Drawers and the review refresh on their own when
+the index, HEAD or the files change.
+
+## Install
+
+iter needs Neovim 0.12 or newer and `git` on `PATH`. `:checkhealth iter`
+checks both.
+
+With `vim.pack`:
 
 ```lua
 vim.pack.add({
@@ -66,7 +80,7 @@ vim.pack.add({
 require('iter').setup()
 ```
 
-### lazy.nvim
+With lazy.nvim:
 
 ```lua
 {
@@ -76,10 +90,10 @@ require('iter').setup()
 }
 ```
 
-Call `setup()` at startup. It is what shows annotations in normal file buffers,
-so a plugin manager must not delay it until the first `:Iter`.
+Call `setup()` at startup. It draws annotations in normal file buffers, so a
+plugin manager must not delay it until the first `:Iter`.
 
-## Usage
+## Quick start
 
 ```vim
 :Iter          " open the status drawer
@@ -87,170 +101,180 @@ so a plugin manager must not delay it until the first `:Iter`.
 :Iter review   " open the review tab, or switch to it
 ```
 
-Outside a git repository iter warns and opens nothing. On a clean tree the
-status drawer says "Working tree clean"; the review tab still opens, with its
-Annotations column.
-
-The status drawer's header reads `HEAD <branch>  ↑n ↓m  <upstream>` with the
-number of changes at the right; stacked, it shows `N unstaged · M staged`
-instead. `↑` and `↓` show only when not 0 and count
-against the upstream as last fetched; iter never fetches. A branch without an
-upstream shows neither, and a detached HEAD shows `(detached)`. In a narrow
-drawer the change count goes first, then the upstream, then the arrows.
-
-Pinned at the bottom of the drawer, above the key hints, Recent commits lists
-the last `drawer.commits` commits: `↑` on a commit not on the upstream, the
-short sha, the subject and its age (`2h`, `3d`, `5w`). Its title adds
-`↑n unpushed` and `↓m behind` when not 0. It stays in view however long the
-file list is, and the cursor stays on the files.
-
-In the drawer, `j` and `k` move through the files and the window above shows
-the diff. `<CR>` opens the file there and closes the drawer. `r` opens the
-review tab. `?` lists the keys of the current view.
-
-![The status drawer: moving through the files previews each diff, s stages a file, ? lists the keys](docs/assets/drawer.webp)
-
-A rename or copy reads `old → new` on one row. In a narrow column the old
-path is cut first, so the end of the new path stays in view.
-
-`I` on an untracked row appends its path to the `.gitignore` at the
-repository root, after a confirm (`confirm.ignore`), and creates the file when
-it is missing. The line is anchored to the root: `untracked.txt` becomes
-`/untracked.txt`, a nested repository `nested/` becomes `/nested/`. Glob
-characters in the path are escaped, so the line ignores that path alone.
-
-## Lua API
-
-```lua
-local iter = require('iter')
-
-iter.setup(opts)                     -- see Configuration
-iter.status()                        -- same as :Iter status
-iter.review()                        -- same as :Iter review
-iter.annotate()                      -- annotate the cursor line or the visual range
-iter.annotate({ scope = 'review' })  -- annotate the whole review
-iter.annotations()                   -- open the review on its Annotations column
-iter.yank()                          -- copy the review as a prompt
-iter.statusline()                    -- text for your statusline
-iter.uri()                           -- address of the review's diff cursor
-iter.open_uri(uri)                   -- open an iter:// address, unescaped
-iter.tabline()                       -- a 'tabline' that labels the review tab
-```
-
-`annotate()` works in any buffer of a file inside a git repository. Map it in
-normal and visual mode:
+`?` lists the keys of the view you are in. Two mappings worth adding:
 
 ```lua
 vim.keymap.set({ 'n', 'x' }, '<leader>a', function()
     require('iter').annotate()
 end, { desc = 'Annotate' })
-```
 
-`yank()` copies the annotations to the `+` and `"` registers: the
-`export.intro` text, then a numbered list with `file:line`, the annotated code
-and the annotation. It then asks once whether to clear the annotations.
-
-`statusline()` returns `review · <file> · <i>/<n>` inside the review tab
-(`review` when no file is shown), `review · all files · <file> · <i>/<n>`
-for the file under the cursor when the pane shows all files, with `split`
-after the mode while the diff shows side by side
-(`review · split · <file> · <i>/<n>`). Elsewhere inside a repository it
-returns `<branch> · <n>`, such as `feat/renovation · 7`, with n the changed
-files (unstaged, staged and untracked, a file on both sides once), and `''`
-outside one. While an annotation draft is hidden it adds `draft annotation`.
-
-`statusline()` never runs git. The branch and count come from a cache per
-repository. Every drawer and review refresh updates it, and so does a
-background read of the status on `BufWritePost`, `FocusGained`,
-`DirChanged`, `ShellCmdPost` and `TermClose` (after `setup()`), one read per
-burst of events. The first call for a repository reads its status the same
-way; until it is done the part is `''`. The statusline redraws when the part
-changes. The repository is the one of the statusline window's file, else of
-the current directory.
-
-```lua
 vim.o.statusline = "%f %m%=%{v:lua.require'iter'.statusline()} "
 ```
 
-### Addresses
+## Reference
 
-iter's buffers are named with `iter://` addresses, and `:edit` of one opens
-what it names, in the repository of the current directory:
+### Status drawer
 
-| Address                     | Opens                                                                                                              |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `iter://status`             | The status drawer, or focuses it                                                                                   |
-| `iter://status/<path>`      | The status drawer with `<path>` selected                                                                           |
-| `iter://review`             | The review tab, or switches to it                                                                                  |
-| `iter://review/<path>`      | The review tab with `<path>` selected, Unstaged before Staged                                                      |
-| `iter://review/<path>#L<n>` | The same, with the cursor in the diff on the row of worktree line `n`, showing hidden context and a collapsed file |
-| `iter://review#all`         | The review tab in all-files mode                                                                                   |
-| `iter://review#annotations` | The review tab on its Annotations column                                                                           |
-| `iter://annotation`         | The hidden annotation draft                                                                                        |
+The header reads `HEAD <branch>  ↑n ↓m  <upstream>` with the number of changes
+on the right, or `N unstaged · M staged` when the columns stack. The arrows
+count against the upstream as last fetched (iter never fetches) and show only
+when not 0. A detached HEAD reads `(detached)`. In a narrow drawer the change
+count goes first, then the upstream, then the arrows.
 
-A path outside the changes opens the drawer or the review with a warning.
-While the open drawer or review belongs to another repository than the
-current directory's, an address warns once and changes nothing.
-On the command line `#` stands for the alternate file, so it takes a
-backslash: `:e iter://review/a.txt\#L3`. `open_uri()` takes the address as
-it is, for mappings and saved addresses:
+Recent commits, pinned above the key hints, lists the last `drawer.commits`
+commits with the short sha, subject and age (`2h`, `3d`, `5w`), and `↑` on
+those not on the upstream yet.
+
+A rename reads `old → new` on one row, and a narrow column cuts the old path
+first. `I` on an untracked row appends its path to the `.gitignore` at the
+repository root, anchored and with glob characters escaped (`untracked.txt`
+becomes `/untracked.txt`), after a confirm.
+
+In the diff above the drawer, `<CR>` on a code line opens the file at that
+line and closes the drawer. A staged line lands where it is in the worktree.
+On a clean tree the drawer says "Working tree clean". Outside a git repository
+iter warns and opens nothing.
+
+### Review tab
+
+The review drawer has the files on the left, Unstaged above Staged, and the
+Annotations column on the right in a window of its own that stays put while
+the files scroll. `h` and `l` switch between them; in narrow windows the three
+stack and `h` and `l` step through them.
+
+The Annotations column starts with the progress (`reviewed ■■■□□□□□ 3 of 8`,
+then `· ↻ n` for files changed since they were reviewed), then every
+annotation in file order, review annotations last: the file with `:line`,
+`:first–last` or ` old` for a deleted line, and the start of the text.
+Outdated annotations are dimmed. `<CR>` on one opens a file without changes in
+the tab the review came from, and a review annotation in the editor.
+
+The diff header shows the reviewed state, the stat and the number of
+annotations. It also names a mode change (`mode 100644 → 100755`) and reads
+`untracked · +n` for an untracked file. After `s` or `u` on the last change of
+a file, the pane shows the file's other side. A file opened in the diff pane
+with `:edit` opens in the tab the review came from.
+
+In visual mode `s` and `u` take only the added and deleted lines of the
+selection, across hunks if needed. A changed line staged alone goes next to
+the line it pairs with.
+
+**All files.** `m` shows every file in one buffer in drawer order, each under
+its header. A file on both sides shows twice. The drawer selection follows the
+cursor, `]f` and `[f` jump between headers, and `]c`, `[c`, `]a` and `[a` run
+across files. A reviewed file shows its header alone, and `<CR>` on that header
+opens it until `r` or `m` closes it again. The mode lasts until the review tab
+closes.
+
+**Side by side.** `|` puts the old version in a window on the left (`HEAD` for
+a staged file, `index` for an unstaged one) and the new version on the right,
+scrolling together. A deleted line and the added line it pairs with share a
+row; a line without a partner faces a row of `╱`. `a` in the left window
+annotates the old version. `s` and `u` work from either window. `-` or closing
+the left window goes back to one pane. The status drawer's diff takes `m`, `|`
+and `-` too.
+
+**Annotation float.** `<C-s>` and `:wq` save and close, `:w` saves, `<C-t>`
+hides the draft and shows it again from any buffer, `<C-c>` drops it, and `q`
+closes a saved annotation.
+
+### Keys
+
+Keys are buffer-local and set per view. A value is a key, a list of keys, or
+`false` to leave the action unmapped:
 
 ```lua
-require('iter').open_uri('iter://review/a.txt#L3')
-```
-
-The same names label iter's windows: the drawers are `iter://status` and
-`iter://review`, the review's diff pane `iter://review/<path>` for the file it
-shows (`iter://review#all` in all-files mode, `#old` added to the left pane of
-the side by side layout), the Annotations window `iter://review#annotations`
-and the annotation float `iter://annotation`. The status drawer's diff is
-`iter://status/<path>`. `:edit` in one of these windows draws it again.
-When one of these buffers lands in another window (`:edit` of its name, `:b`),
-that window gets its previous buffer back and iter opens what the name
-addresses. iter's buffers stay unlisted, so `:bnext` passes them by. A
-session restores none of them: on `SessionLoadPost` iter wipes the
-`iter://` buffers it doesn't own and closes their windows.
-
-`uri()` returns `iter://review/<path>#L<n>` for the cursor in the review's
-diff pane, with the worktree line of the cursor row (a staged row's line in
-the worktree file), and `nil` elsewhere. Save it, for example as a bookmark,
-and open it later with `open_uri(saved)`.
-
-### Tab label
-
-The review tab sets the tab variable `iter_label` to `iter review`. Neovim's
-default tabline doesn't read it: it shows the current window's buffer name
-with its directories shortened (`i//review` for the drawer, `i//r/a.txt` for
-the diff pane, `i//r/a.txt#old` for its left pane), and counts focusable floats such as the drawer among the
-windows. `tabline()` is a 'tabline' like the default one that shows a tab's
-`iter_label` when it has one and counts only normal windows:
-
-```lua
-vim.o.tabline = "%!v:lua.require'iter'.tabline()"
-```
-
-A custom tabline can read the label with `vim.t[tab].iter_label` (or
-`gettabvar(n, 'iter_label')`).
-
-### Events
-
-iter fires `User` autocmds with the repository root and the paths in `data`:
-
-| Pattern       | When                                                                                  | `data`                                                                               |
-| ------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `IterRefresh` | A drawer or review refresh read the status, after an action or when the files changed | `root`, `paths`: every changed path, a file on both sides once                       |
-| `IterStage`   | A stage, unstage or discard succeeded, of files, hunks or lines                       | `root`, `paths`: the paths acted on, `action`: `'stage'`, `'unstage'` or `'discard'` |
-
-```lua
-vim.api.nvim_create_autocmd('User', {
-    pattern = 'IterStage',
-    callback = function(args)
-        print(args.data.action, table.concat(args.data.paths, ' '))
-    end,
+require('iter').setup({
+    keys = {
+        drawer = { stage = { 's', '<Space>' }, discard = false },
+        diff = { annotate = 'gc' },
+    },
 })
 ```
 
-## Configuration
+The status drawer (`drawer`):
+
+| Key     | Action         | Does                                 |
+| ------- | -------------- | ------------------------------------ |
+| `<CR>`  | `open`         | Open the file and close the drawer   |
+| `s`     | `stage`        | Stage or unstage the file            |
+| `u`     | `unstage`      | Unstage the file                     |
+| `d`     | `discard`      | Discard changes in the file          |
+| `I`     | `ignore`       | Add the untracked file to .gitignore |
+| `r`     | `review`       | Open the review tab                  |
+| `m`     | `mode`         | Toggle one file or all files         |
+| `\|`    | `split`        | Show the diff side by side           |
+| `-`     | `unified`      | Show the diff unified                |
+| `q`     | `close`        | Close                                |
+| `?`     | `help`         | Show the keys                        |
+| `<C-d>` | `scroll_down`  | Scroll the diff down                 |
+| `<C-u>` | `scroll_up`    | Scroll the diff up                   |
+| `h`     | `column_left`  | Select the column to the left        |
+| `l`     | `column_right` | Select the column to the right       |
+
+The review drawer (`review_drawer`):
+
+| Key     | Action          | Does                                     |
+| ------- | --------------- | ---------------------------------------- |
+| `<CR>`  | `open`          | Open the diff, or jump to the annotation |
+| `s`     | `stage`         | Stage or unstage the file                |
+| `u`     | `unstage`       | Unstage the file                         |
+| `d`     | `discard`       | Discard changes in the file              |
+| `I`     | `ignore`        | Add the untracked file to .gitignore     |
+| `r`     | `reviewed`      | Toggle reviewed                          |
+| `m`     | `mode`          | Toggle one file or all files             |
+| `\|`    | `split`         | Show the diff side by side               |
+| `-`     | `unified`       | Show the diff unified                    |
+| `A`     | `annotate_file` | Annotate the file                        |
+| `e`     | `edit`          | Edit the annotation                      |
+| `x`     | `delete`        | Delete the annotation                    |
+| `y`     | `yank`          | Copy the review                          |
+| `q`     | `close`         | Close                                    |
+| `?`     | `help`          | Show the keys                            |
+| `<C-d>` | `scroll_down`   | Scroll the diff down                     |
+| `<C-u>` | `scroll_up`     | Scroll the diff up                       |
+| `h`     | `column_left`   | Select the column to the left            |
+| `l`     | `column_right`  | Select the column to the right           |
+
+The diff pane (`diff`), in the review tab and above the status drawer:
+
+| Key     | Action            | Does                                                            |
+| ------- | ----------------- | --------------------------------------------------------------- |
+| `]c`    | `next_hunk`       | Next hunk                                                       |
+| `[c`    | `prev_hunk`       | Previous hunk                                                   |
+| `]a`    | `next_annotation` | Next annotation                                                 |
+| `[a`    | `prev_annotation` | Previous annotation                                             |
+| `]f`    | `next_file`       | Next file                                                       |
+| `[f`    | `prev_file`       | Previous file                                                   |
+| `s`     | `stage`           | Stage the hunk or the selected lines (normal and visual mode)   |
+| `u`     | `unstage`         | Unstage the hunk or the selected lines (normal and visual mode) |
+| `a`     | `annotate`        | Annotate the line or range (normal and visual mode)             |
+| `A`     | `annotate_file`   | Annotate the file                                               |
+| `e`     | `edit`            | Edit the annotation                                             |
+| `x`     | `delete`          | Delete the annotation                                           |
+| `<CR>`  | `expand`          | Expand the collapsed file or hidden context                     |
+| `gf`    | `goto_file`       | Go to the line in the file                                      |
+| `r`     | `reviewed`        | Toggle reviewed                                                 |
+| `m`     | `mode`            | Toggle one file or all files                                    |
+| `\|`    | `split`           | Show the diff side by side                                      |
+| `-`     | `unified`         | Show the diff unified                                           |
+| `y`     | `yank`            | Copy the review                                                 |
+| `<C-j>` | `focus_drawer`    | Focus the drawer                                                |
+| `q`     | `close`           | Close                                                           |
+| `?`     | `help`            | Show the keys                                                   |
+
+The annotation float (`annotation`):
+
+| Key     | Action   | Does                                                             |
+| ------- | -------- | ---------------------------------------------------------------- |
+| `<C-s>` | `save`   | Save the annotation and close the float (normal and insert mode) |
+| `<C-t>` | `toggle` | Hide or show the draft (normal and insert mode)                  |
+| `<C-c>` | `cancel` | Drop the draft (normal and insert mode)                          |
+| `q`     | `close`  | Close a saved annotation                                         |
+
+The help float (`help`) closes on `q`, `?` and `<Esc>`.
+
+### Configuration
 
 `setup()` takes a table. Every field is optional. These are the defaults:
 
@@ -287,14 +311,11 @@ require('iter').setup({
 })
 ```
 
-The source of truth is
-[`lua/iter/config/defaults.lua`](lua/iter/config/defaults.lua). Unknown
-options, views or actions raise an error.
-
-### Diff arguments
+[`lua/iter/config/defaults.lua`](lua/iter/config/defaults.lua) is the source
+of truth. Unknown options, views or actions raise an error.
 
 `diff.args` adds flags to every `git diff` iter runs, for display and for
-staging. Only flags that leave hunks `git apply` can take back are allowed:
+staging. Only flags that keep hunks `git apply` can take back are allowed:
 
 - `--diff-algorithm=<myers|minimal|patience|histogram>`, `--patience`,
   `--histogram`, `--minimal`
@@ -302,208 +323,102 @@ staging. Only flags that leave hunks `git apply` can take back are allowed:
 - `--inter-hunk-context=<n>`
 - `-U<n>` or `--unified=<n>`, with `n` of 1 or more
 
-Anything else (`-w`, `--ignore-*`, `--word-diff`, `--color*`, `--no-prefix`,
-`-R`, `--text`, `-U0`) raises an error in `setup()`. iter's own flags
-(`--no-color`, `--no-ext-diff`, `--no-textconv`, `a/` and `b/` prefixes) come
-after yours.
-
 ```lua
 require('iter').setup({ diff = { args = { '--histogram', '-U5' } } })
 ```
 
-### Keys
-
-Keys are buffer-local and set per view. A value is a key, a list of keys, or
-`false` to leave the action unmapped:
+### Lua API
 
 ```lua
-require('iter').setup({
-    keys = {
-        drawer = { stage = { 's', '<Space>' }, discard = false },
-        diff = { annotate = 'gc' },
-    },
+local iter = require('iter')
+
+iter.setup(opts)                     -- see Configuration
+iter.status()                        -- same as :Iter status
+iter.review()                        -- same as :Iter review
+iter.annotate()                      -- annotate the cursor line or the visual range
+iter.annotate({ scope = 'review' })  -- annotate the whole review
+iter.annotations()                   -- open the review on its Annotations column
+iter.yank()                          -- copy the review as a prompt
+iter.statusline()                    -- text for your statusline
+iter.uri()                           -- address of the review's diff cursor
+iter.open_uri(uri)                   -- open an iter:// address, unescaped
+iter.tabline()                       -- a 'tabline' that labels the review tab
+```
+
+`annotate()` works in any buffer of a file inside a git repository.
+
+`yank()` copies to the `+` and `"` registers: the `export.intro` text, then a
+numbered list with `file:line`, the annotated code and the annotation. Then it
+asks once whether to clear the annotations.
+
+`statusline()` returns `review · <file> · <i>/<n>` in the review tab, with
+`all files` or `split` after `review` in those modes. Elsewhere in a
+repository it returns `<branch> · <n>` with n the changed files, and `''`
+outside one. A hidden annotation draft adds `draft annotation`. It never runs
+git: a cache per repository refreshes on writes, focus, directory changes and
+shell commands.
+
+`uri()` returns `iter://review/<path>#L<n>` for the cursor in the review's
+diff, with the worktree line of the cursor row, and `nil` elsewhere. Save it
+and open it later with `open_uri()`.
+
+### Addresses
+
+iter's buffers are named with `iter://` addresses, and `:edit` of one opens
+what it names in the repository of the current directory:
+
+| Address                     | Opens                                                                    |
+| --------------------------- | ------------------------------------------------------------------------ |
+| `iter://status`             | The status drawer, or focuses it                                         |
+| `iter://status/<path>`      | The status drawer with `<path>` selected                                 |
+| `iter://review`             | The review tab, or switches to it                                        |
+| `iter://review/<path>`      | The review tab with `<path>` selected, Unstaged before Staged            |
+| `iter://review/<path>#L<n>` | The same, with the cursor on worktree line `n`, revealed if it is hidden |
+| `iter://review#all`         | The review tab in all-files mode                                         |
+| `iter://review#annotations` | The review tab on its Annotations column                                 |
+| `iter://annotation`         | The hidden annotation draft                                              |
+
+A path outside the changes opens the view with a warning. On the command line
+`#` needs a backslash (`:e iter://review/a.txt\#L3`); `open_uri()` takes the
+address as it is. iter's buffers stay unlisted, and a restored session gets
+none of them back.
+
+### Tab label
+
+The review tab sets `vim.t.iter_label` to `iter review`. Neovim's default
+tabline ignores it and counts the drawer float among the windows. `tabline()`
+is a 'tabline' like the default that shows the label and counts only normal
+windows:
+
+```lua
+vim.o.tabline = "%!v:lua.require'iter'.tabline()"
+```
+
+### Events
+
+iter fires `User` autocmds with the repository root and the paths in `data`:
+
+| Pattern       | When                                                            | `data`                                                                               |
+| ------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `IterRefresh` | A drawer or review read the status, after an action or a change | `root`, `paths`: every changed path, a file on both sides once                       |
+| `IterStage`   | A stage, unstage or discard of files, hunks or lines succeeded  | `root`, `paths`: the paths acted on, `action`: `'stage'`, `'unstage'` or `'discard'` |
+
+```lua
+vim.api.nvim_create_autocmd('User', {
+    pattern = 'IterStage',
+    callback = function(args)
+        print(args.data.action, table.concat(args.data.paths, ' '))
+    end,
 })
 ```
 
-The status drawer (`drawer`):
-
-| Key     | Action         | Does                                 |
-| ------- | -------------- | ------------------------------------ |
-| `<CR>`  | `open`         | Open the file and close the drawer   |
-| `s`     | `stage`        | Stage or unstage the file            |
-| `u`     | `unstage`      | Unstage the file                     |
-| `d`     | `discard`      | Discard changes in the file          |
-| `I`     | `ignore`       | Add the untracked file to .gitignore |
-| `r`     | `review`       | Open the review tab                  |
-| `m`     | `mode`         | Toggle one file or all files         |
-| `\|`    | `split`        | Show the diff side by side           |
-| `-`     | `unified`      | Show the diff unified                |
-| `q`     | `close`        | Close                                |
-| `?`     | `help`         | Show the keys                        |
-| `<C-d>` | `scroll_down`  | Scroll the diff down                 |
-| `<C-u>` | `scroll_up`    | Scroll the diff up                   |
-| `h`     | `column_left`  | Select the column to the left        |
-| `l`     | `column_right` | Select the column to the right       |
-
-In the diff above the status drawer, the `expand` key (`<CR>`) on a code line
-opens the file at that line and closes the drawer; on hidden context it
-expands. A staged line lands where it is in the worktree. The diff's `mode`,
-`split` and `unified` keys work there as in the review.
-
-The drawer of the review tab (`review_drawer`):
-
-| Key     | Action          | Does                                     |
-| ------- | --------------- | ---------------------------------------- |
-| `<CR>`  | `open`          | Open the diff, or jump to the annotation |
-| `s`     | `stage`         | Stage or unstage the file                |
-| `u`     | `unstage`       | Unstage the file                         |
-| `d`     | `discard`       | Discard changes in the file              |
-| `I`     | `ignore`        | Add the untracked file to .gitignore     |
-| `r`     | `reviewed`      | Toggle reviewed                          |
-| `m`     | `mode`          | Toggle one file or all files             |
-| `\|`    | `split`         | Show the diff side by side               |
-| `-`     | `unified`       | Show the diff unified                    |
-| `A`     | `annotate_file` | Annotate the file                        |
-| `e`     | `edit`          | Edit the annotation                      |
-| `x`     | `delete`        | Delete the annotation                    |
-| `y`     | `yank`          | Copy the review                          |
-| `q`     | `close`         | Close                                    |
-| `?`     | `help`          | Show the keys                            |
-| `<C-d>` | `scroll_down`   | Scroll the diff down                     |
-| `<C-u>` | `scroll_up`     | Scroll the diff up                       |
-| `h`     | `column_left`   | Select the column to the left            |
-| `l`     | `column_right`  | Select the column to the right           |
-
-The diff pane of the review tab (`diff`):
-
-| Key     | Action            | Does                                                            |
-| ------- | ----------------- | --------------------------------------------------------------- |
-| `]c`    | `next_hunk`       | Next hunk                                                       |
-| `[c`    | `prev_hunk`       | Previous hunk                                                   |
-| `]a`    | `next_annotation` | Next annotation                                                 |
-| `[a`    | `prev_annotation` | Previous annotation                                             |
-| `]f`    | `next_file`       | Next file                                                       |
-| `[f`    | `prev_file`       | Previous file                                                   |
-| `s`     | `stage`           | Stage the hunk or the selected lines (normal and visual mode)   |
-| `u`     | `unstage`         | Unstage the hunk or the selected lines (normal and visual mode) |
-| `a`     | `annotate`        | Annotate the line or range (normal and visual mode)             |
-| `A`     | `annotate_file`   | Annotate the file                                               |
-| `e`     | `edit`            | Edit the annotation                                             |
-| `x`     | `delete`          | Delete the annotation                                           |
-| `<CR>`  | `expand`          | Expand the collapsed file or hidden context                     |
-| `gf`    | `goto_file`       | Go to the line in the file                                      |
-| `r`     | `reviewed`        | Toggle reviewed                                                 |
-| `m`     | `mode`            | Toggle one file or all files                                    |
-| `\|`    | `split`           | Show the diff side by side                                      |
-| `-`     | `unified`         | Show the diff unified                                           |
-| `y`     | `yank`            | Copy the review                                                 |
-| `<C-j>` | `focus_drawer`    | Focus the drawer                                                |
-| `q`     | `close`           | Close                                                           |
-| `?`     | `help`            | Show the keys                                                   |
-
-![The review tab: moving through the files, a annotates a line, r marks the file reviewed, the Annotations column lists the annotation](docs/assets/review.webp)
-
-The review drawer has two columns: the files on the left, Unstaged above
-Staged, and Annotations on the right in a window of its own that stays in
-place while the file list scrolls. `j` and `k` move through both file
-sections; `h` and `l` switch between the files and Annotations, and each
-keeps its row. In narrow windows Unstaged, Staged and Annotations stack, and
-`h` and `l` step through them, skipping a file section without files. The
-Annotations column starts with the reviewed progress (`reviewed ■■■□□□□□ 3 of 8`,
-then `· ↻ n` for files changed since they were reviewed) and lists every
-annotation in drawer file order, review annotations last: the file name with
-`:line`, `:first–last` or ` old` for a deleted line, then the start of the
-text. Outdated ones are dimmed. Moving onto an annotation shows its file in
-the diff pane, scrolled to it and highlighted. `<CR>` moves into the diff
-there, opens a file without changes in the tab the review came from, and
-opens a review annotation in the editor. `e`
-and `x` work only on an annotation row.
-
-In visual mode, `s` and `u` take only the added and deleted lines of the
-selection, which may span several hunks. A changed line staged or unstaged
-alone goes next to the line it pairs with, which stays unless the selection takes it too. After `s` or `u` on the last change of a file, the pane shows the same
-file on its other side. A file opened in the diff pane, with `:edit` for
-example, opens in the tab the review came from, and the pane keeps its diff. A
-mode change shows in the diff header as `mode 100644 → 100755`; `s` on the file
-in the drawer stages it. An untracked file's diff header reads `untracked · +n`.
-In the review tab the header also shows the file's reviewed state and its
-number of annotations, for an untracked file only when it has any.
-
-`r` marks the file reviewed and moves on to the next file in drawer order
-that is not reviewed: its header at the top of the pane, the cursor on its
-first change, the drawer selection on it, and the focus where it was. `r` on
-a reviewed file unmarks it and stays.
-
-`m`, in the diff pane or the review drawer, shows every file of the review
-in one buffer, in drawer order: Unstaged, then Staged, each file under its
-header with a blank line between files. A file on both sides shows twice.
-The drawer selection follows the cursor from file to file, and selecting a
-file in the drawer puts its header at the top of the pane. `]f` and `[f`
-jump between the headers, `]c`, `[c`, `]a` and `[a` run across files, and
-staging, annotations, reviewed, `gf` and hidden context work on the file
-under the cursor. A visual selection over two files stages and annotates
-nothing. `m` again shows the selected file alone; the key hint line names
-the mode it switches to. The mode lasts until the
-review tab closes.
-
-In all-files mode a reviewed file shows its header row alone (`✓ reviewed`),
-with its stat and annotation count. `r` on a file collapses it, `r` on a
-collapsed header unreviews and expands it, from the diff pane or the drawer.
-`<CR>` on a collapsed header shows the whole file and keeps it reviewed, until
-`r` marks it reviewed again or `m` enters the mode again. Entering the mode
-shows reviewed files collapsed and files changed since they were reviewed (`↻`)
-whole. `]f` and `[f` stop on collapsed headers; moving the drawer selection
-or an annotation preview leaves a collapsed file as it is, and `<CR>` on an
-annotation in one expands it.
-
-`|`, in the diff pane or the review drawer, shows the diff side by side: the
-old version in a window on the left (`HEAD` for a staged file, `index` for an
-unstaged one), the new version on the right (`index` or `worktree`), each
-with its own line numbers, syntax and a clean buffer. The right header keeps
-the stat and the annotation count and shows the reviewed state as its glyph
-(`✓`, `↻`, `○`). The two windows scroll
-and move the cursor together. A deleted line and the added line it pairs
-with share a row, with the changed words highlighted; a line without a
-partner faces a row of `╱`. Hidden context shows on both sides and expands
-on both. An annotation shows on its side, with blank lines of the same
-height on the other. `a` takes the lines of its window's side: in the left
-window a selection with a deleted line annotates the old version, unchanged
-lines in it included; an added or unchanged line alone annotates the new
-one. `s` and `u` stage and unstage
-the hunk under the cursor from either window; in visual mode they take the
-added and deleted lines on both sides of the selected rows. `m` works here
-too, with every file on both sides. `-` goes back to one unified pane, and
-so does closing the left window. The key hint line names the layout it
-switches to. The status drawer's diff stays unified.
-
-The annotation float (`annotation`). `:w` saves and keeps the float open; `:wq` and `<C-s>` save and close it.
-
-| Key     | Action   | Does                                                             |
-| ------- | -------- | ---------------------------------------------------------------- |
-| `<C-s>` | `save`   | Save the annotation and close the float (normal and insert mode) |
-| `<C-t>` | `toggle` | Hide or show the draft (normal and insert mode)                  |
-| `<C-c>` | `cancel` | Drop the draft (normal and insert mode)                          |
-| `q`     | `close`  | Close a saved annotation                                         |
-
-While a draft is hidden, `<C-t>` in normal mode shows it again from any
-buffer. A `<C-t>` mapping of your own comes back once the draft is gone.
-
-The help float (`help`): `close` on `q`, `?` and `<Esc>`.
-
 ### Highlight groups
 
-iter defines its own groups, all named `Iter*`, and derives them from the
-colorscheme on every `ColorScheme` event. A group the colorscheme defines
-itself is left as it is; only undefined groups are derived.
-
-A colorscheme that runs `:hi clear` loses iter's derived groups and gets them
-re-derived after it loads. One that does not keeps them too: iter re-derives a
-group only while it still holds exactly what iter set last, and never
-overwrites a different definition. Define the groups before the `ColorScheme`
-event fires (the usual place, in the colorscheme file) and they win.
-
-"Derived from" lists the first group found with that colour, then the
-fallback. Row backgrounds blend the diff colour 60 % towards `Normal`.
+iter derives its `Iter*` groups from the colorscheme on every `ColorScheme`
+event, so no colorscheme needs to define them. A group the colorscheme does
+define wins, whether or not it runs `:hi clear`. "Derived from" lists the
+first group found with that colour, then the fallback. Row backgrounds blend
+the diff colour 60 % towards `Normal`.
 
 | Group                        | Colours                               | Derived from                                                         |
 | ---------------------------- | ------------------------------------- | -------------------------------------------------------------------- |
@@ -542,8 +457,8 @@ fallback. Row backgrounds blend the diff colour 60 % towards `Normal`.
 ### Files
 
 Annotations and reviewed marks live in
-`stdpath('data')/iter/<repo>/<branch>.json`. Linked worktrees of one
-repository share them. The log is `stdpath('state')/iter/iter.log`.
+`stdpath('data')/iter/<repo>/<branch>.json`, the log in
+`stdpath('state')/iter/iter.log`.
 
 ## Development
 
@@ -555,31 +470,28 @@ The project pins its tools in `mise.toml`: `lua-language-server`, `stylua`,
 just checks        # lint, format-check and test
 just lint          # lua-language-server --check against Neovim's Lua API
 just format        # format Lua with stylua and Markdown with vp fmt
-just format-check  # check formatting only
 just test          # run the whole test suite
 just test-file tests/test_git.lua  # run one test file
 ```
 
-Once per clone, `just git-config` points Git at the hooks in `.githooks/`:
-format and lint checks before every commit, `just checks` before every push.
+Run `just git-config` once per clone. It points Git at the hooks in
+`.githooks/`: format and lint before every commit, `just checks` before every
+push.
 
-### Testing
-
-Tests use [mini.test](https://github.com/echasnovski/mini.nvim/blob/main/TESTING.md).
-`just test` clones mini.nvim at a pinned commit into the gitignored `deps/`
-folder and runs the suite headless. It exits non-zero on any failure.
-`just bump-mini` moves that pin to mini.nvim's latest commit and runs the
-suite against it.
-
-Test files are `tests/test_*.lua`. `tests/helpers.lua` creates temporary git
-repositories with fixtures and starts a child Neovim with the plugin loaded.
-UI tests drive that child and compare screenshots with the references in
+Tests use [mini.test](https://github.com/echasnovski/mini.nvim/blob/main/TESTING.md),
+pinned in `deps/` by `just test` and moved with `just bump-mini`. UI tests
+drive a child Neovim and compare screenshots with the references in
 `tests/screenshots/`. A missing reference is written on the next run, and
-fails the run when `CI` is set. Delete a reference to write it again after an
+fails it when `CI` is set; delete a reference to write it again after an
 intended UI change.
+
+The README clips are recorded with [VHS](https://github.com/charmbracelet/vhs)
+from the tapes in `docs/assets/tapes/`; each tape says how to run it.
 
 ## Credits
 
-iter.nvim is a fork of [minifugit.nvim](https://github.com/vieitesss/minifugit.nvim)
-by [vieitesss](https://github.com/vieitesss), which gave it its start as a
-lightweight Git status UI.
+iter.nvim started as a fork of
+[minifugit.nvim](https://github.com/vieitesss/minifugit.nvim) by
+[vieitesss](https://github.com/vieitesss). The review follows
+[tuicr](https://github.com/agavra/tuicr), and annotations in normal buffers
+follow [annotator.nvim](https://github.com/chpeters/annotator.nvim).
