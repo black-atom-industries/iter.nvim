@@ -21,6 +21,7 @@ end
 
 ---@class IterFloatOpts
 ---@field pane integer window the float is anchored to
+---@field left? integer|false window left of the pane that the float covers too
 ---@field buf integer
 ---@field zindex integer
 ---@field height number up to 1 a fraction of the pane's height, else lines
@@ -99,6 +100,21 @@ local function resolve_height(opts)
     return math.max(1, height)
 end
 
+--- The window the float is placed relative to, and the float's width.
+---@param opts IterFloatOpts
+---@return integer win
+---@return integer width
+local function span(opts)
+    local width = vim.api.nvim_win_get_width(opts.pane)
+    local left = opts.left
+
+    if left and util.is_valid_win(left) then
+        return left, vim.api.nvim_win_get_width(left) + 1 + width
+    end
+
+    return opts.pane, width
+end
+
 --- The float's window config, and the strip's when there is one.
 ---@param opts IterFloatOpts
 ---@return table config
@@ -107,11 +123,11 @@ local function win_config(opts)
     local height = resolve_height(opts)
     local strip = strip_of(opts)
     local bottom = text_height(opts.pane)
-    local width = vim.api.nvim_win_get_width(opts.pane)
+    local host, width = span(opts)
 
     local config = {
         relative = 'win',
-        win = opts.pane,
+        win = host,
         anchor = 'SW',
         row = strip and (bottom - strip.lines - 1) or bottom,
         col = 0,
@@ -142,7 +158,7 @@ local function win_config(opts)
     return config,
         {
             relative = 'win',
-            win = opts.pane,
+            win = host,
             anchor = 'SW',
             row = bottom,
             col = 0,

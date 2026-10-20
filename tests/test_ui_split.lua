@@ -378,28 +378,6 @@ T['split']['closing the review leaves no window or buffer behind'] = function()
     eq(child.lua_get([[#vim.api.nvim_list_bufs()]]), before)
 end
 
-T['split']['the status preview maps neither | nor -'] = function()
-    child.cmd('Iter status')
-    helpers.wait_until(
-        child,
-        [[require('iter').drawer ~= nil and require('iter').drawer.view:is_shown()]]
-    )
-
-    local maps = child.lua_get([[(function()
-        local buf = require('iter').drawer.view.buf
-        local out = {}
-        for _, lhs in ipairs({ '|', '-' }) do
-            local map = vim.api.nvim_buf_call(buf, function()
-                return vim.fn.maparg(lhs, 'n', false, true)
-            end)
-            table.insert(out, map.buffer == 1)
-        end
-        return out
-    end)()]])
-
-    eq(maps, { false, false })
-end
-
 T['split']['resizing keeps the panes the same width'] = function()
     open_review()
     split()

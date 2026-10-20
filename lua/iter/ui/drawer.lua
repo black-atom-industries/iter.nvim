@@ -333,7 +333,7 @@ local function header_chunks(drawer)
         end
     end
 
-    local width = vim.api.nvim_win_get_width(drawer.pane)
+    local width = drawer:width()
 
     if drawer.context == 'status' then
         return status_header(drawer, table.concat(parts, ' · '), total, width)
@@ -447,6 +447,15 @@ function Drawer.open(opts)
         view_handlers.expand = function()
             self:open_row()
         end
+        view_handlers.mode = function()
+            self:set_all_files(not self.all_files)
+        end
+        view_handlers.split = function()
+            self.view:set_layout('split')
+        end
+        view_handlers.unified = function()
+            self.view:set_layout('unified')
+        end
     end
 
     -- The review's diff pane belongs to the view, so a buffer that takes its
@@ -465,7 +474,10 @@ function Drawer.open(opts)
         end,
         on_layout = function()
             if self.float ~= nil and not self.closed then
-                self.float:reposition({ footer = self:footer() })
+                self.float:reposition({
+                    left = self:left() or false,
+                    footer = self:footer(),
+                })
             end
         end,
     })
@@ -546,6 +558,15 @@ function Drawer:make_handlers()
         unstage = act('unstage'),
         discard = act('discard'),
         ignore = act('ignore'),
+        mode = function()
+            self:set_all_files(not self.all_files)
+        end,
+        split = function()
+            self.view:set_layout('split')
+        end,
+        unified = function()
+            self.view:set_layout('unified')
+        end,
         close = act('close'),
         help = act('toggle_help'),
         scroll_down = function()
@@ -733,7 +754,7 @@ end
 --- with the header and key hint line around them, and the Recent commits
 --- pinned under them.
 function Drawer:render()
-    local width = vim.api.nvim_win_get_width(self.pane)
+    local width = self:width()
     local decorate = self.extras and self.extras:drawer_decorator(self)
     ---@type IterLayoutSlot[]
     local columns = vim.tbl_map(function(column)
@@ -868,8 +889,31 @@ function Drawer:footer()
     return layout.hints(
         keymap.list(self.keys_view, self.keys, self.handlers),
         hints,
-        vim.api.nvim_win_get_width(self.pane) - 1
+        self:width() - 1
     )
+end
+
+--- The old side's window of a split diff in the drawer's own pane, which
+--- the drawer covers too.
+---@return integer?
+function Drawer:left()
+    if self.view.win == self.pane and self.view.old ~= nil then
+        return self.view.old.win
+    end
+end
+
+--- Width of the drawer: its pane's, with the window left of it when it
+--- covers that too.
+---@return integer
+function Drawer:width()
+    local width = vim.api.nvim_win_get_width(self.pane)
+    local left = self:left()
+
+    if left ~= nil and util.is_valid_win(left) then
+        width = width + vim.api.nvim_win_get_width(left) + 1
+    end
+
+    return width
 end
 
 --- Mark `buf` as the drawer's, shown in the windows `owns` accepts.

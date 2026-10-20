@@ -1120,12 +1120,6 @@ function Review:drawer_handlers(drawer, handlers)
     handlers.mode = function()
         self:toggle_mode()
     end
-    handlers.split = function()
-        drawer.view:set_layout('split')
-    end
-    handlers.unified = function()
-        drawer.view:set_layout('unified')
-    end
 end
 
 --- Read the stored annotations again whatever the store file's stat says,
