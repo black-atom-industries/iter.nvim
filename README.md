@@ -38,6 +38,8 @@ emphasized, old and new line numbers, and hidden context that `<CR>` expands.
 A reviewed file that changes again turns `↻`, so the next pass shows what
 moved. In all-files mode a reviewed file collapses to its header.
 
+![All files: m shows every file, r collapses each reviewed file and moves to the next, | shows the diff side by side, - and m switch back](docs/assets/layouts.webp)
+
 Stage as you go: `s` and `u` take the hunk under the cursor, or in visual
 mode only the selected lines, applied like `git add -p`.
 
