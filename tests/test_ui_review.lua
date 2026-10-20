@@ -1783,6 +1783,8 @@ T['reviewed']['r in the drawer toggles the selected file'] = function()
 
     child.type_keys('r')
     wait_state('a.txt', 'reviewed')
+    select_item('unstaged', 'a.txt')
+    wait_diff('unstaged a.txt')
 
     eq(drawer_rows()[2], 'M ✓ a.txt')
     eq(drawer_rows()[8], 'M ○ b.txt')
@@ -1808,10 +1810,13 @@ T['reviewed']['r in the diff pane toggles the shown file'] = function()
         child.lua_get('vim.api.nvim_get_current_win() == ' .. R .. '.diff_win'),
         true
     )
+    select_item('unstaged', 'a.txt')
+    wait_diff('unstaged a.txt')
     eq(diff_header(), '✓ reviewed  +2 −2 · 0 annotations ')
     eq(drawer_rows()[2], 'M ✓ a.txt')
     eq(drawer_rows()[8], 'M ○ b.txt')
 
+    child.lua('vim.api.nvim_set_current_win(' .. R .. '.diff_win)')
     child.type_keys('r')
     wait_state('a.txt', 'unreviewed')
     eq(diff_header(), '○ not reviewed  +2 −2 · 0 annotations ')
@@ -1845,6 +1850,8 @@ T['reviewed']['staging keeps a file reviewed'] = function()
     wait_diff('unstaged a.txt')
     child.type_keys('r')
     wait_state('a.txt', 'reviewed')
+    select_item('unstaged', 'a.txt')
+    wait_diff('unstaged a.txt')
 
     child.type_keys('s')
     helpers.wait_until(child, '#' .. R .. '.drawer.changes.staged == 2')
@@ -1875,6 +1882,8 @@ T['reviewed']['an edit from outside turns reviewed into changed'] = function()
 
     child.type_keys('r')
     wait_state('b.txt', 'reviewed')
+    select_item('unstaged', 'b.txt')
+    wait_diff('unstaged b.txt')
     wait_diff_header('✓ reviewed')
     eq(progress(), 'reviewed ■■□□□□□□ 1 of 4')
 end
@@ -1884,6 +1893,8 @@ T['reviewed']['an edit of the shown file updates the diff header'] = function()
     wait_diff('unstaged a.txt')
     child.type_keys('r')
     wait_state('a.txt', 'reviewed')
+    select_item('unstaged', 'a.txt')
+    wait_diff('unstaged a.txt')
     wait_diff_header('✓ reviewed')
 
     local a = numbered('a', 1, 30)
@@ -2019,6 +2030,102 @@ T['reviewed']['polls without a change hash nothing'] = function()
     helpers.wait_until(child, '_G.polls >= 3')
 
     eq(child.lua_get('_G.hashes'), 0)
+end
+
+--- Top line of the diff pane and the window the cursor is in.
+---@return { top: integer, focus: string }
+local function placement()
+    return child.lua_get([[(function()
+        local r = require('iter').current_review
+        local win = vim.api.nvim_get_current_win()
+        return {
+            top = vim.fn.getwininfo(r.diff_win)[1].topline,
+            focus = win == r.diff_win and 'diff'
+                or win == r.drawer.win and 'drawer'
+                or 'other',
+        }
+    end)()]])
+end
+
+T['reviewed']['r in the diff marks the file and moves to the first change of the next'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.lua('vim.api.nvim_set_current_win(' .. R .. '.diff_win)')
+
+    child.type_keys('r')
+    wait_diff('unstaged b.txt')
+
+    eq(selected(), 'unstaged b.txt')
+    eq(cursor_row(), 'add top1')
+    eq(placement(), { top = 1, focus = 'diff' })
+    eq(drawer_rows()[2], 'M ✓ a.txt')
+end
+
+T['reviewed']['r in the drawer moves the selection on and keeps the focus'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+
+    child.type_keys('r')
+    wait_diff('unstaged b.txt')
+
+    eq(selected(), 'unstaged b.txt')
+    eq(cursor_row(), 'add top1')
+    eq(placement(), { top = 1, focus = 'drawer' })
+end
+
+T['reviewed']['r skips files already reviewed'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.lua(R .. ":toggle_reviewed('b.txt')")
+
+    child.type_keys('r')
+    wait_diff('unstaged c.txt')
+
+    eq(selected(), 'unstaged c.txt')
+    eq(cursor_row(), 'add c')
+end
+
+T['reviewed']['r on a reviewed file unmarks it and stays'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.lua(R .. ":toggle_reviewed('a.txt')")
+
+    child.type_keys('r')
+
+    eq(selected(), 'unstaged a.txt')
+    eq(drawer_rows()[2], 'M ○ a.txt')
+end
+
+T['reviewed']['r on the last file marks it and stays'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    select_item('staged', 'b.txt')
+    wait_diff('staged b.txt')
+
+    child.type_keys('r')
+
+    eq(selected(), 'staged b.txt')
+    eq(drawer_rows()[8], 'M ✓ b.txt')
+end
+
+T['reviewed']['in all files, r collapses the file and puts the next header on top'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.lua(R .. ':toggle_mode()')
+    helpers.wait_until(child, R .. '.drawer.view.document.sections[2] ~= nil')
+    child.lua('vim.api.nvim_set_current_win(' .. R .. '.diff_win)')
+
+    child.type_keys('r')
+    helpers.wait_until(
+        child,
+        R .. '.drawer.view.document.sections[1].collapsed == true'
+    )
+
+    local header = child.lua_get(R .. '.drawer.view.document.sections[2].first')
+    eq(selected(), 'unstaged b.txt')
+    eq(cursor_row(), 'add top1')
+    eq(placement(), { top = header, focus = 'diff' })
+    helpers.expect_screenshot(child, 'review-reviewed-advance')
 end
 
 T['reviewed']['screenshot of reviewed, changed and unreviewed rows'] = function()
