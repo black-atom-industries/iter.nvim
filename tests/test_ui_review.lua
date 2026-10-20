@@ -1713,6 +1713,67 @@ T['viewed']['rows start unviewed, the header counts files, the column shows prog
     eq(diff_header(), '○ not viewed  +2 −2 · 0 annotations ')
 end
 
+T['viewed']['in a narrow pane the diff header keeps the path readable'] = function()
+    open_review()
+    wait_diff('unstaged a.txt')
+    eq(diff_header(), '○ not viewed  +2 −2 · 0 annotations ')
+
+    -- The new window takes the width given; the diff pane keeps the rest.
+    child.type_keys('<CR>')
+    child.cmd('vsplit')
+    child.cmd('vertical resize 30')
+    helpers.wait_until(
+        child,
+        [[require('iter').current_review.drawer.view:text_width() < 40]]
+    )
+    eq(diff_header(), '+2 −2 · 0 annotations ')
+
+    child.cmd('vertical resize 62')
+    helpers.wait_until(
+        child,
+        [[require('iter').current_review.drawer.view:text_width() < 10]]
+    )
+    eq(diff_header(), '')
+end
+
+T['viewed']['in the split layout at 70 columns the header fits beside the path'] = function()
+    child.o.columns = 70
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.lua('vim.api.nvim_set_current_win(' .. R .. '.diff_win)')
+    child.type_keys('|')
+    helpers.wait_until(child, R .. '.drawer.view.old ~= nil')
+
+    local fit = child.lua_get([[(function()
+        local view = ]] .. R .. [[.drawer.view
+        local ns = vim.api.nvim_get_namespaces()['iter.diff']
+        local used = vim.fn.strdisplaywidth(
+            'M ' .. vim.api.nvim_buf_get_lines(view.buf, 0, 1, true)[1]
+                .. '  worktree'
+        )
+        for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(view.buf, ns, { 0, 0 }, { 0, -1 }, { details = true })) do
+            if mark[4].virt_text_pos == 'right_align' then
+                for _, chunk in ipairs(mark[4].virt_text) do
+                    used = used + vim.fn.strdisplaywidth(chunk[1])
+                end
+            end
+        end
+        return used < view:text_width()
+    end)()]])
+
+    eq(fit, true)
+end
+
+T['viewed']['the header has no ahead count'] = function()
+    helpers.git(repo, { 'branch', 'base' })
+    helpers.git(repo, { 'branch', '--set-upstream-to=base' })
+    helpers.git(repo, { 'commit', '--quiet', '--allow-empty', '-m', 'ahead' })
+    open_review()
+    wait_diff('unstaged a.txt')
+
+    eq(drawer_header(), 'HEAD main 4 files')
+end
+
 T['viewed']['v in the drawer toggles the selected file'] = function()
     open_review()
     wait_diff('unstaged a.txt')
@@ -2042,6 +2103,28 @@ T['files']['u in the Staged section unstages and keeps a file selected'] = funct
     select_item('staged', 'a.txt')
     child.type_keys('s')
     helpers.wait_until(child, '#' .. R .. '.drawer.changes.staged == 0')
+end
+
+T['files']['u without commits makes the file untracked again'] = function()
+    child.stop()
+    helpers.cleanup(repo)
+    repo = vim.fn.resolve(vim.fn.tempname())
+    vim.fn.mkdir(repo, 'p')
+    helpers.git(repo, { 'init', '--quiet', '-b', 'main' })
+    helpers.write_file(vim.fs.joinpath(repo, 'm.txt'), { 'm' })
+    helpers.git(repo, { 'add', 'm.txt' })
+    helpers.start_child(child, repo)
+    stub_ui()
+    open_review()
+    wait_diff('staged m.txt')
+
+    child.type_keys('u')
+    helpers.wait_until(child, '#' .. R .. '.drawer.changes.staged == 0')
+
+    eq(selected(), 'unstaged m.txt')
+    eq(helpers.git(repo, { 'status', '--porcelain=v1', '-z' }), '?? m.txt\0')
+    eq(vim.fn.readfile(vim.fs.joinpath(repo, 'm.txt')), { 'm' })
+    eq(child.lua_get('_G.notes'), {})
 end
 
 T['files']['below the breakpoint Unstaged, Staged and Annotations stack'] = function()
@@ -2613,6 +2696,27 @@ T['uri'][':edit from the status drawer windows'] = function()
     helpers.wait_until(child, R .. '.drawer.view:row().new == 3')
     eq(cursor_row(), 'add a3 changed')
     eq(child.lua_get([[require('iter').drawer]]), vim.NIL)
+    eq(child.v.errmsg, '')
+end
+
+T['uri'][':edit from the Annotations window routes from the diff pane'] = function()
+    child.o.columns = 120
+    open_review()
+    wait_diff('unstaged a.txt')
+    child.lua('vim.api.nvim_set_current_win(' .. R .. '.drawer.float.side_win)')
+
+    child.type_keys(':e iter://review/a.txt\\#L3<CR>')
+    helpers.wait_until(child, R .. '.drawer.view:row().new == 3')
+
+    eq(child.api.nvim_get_current_win(), child.lua_get(R .. '.diff_win'))
+    eq(cursor_row(), 'add a3 changed')
+    eq(child.v.errmsg, '')
+
+    child.lua('vim.api.nvim_set_current_win(' .. R .. '.drawer.float.side_win)')
+    child.type_keys(':e iter://annotation<CR>')
+    helpers.wait_until(child, '#_G.notes == 1')
+
+    eq(child.lua_get('_G.notes[1][1]'), '[iter] No annotation draft to show')
     eq(child.v.errmsg, '')
 end
 

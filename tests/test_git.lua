@@ -117,6 +117,28 @@ T['stage(), unstage(), discard() and delete_untracked()'] = function()
     eq(entry('untracked.txt'), nil)
 end
 
+T['unstage() without commits keeps the worktree file'] = function()
+    local fresh = vim.fn.resolve(vim.fn.tempname())
+    vim.fn.mkdir(fresh, 'p')
+    helpers.git(fresh, { 'init', '--quiet', '-b', 'main' })
+    helpers.write_file(vim.fs.joinpath(fresh, 'm.txt'), { 'one' })
+    helpers.write_file(vim.fs.joinpath(fresh, 'n.txt'), { 'one' })
+    helpers.git(fresh, { 'add', '--all' })
+    helpers.write_file(vim.fs.joinpath(fresh, 'n.txt'), { 'two' })
+
+    local ok, err = git.unstage(fresh, { 'm.txt', 'n.txt' })
+    local entries = git.status_snapshot(fresh).entries
+    local n = vim.fn.readfile(vim.fs.joinpath(fresh, 'n.txt'))
+    helpers.cleanup(fresh)
+
+    eq({ ok, err }, { true, '' })
+    eq(entries, {
+        { staged = '?', unstaged = '?', path = 'm.txt' },
+        { staged = '?', unstaged = '?', path = 'n.txt' },
+    })
+    eq(n, { 'two' })
+end
+
 T['path actions treat paths literally'] = function()
     write('a.txt', { 'a' })
     write('[ab].txt', { 'glob' })
@@ -138,23 +160,6 @@ T['path actions treat paths literally'] = function()
     eq(git.delete_untracked(repo, { '*.log' }), true)
     eq(entry('*.log'), nil)
     eq(entry('x.log').staged, '?')
-end
-
-T['ahead()'] = new_set()
-
-T['ahead()']['is nil without an upstream'] = function()
-    eq(git.ahead(repo), nil)
-end
-
-T['ahead()']['counts commits ahead of the upstream'] = function()
-    helpers.git(repo, { 'branch', 'base' })
-    helpers.git(repo, { 'branch', '--set-upstream-to=base' })
-    eq(git.ahead(repo), 0)
-
-    write('tracked.txt', { 'one', 'two' })
-    helpers.git(repo, { 'commit', '--quiet', '-am', 'second' })
-    eq(git.ahead(repo), 1)
-    eq(git.status_snapshot().ahead, 1)
 end
 
 T['status_snapshot()']['lists each untracked file, not ignored ones'] = function()
@@ -186,27 +191,6 @@ T['status_snapshot()']['flags a detached HEAD'] = function()
 
     helpers.git(repo, { 'checkout', '--quiet', '--detach' })
     eq(git.status_snapshot().detached, true)
-end
-
-T['status_snapshot()']['reads the ahead count with one rev-list'] = function()
-    helpers.git(repo, { 'branch', 'base' })
-    helpers.git(repo, { 'branch', '--set-upstream-to=base' })
-    local run = git.run
-    local history = {}
-    ---@diagnostic disable-next-line: duplicate-set-field
-    git.run = function(args, opts)
-        if args[1] == 'rev-list' or args[1] == 'log' then
-            table.insert(history, args[1])
-        end
-        return run(args, opts)
-    end
-
-    local ok, snapshot = pcall(git.status_snapshot)
-    git.run = run
-
-    eq(ok, true)
-    eq(snapshot.ahead, 0)
-    eq(history, { 'rev-list' })
 end
 
 ---@type string?
@@ -346,15 +330,6 @@ T['recent()']['reuses prev after one rev-parse while nothing moved'] = function(
         'rev-list',
         'log',
     })
-end
-
-T['status_snapshot()']['leaves ahead out on request'] = function()
-    helpers.git(repo, { 'branch', 'base' })
-    helpers.git(repo, { 'branch', '--set-upstream-to=base' })
-    commit('second')
-
-    eq(git.status_snapshot(repo).ahead, 1)
-    eq(git.status_snapshot(repo, { ahead = false }).ahead, nil)
 end
 
 T['git_paths()'] = new_set()

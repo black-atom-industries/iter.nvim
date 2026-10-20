@@ -335,6 +335,9 @@ T['commits()']['title, markers, subjects and right-aligned ages'] = function()
         '   0aa4465  fix: keep                1d ',
     })
 
+    local behind = layout.commits(recent('origin/main', 1, 2), 40, NOW)
+    eq(spans(behind.lines[1], 'IterBehind'), { { 36, 47 } })
+
     local result = layout.commits(recent('origin/main', 1, 0), 40, NOW)
     eq(result.rows, { {}, {}, {} })
     eq(result.cells, { {}, {}, {} })

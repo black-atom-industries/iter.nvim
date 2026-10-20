@@ -700,7 +700,7 @@ function M.commits(recent, width, now)
         table.insert(parts, { ' · ', 'IterDrawerHint' })
         table.insert(
             parts,
-            { '↓' .. recent.behind .. ' behind', 'IterUnpushed' }
+            { '↓' .. recent.behind .. ' behind', 'IterBehind' }
         )
     end
 

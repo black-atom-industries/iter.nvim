@@ -566,18 +566,20 @@ function M.open(opts)
 end
 
 --- Show the hidden draft where it was, or focus the float.
+---@return boolean shown false without a draft
 function M.show()
     if draft == nil then
-        return
+        return false
     end
 
     if is_visible() then
         vim.api.nvim_set_current_win(draft.win --[[@as integer]])
         vim.cmd.startinsert()
-        return
+        return true
     end
 
     open_win()
+    return true
 end
 
 ---@return boolean

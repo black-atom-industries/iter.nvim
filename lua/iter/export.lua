@@ -156,12 +156,7 @@ end
 function M.yank(opts)
     vim.validate('opts', opts, 'table')
 
-    local data, err = store.load(opts.root)
-
-    if data == nil then
-        util.error('Cannot read the annotations: ' .. tostring(err))
-        return
-    end
+    local data = store.cached(opts.root, true)
 
     if #data.annotations == 0 then
         util.warn('No annotations to copy')

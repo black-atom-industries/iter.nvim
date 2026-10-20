@@ -465,6 +465,40 @@ T['yank']['clears only the annotations that were copied'] = function()
     )
 end
 
+T['yank']['copies and clears annotations queued under a held lock'] = function()
+    seed()
+    child.lua([[
+        local store = require('iter.store')
+        local root = vim.fn.getcwd()
+        local lock = assert(store.path(root)) .. '.lock'
+        vim.fn.writefile({ 'another instance' }, lock)
+        assert(store.put_annotation(root, {
+            scope = 'line',
+            body = 'Queued',
+            anchor = {
+                path = 'a.lua', side = 'new', start_line = 1, end_line = 1,
+                lines = { 'one' },
+            },
+        }))
+    ]])
+    eq(stored_count(), 2)
+    child.lua_notify([[require('iter').yank()]])
+    helpers.wait_until(child, [[#_G.echoes == 1]])
+    eq(child.fn.getreg('+'):find('Queued', 1, true) ~= nil, true)
+    eq(
+        child.lua_get('_G.echoes'),
+        { 'Copied 3 annotations. Clear them? [y/N]' }
+    )
+    child.type_keys('y')
+    helpers.wait_until(
+        child,
+        [[#require('iter.store').cached(vim.fn.getcwd(), true).annotations == 0]]
+    )
+    child.lua([[
+        vim.uv.fs_unlink(require('iter.store').path(vim.fn.getcwd()) .. '.lock')
+    ]])
+end
+
 T['yank']['the API works without a review'] = function()
     seed()
     child.lua_notify([[require('iter').yank()]])

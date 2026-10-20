@@ -6,7 +6,6 @@ local M = {}
 ---@class IterChanges
 ---@field root string
 ---@field branch string 'HEAD' when detached
----@field ahead? integer
 ---@field unstaged IterChange[] sorted by path, untracked included
 ---@field staged IterChange[]
 
@@ -88,7 +87,6 @@ function M.build(snapshot)
     return {
         root = snapshot.root,
         branch = snapshot.detached and 'HEAD' or snapshot.branch,
-        ahead = snapshot.ahead,
         unstaged = unstaged,
         staged = staged,
     }
