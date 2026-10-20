@@ -81,7 +81,6 @@ T['build()']['splits a real snapshot into sides, untracked files by path'] = fun
     eq(result.unstaged[1].dir, nil)
     eq(result.unstaged[3].code, 'M')
     eq(result.unstaged[4].code, '?')
-    eq(result.ahead, nil)
 end
 
 T['build()']['lists a partly staged file on both sides'] = function()
@@ -139,13 +138,11 @@ T['build()']['lists a conflict once, unstaged, with code U'] = function()
     eq(result.unstaged[2].code, 'U')
 end
 
-T['build()']['names a detached HEAD "HEAD" and carries ahead'] = function()
+T['build()']['names a detached HEAD "HEAD"'] = function()
     local detached =
         changes.build(snapshot({}, { branch = 'abc1234', detached = true }))
-    local ahead = changes.build(snapshot({}, { ahead = 2 }))
 
     eq(detached.branch, 'HEAD')
-    eq(ahead.ahead, 2)
 end
 
 T['odd paths'] = new_set()

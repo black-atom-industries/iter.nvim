@@ -92,7 +92,8 @@ status drawer says "Working tree clean"; the review tab still opens, with its
 Annotations column.
 
 The status drawer's header reads `HEAD <branch>  ↑n ↓m  <upstream>` with the
-number of changes at the right. `↑` and `↓` show only when not 0 and count
+number of changes at the right; stacked, it shows `N unstaged · M staged`
+instead. `↑` and `↓` show only when not 0 and count
 against the upstream as last fetched; iter never fetches. A branch without an
 upstream shows neither, and a detached HEAD shows `(detached)`. In a narrow
 drawer the change count goes first, then the upstream, then the arrows.
@@ -168,7 +169,7 @@ changes. The repository is the one of the statusline window's file, else of
 the current directory.
 
 ```lua
-vim.o.statusline = '%f %m%=%{v:lua.require("iter").statusline()} '
+vim.o.statusline = "%f %m%=%{v:lua.require'iter'.statusline()} "
 ```
 
 ### Addresses
@@ -416,7 +417,7 @@ and `x` work only on an annotation row.
 
 In visual mode, `s` and `u` take only the added and deleted lines of the
 selection, which may span several hunks. A changed line staged or unstaged
-alone takes the place of the line it pairs with. After `s` or `u` on the last change of a file, the pane shows the same
+alone goes next to the line it pairs with, which stays unless the selection takes it too. After `s` or `u` on the last change of a file, the pane shows the same
 file on its other side. A file opened in the diff pane, with `:edit` for
 example, opens in the tab the review came from, and the pane keeps its diff. A
 mode change shows in the diff header as `mode 100644 → 100755`; `s` on the file
@@ -500,7 +501,6 @@ fallback. Row backgrounds blend the diff colour 60 % towards `Normal`.
 | `IterStage`                  | Staged files in the drawer            | fg of `Added`, `String`                                              |
 | `IterUnstage`                | Unstaged files in the drawer          | fg of `Removed`, `Error`                                             |
 | `IterUntracked`              | Untracked files                       | fg of `DiagnosticInfo`, `Directory`, `Identifier`                    |
-| `IterIgnored`                | Ignored files                         | fg of `Comment`                                                      |
 | `IterConflict`               | Files with merge conflicts            | fg of `DiagnosticError`, `ErrorMsg`, `Error`                         |
 | `IterHead`                   | Branch name in the drawer             | fg of `Identifier`, `Keyword`                                        |
 | `IterUnpushed`               | Unpushed commits and the ahead count  | fg of `Constant`, `Number`                                           |

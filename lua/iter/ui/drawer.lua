@@ -309,10 +309,9 @@ local function status_header(drawer, summary, total, width)
 end
 
 --- The status drawer: `status_header`, with `<n> changes` at the right edge.
---- The review: `HEAD <branch> ↑<ahead>`, `↑` only when HEAD is ahead of its
---- upstream, and the extras' chunks. A file in more than one column counts
---- once. Stacked, the counts are per column, since a lower title may sit
---- below the visible lines.
+--- The review: `HEAD <branch>` and the extras' chunks. A file in more than
+--- one column counts once. Stacked, the counts are per column, since a lower
+--- title may sit below the visible lines.
 ---@param drawer IterDrawer
 ---@return [string, string][]
 local function header_chunks(drawer)
@@ -347,10 +346,6 @@ local function header_chunks(drawer)
             'IterHead',
         },
     }
-
-    if result.ahead ~= nil and result.ahead > 0 then
-        table.insert(chunks, { ' ↑' .. result.ahead, 'IterUnpushed' })
-    end
 
     local tail = { ' · ' .. table.concat(parts, ' · '), 'IterDrawerHint' }
 
@@ -593,6 +588,30 @@ function Drawer:attach()
         keymap.attach(buf, self.keys_view, self.keys, self.handlers)
     end
 
+    if self.side_buf ~= nil then
+        -- The side window has 'winfixbuf', which refuses `:edit` before
+        -- `BufReadCmd` could route it, so `:edit iter://…` runs from the
+        -- diff pane instead.
+        vim.api.nvim_create_autocmd('CmdlineLeave', {
+            group = self.group,
+            buffer = self.side_buf,
+            callback = function()
+                local cmd =
+                    vim.fn.getcmdline():match('^[%s:]*(%a+)!?%s+iter://')
+
+                if
+                    vim.v.event.cmdtype == ':'
+                    and not vim.v.event.abort
+                    and cmd ~= nil
+                    and vim.startswith('edit', cmd)
+                    and util.is_valid_win(self.view.win)
+                then
+                    vim.api.nvim_set_current_win(self.view.win)
+                end
+            end,
+        })
+    end
+
     vim.api.nvim_create_autocmd('WinClosed', {
         group = self.group,
         callback = function(args)
@@ -654,10 +673,8 @@ end
 ---@return boolean extras_changed
 function Drawer:load()
     local status = self.context == 'status'
-    local snapshot = git.status_snapshot(
-        self.changes and self.changes.root or nil,
-        { ahead = not status }
-    )
+    local snapshot =
+        git.status_snapshot(self.changes and self.changes.root or nil)
 
     if snapshot.error ~= nil then
         util.error(snapshot.error, 'Cannot read the git status')

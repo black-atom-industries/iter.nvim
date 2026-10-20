@@ -560,13 +560,36 @@ local function version_label(file, side)
     return file.side == 'staged' and 'index' or 'worktree'
 end
 
+--- The chunks of `chunks` that fit in `width` cells, dropping from the
+--- front.
+---@param chunks [string, string][]
+---@param width integer
+---@return [string, string][]
+local function fit_chunks(chunks, width)
+    local total = 0
+
+    for _, chunk in ipairs(chunks) do
+        total = total + vim.fn.strdisplaywidth(chunk[1])
+    end
+
+    local first = 1
+
+    while first <= #chunks and total > width do
+        total = total - vim.fn.strdisplaywidth(chunks[first][1])
+        first = first + 1
+    end
+
+    return vim.list_slice(chunks, first)
+end
+
 --- Draw the header row of section `index`: the code letter, and at the
 --- right the viewed state, a mode change, the stat (`untracked · +n` for
 --- an untracked file) and, where the viewed state shows, the count of
 --- annotations placed in the file, for an untracked file only when it has
 --- any. In the split layout each side names its version after the path,
 --- and only the new side shows the right part, with the viewed state as its
---- glyph. Drawn again in place, so the viewed state and the count can
+--- glyph. The right part sheds its parts from the left where it would cover
+--- the path. Drawn again in place, so the viewed state and the count can
 --- change alone.
 ---@param index integer
 function View:decorate_header(index)
@@ -621,6 +644,19 @@ function View:decorate_header(index)
 
     for _, pane in ipairs(self:panes()) do
         local ids = pane.headers[index] or {}
+        local text =
+            vim.api.nvim_buf_get_lines(pane.buf, lnum, lnum + 1, true)[1]
+        local label = pane.side ~= nil
+            and '  ' .. version_label(file, pane.side)
+        local right = pane.side ~= 'old' and virt_text or nil
+
+        if right ~= nil and vim.api.nvim_win_is_valid(pane.win) then
+            local left = vim.fn.strdisplaywidth(file.code .. ' ' .. text)
+                + vim.fn.strdisplaywidth(label or '')
+
+            right = fit_chunks(right, self:text_width(pane) - left - 1)
+            right = #right > 0 and right or nil
+        end
 
         ids.code = vim.api.nvim_buf_set_extmark(pane.buf, NS, lnum, 0, {
             id = ids.code,
@@ -630,21 +666,17 @@ function View:decorate_header(index)
         ids.mark = vim.api.nvim_buf_set_extmark(pane.buf, NS, lnum, 0, {
             id = ids.mark,
             line_hl_group = ROW_HL.header,
-            virt_text = pane.side ~= 'old' and virt_text or nil,
-            virt_text_pos = pane.side ~= 'old' and 'right_align' or nil,
+            virt_text = right,
+            virt_text_pos = right and 'right_align' or nil,
         })
 
-        if pane.side ~= nil then
-            local col =
-                #vim.api.nvim_buf_get_lines(pane.buf, lnum, lnum + 1, true)[1]
-
-            ids.label = vim.api.nvim_buf_set_extmark(pane.buf, NS, lnum, col, {
-                id = ids.label,
-                virt_text = {
-                    { '  ' .. version_label(file, pane.side), 'IterDiffHunk' },
-                },
-                virt_text_pos = 'inline',
-            })
+        if label then
+            ids.label =
+                vim.api.nvim_buf_set_extmark(pane.buf, NS, lnum, #text, {
+                    id = ids.label,
+                    virt_text = { { label, 'IterDiffHunk' } },
+                    virt_text_pos = 'inline',
+                })
         end
 
         pane.headers[index] = ids
@@ -679,8 +711,9 @@ function View:decorate(pane, row, lnum, expand_lhs)
         local chunks = {
             {
                 string.format(
-                    '··· %d unchanged lines ···',
-                    row.gap.count
+                    '··· %d unchanged %s ···',
+                    row.gap.count,
+                    row.gap.count == 1 and 'line' or 'lines'
                 ),
                 'IterDiffGap',
             },

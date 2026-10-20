@@ -545,6 +545,26 @@ T['stage']['u and s in Staged unstage a file'] = function()
     eq(status()['deleted.txt'], ' D')
 end
 
+T['stage']['u without commits makes the file untracked again'] = function()
+    child.stop()
+    helpers.cleanup(repo)
+    repo = vim.fn.resolve(vim.fn.tempname())
+    vim.fn.mkdir(repo, 'p')
+    helpers.git(repo, { 'init', '--quiet', '-b', 'main' })
+    helpers.write_file(vim.fs.joinpath(repo, 'm.txt'), { 'm' })
+    helpers.git(repo, { 'add', 'm.txt' })
+    helpers.start_child(child, repo)
+    stub_ui()
+    open_drawer()
+    select_item('staged', 'm.txt')
+
+    child.type_keys('u')
+
+    eq(status(), { ['m.txt'] = '??' })
+    eq(read('m.txt'), { 'm' })
+    eq(child.lua_get('_G.notes'), {})
+end
+
 T['stage']['u unstages a staged rename on both paths'] = function()
     helpers.write_file(
         vim.fs.joinpath(repo, 'rename_me.txt'),

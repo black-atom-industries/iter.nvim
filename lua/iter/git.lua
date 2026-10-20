@@ -7,7 +7,6 @@
 ---@class GitStatusSnapshot
 ---@field branch string
 ---@field entries GitStatusEntry[]
----@field ahead integer? commits ahead of the upstream, nil without one
 ---@field detached boolean? HEAD is not on a branch
 ---@field root string
 ---@field error string?
@@ -178,9 +177,8 @@ function git.root()
 end
 
 ---@param root? string worktree root, the one of the cwd when nil
----@param opts? { ahead?: boolean } `ahead = false` leaves the ahead count out
 ---@return GitStatusSnapshot
-function git.status_snapshot(root, opts)
+function git.status_snapshot(root)
     if not ensure_git() then
         return {
             branch = '',
@@ -235,15 +233,13 @@ function git.status_snapshot(root, opts)
     return {
         branch = branch,
         entries = parse_status(status_out.output),
-        ahead = not (opts and opts.ahead == false) and git.ahead(root) or nil,
         detached = detached,
         root = root,
     }
 end
 
 --- `git.status_snapshot` without waiting: the branch and the entries of
---- `root`, read in the background, then `on_done` on the main loop. The
---- ahead count is left out.
+--- `root`, read in the background, then `on_done` on the main loop.
 ---@param root string
 ---@param on_done fun(snapshot: GitStatusSnapshot)
 function git.status_async(root, on_done)
@@ -299,22 +295,6 @@ function git.status_async(root, on_done)
             end
         )
     end)
-end
-
----Number of commits HEAD is ahead of its upstream.
----@param root string
----@return integer? ahead nil when there is no upstream
-function git.ahead(root)
-    local out = git.run(
-        { 'rev-list', '--count', '@{upstream}..HEAD' },
-        { cwd = root, ignore_error = true }
-    )
-
-    if out.exit_code ~= 0 then
-        return nil
-    end
-
-    return tonumber(return_result(out))
 end
 
 ---Absolute paths of files in the git dir, e.g. `index` and `HEAD`. In a
@@ -422,11 +402,27 @@ function git.stage(root, paths)
     return run_on_paths(root, { 'add' }, paths)
 end
 
+--- On an unborn HEAD, `rm --cached` takes the paths out of the index and
+--- leaves the worktree files; `--force` lets it drop staged content that
+--- differs from the worktree too.
 ---@param root string
 ---@param paths string[]
 ---@return boolean
 ---@return string?
 function git.unstage(root, paths)
+    local head = git.run(
+        { 'rev-parse', '--verify', '--quiet', 'HEAD' },
+        { cwd = root, ignore_error = true }
+    )
+
+    if head.exit_code ~= 0 then
+        return run_on_paths(
+            root,
+            { 'rm', '--cached', '--force', '--quiet' },
+            paths
+        )
+    end
+
     return run_on_paths(root, { 'restore', '--staged' }, paths)
 end
 

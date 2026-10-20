@@ -153,7 +153,9 @@ local function route(target, name)
             drawer:reveal(target.path)
         end
     elseif target.kind == 'annotation' then
-        require('iter.annotations.editor').show()
+        if not require('iter.annotations.editor').show() then
+            util.warn('No annotation draft to show')
+        end
     else
         iter.review()
 

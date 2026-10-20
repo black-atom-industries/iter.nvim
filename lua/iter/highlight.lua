@@ -48,7 +48,6 @@ local FOREGROUNDS = {
         sources = { 'DiagnosticInfo', 'Directory', 'Identifier' },
         fallback = 0x61AFEF,
     },
-    IterIgnored = { sources = { 'Comment' }, fallback = 0x5C6370 },
     IterConflict = {
         sources = { 'DiagnosticError', 'ErrorMsg', 'Error' },
         fallback = 0xE06C75,

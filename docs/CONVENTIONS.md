@@ -31,7 +31,7 @@ the review straight to an agent pane.
   same height on the other. Moves the code makes go through `View:sync()`, since the binds follow only the current
   window. Only the review tab offers the split layout.
 - A patch of selected lines (`patch.lines`) writes each change group in pair order, the split layout's: a deleted
-  line next to the added line it pairs with, so a staged or unstaged line takes its partner's place.
+  line next to the added line it pairs with, so a staged or unstaged line goes next to its partner, which stays unless the selection takes it too.
 - A document of several files decorates per viewport: syntax, word emphasis and annotation `virt_lines` for the lines
   in view and two screens around them, again on `WinScrolled`; row highlights, headers and annotation positions cover
   the whole document. A read of all files keeps a file's rows, and so its parse, while its blob ids and worktree stat
