@@ -71,6 +71,18 @@ T['apply()']['re-derives its own groups when the colorscheme has no hi clear'] =
     eq(hl('IterDiffAdd').bg, 0x003d00)
 end
 
+T['apply()']['file headers take a band of the title colour and a rule in it'] = function()
+    vim.api.nvim_set_hl(0, 'Normal', { fg = 0xcccccc, bg = 0x000000 })
+    vim.api.nvim_set_hl(0, 'Title', { fg = 0xffffff })
+
+    highlight.apply()
+
+    -- 20 % of the title colour over Normal: 0xff * 0.2 = 0x33.
+    eq(hl('IterDiffHeader').bg, 0x333333)
+    eq(hl('IterDiffHeader').fg, 0xcccccc)
+    eq(hl('IterDiffHeaderRule').fg, 0xffffff)
+end
+
 T['setup()'] = new_set()
 
 T['setup()']['colorscheme with hi clear keeps its groups and derives the rest'] = function()

@@ -82,6 +82,7 @@ local WORD_HL = { add = 'IterDiffAddText', del = 'IterDiffDeleteText' }
 
 -- Fill of a filler row, wider than any pane.
 local FILL = string.rep('╱', 300)
+local RULE = string.rep('─', 300)
 
 -- Screens above and below the visible lines that a document of several
 -- files decorates ahead, so scrolling shows them done.
@@ -660,7 +661,12 @@ function View:decorate_header(index)
 
         ids.code = vim.api.nvim_buf_set_extmark(pane.buf, NS, lnum, 0, {
             id = ids.code,
-            virt_text = { { file.code .. ' ', 'IterDiffHeader' } },
+            virt_text = {
+                {
+                    file.code .. ' ',
+                    { 'IterDiffHeader', 'IterDiffHeaderRule' },
+                },
+            },
             virt_text_pos = 'inline',
         })
         ids.mark = vim.api.nvim_buf_set_extmark(pane.buf, NS, lnum, 0, {
@@ -668,6 +674,7 @@ function View:decorate_header(index)
             line_hl_group = ROW_HL.header,
             virt_text = right,
             virt_text_pos = right and 'right_align' or nil,
+            hl_mode = 'combine',
         })
 
         if label then
@@ -676,6 +683,7 @@ function View:decorate_header(index)
                     id = ids.label,
                     virt_text = { { label, 'IterDiffHunk' } },
                     virt_text_pos = 'inline',
+                    hl_mode = 'combine',
                 })
         end
 
@@ -693,6 +701,11 @@ function View:decorate(pane, row, lnum, expand_lhs)
     if row.kind == 'filler' then
         mark = {
             virt_text = { { FILL, 'IterDiffFiller' } },
+            virt_text_pos = 'overlay',
+        }
+    elseif row.kind == 'blank' then
+        mark = {
+            virt_text = { { RULE, 'IterDiffHeaderRule' } },
             virt_text_pos = 'overlay',
         }
     elseif row.kind == 'add' or row.kind == 'del' then
@@ -1717,6 +1730,8 @@ end
 ---@field del string
 ---@field add string
 ---@field filler? string
+---@field header string rail of a file header row
+---@field rule string rail of the blank row above a file header
 
 ---@type table<string, IterDiffRailFormats>
 local rail_formats = {}
@@ -1734,17 +1749,25 @@ local function formats_for(width, side)
     if formats == nil then
         local number = '%' .. width .. 'd'
         local none = string.rep(' ', width)
+        local cells = side == nil and 2 * width + 4 or width + 3
+        local blank = string.rep(' ', cells)
+        local header = '%#IterDiffHeader#' .. blank
+        local rule = '%#IterDiffHeaderRule#' .. RULE:sub(1, 3 * cells)
 
         if side == nil then
             formats = {
-                blank = string.rep(' ', 2 * width + 4),
+                blank = blank,
+                header = header,
+                rule = rule,
                 context = '%%#IterDiffNr#' .. number .. ' ' .. number .. '   ',
                 del = '%%#IterDiffDeleteNr#' .. number .. ' ' .. none .. ' - ',
                 add = '%%#IterDiffAddNr#' .. none .. ' ' .. number .. ' + ',
             }
         else
             formats = {
-                blank = string.rep(' ', width + 3),
+                blank = blank,
+                header = header,
+                rule = rule,
                 context = '%%#IterDiffNr#' .. number .. '   ',
                 del = '%%#IterDiffDeleteNr#' .. number .. ' - ',
                 add = '%%#IterDiffAddNr#' .. number .. ' + ',
@@ -1759,8 +1782,9 @@ local function formats_for(width, side)
 end
 
 --- 'statuscolumn' of a diff view: old and new line numbers and the change
---- sign, in the split layout the number of the pane's side, blank on
---- virtual and wrapped lines.
+--- sign, in the split layout the number of the pane's side, the header
+--- band on a file header, the rule above it, blank on virtual and wrapped
+--- lines.
 ---@return string
 function View.statuscolumn()
     local buf = vim.api.nvim_win_get_buf(vim.g.statusline_winid)
@@ -1782,6 +1806,10 @@ function View.statuscolumn()
 
     if kind == 'filler' then
         return formats.filler or formats.blank
+    elseif kind == 'header' then
+        return formats.header
+    elseif kind == 'blank' then
+        return formats.rule
     elseif kind == 'context' then
         if pane.side ~= nil then
             return string.format(
