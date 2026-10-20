@@ -9,11 +9,8 @@ Scope, architecture and Lua conventions live in `docs/CONVENTIONS.md`. Read it b
 
 - Open work lives in GitHub issues, milestone `v1`.
 - Plan the implementation from the issue's motivation before writing code.
-- Start a conventional branch (`feat/...`, `fix/...`) only from `main`. On any other branch, ask what to do about the
-  branch before anything else.
 - Create a new file when the code fits no current file or handles one very specific job. Long files are fine; a file
   that handles more than its job is not.
-- Commit only when told, through the `repo-commit` skill. Never push.
 
 ## Tests
 
