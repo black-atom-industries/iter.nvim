@@ -2,6 +2,40 @@
 
 ## [0.3.0](https://github.com/black-atom-industries/iter.nvim/compare/v0.2.0...v0.3.0) (2026-10-20)
 
+### Highlights
+
+#### Wide review drawers
+
+From 160 columns on, the review drawer puts Unstaged and Staged side by side with the Annotations column to their right,
+and `h` and `l` step through all three. Between 80 and 160 columns Unstaged stays above Staged. The drawer switches as the
+terminal resizes, and both widths are options:
+
+```lua
+require('iter').setup({
+    drawer = {
+        breakpoint = 80,       -- drawer width below which the columns stack
+        wide_breakpoint = 160, -- review drawer width from which Unstaged and Staged sit side by side
+    },
+})
+```
+
+![The status drawer switches to side by side, the review opens wide in the same layout, r marks and moves on, r on a reviewed file moves on, R removes the mark, l steps to Staged and Annotations](https://raw.githubusercontent.com/black-atom-industries/iter.nvim/v0.3.0/docs/assets/changelog/0.3.0-wide-review.webp)
+
+#### `r` moves on, `R` removes the mark
+
+`r` marks the file reviewed and moves to the next file you haven't reviewed. On a reviewed file it keeps the mark and moves
+on, so going back with `k` to look at a file and pressing `r` again keeps your review. `R` removes the mark and leaves the
+selection where it is.
+
+#### The diff layout holds for the session
+
+Side by side (`|`) or unified (`-`), picked in the status drawer, carries over into the review tab and back until Neovim
+quits.
+
+#### Upgrading from 0.2
+
+To remove a reviewed mark, press `R`. `r` on a reviewed file moves on and keeps the mark.
+
 
 ### Features
 
