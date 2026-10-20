@@ -30,6 +30,13 @@ Scope, architecture and Lua conventions live in `docs/CONVENTIONS.md`. Read it b
 - `repo-release` and `repo-changelog`: preparing or merging the release-please PR.
 - `repo-dep-upgrades`: bumping the pinned mini.nvim or the npm devDependencies.
 
+## Highlight groups
+
+- Adding or changing an `Iter*` group also updates the group table in `README.md`.
+- Black Atom themes can define `Iter*` groups in the Neovim adapter, `~/repos/black-atom-industries/black-atom/adapters/nvim`,
+  under `lua/black-atom/highlights/plugins/`. A group a theme defines wins over the one iter derives, so check that file
+  whenever a group changes and say what it needs.
+
 ## Designs
 
 All UI designs live in the "iter.nvim" Design canvas artifact (https://claude.ai/artifact/N3QkZ8nf9AuZvRTnR3geRQ), one
