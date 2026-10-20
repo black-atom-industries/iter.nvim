@@ -520,7 +520,8 @@ fallback. Row backgrounds blend the diff colour 60 % towards `Normal`.
 | `IterDiffAddNr`              | Line number of added lines            | fg of `diffAdded`, `Added`, `DiffAdd`; bg as `IterDiffAdd`           |
 | `IterDiffDeleteNr`           | Line number of deleted lines          | fg of `diffRemoved`, `Removed`, `DiffDelete`; bg as `IterDiffDelete` |
 | `IterDiffNr`                 | Line number of context lines          | link to `LineNr`                                                     |
-| `IterDiffHeader`             | File headers in the diff              | link to `Title`                                                      |
+| `IterDiffHeader`             | File header rows in the diff          | fg of `Normal`; bg of `Title` fg, blended with `Normal`; bold        |
+| `IterDiffHeaderRule`         | Rule above a file header, code letter | fg of `Title`                                                        |
 | `IterDiffHunk`               | Hunk headers and stats                | link to `Comment`                                                    |
 | `IterDiffGap`                | Collapsed unchanged lines             | link to `Folded`                                                     |
 | `IterDiffFiller`             | Filler rows beside a one-sided change | link to `NonText`                                                    |

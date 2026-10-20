@@ -6,6 +6,9 @@ local M = {}
 -- Share of the diff colour in a row background; the rest is Normal.
 local BLEND = 0.6
 
+-- Share of the title colour in the file header background; the rest is Normal.
+local HEADER_BLEND = 0.2
+
 ---@param color integer
 ---@param base integer
 ---@param alpha number
@@ -111,6 +114,9 @@ function M.apply()
         or (dark and 0x80d080 or 0x206020)
     local del_fg = color({ 'diffRemoved', 'Removed', 'DiffDelete' }, 'fg')
         or (dark and 0xd08080 or 0x802020)
+    local title = color({ 'Title' }, 'fg') or (dark and 0xe0a060 or 0x905020)
+    local header_bg =
+        blend(title, base or (dark and 0x000000 or 0xffffff), HEADER_BLEND)
 
     -- Rows soften the diff colour towards Normal and words take it whole.
     -- Without a Normal background (transparent) rows take the diff colour
@@ -135,7 +141,12 @@ function M.apply()
         IterDiffAddNr = { fg = add_fg, bg = add_row },
         IterDiffDeleteNr = { fg = del_fg, bg = del_row },
         IterDiffNr = { link = 'LineNr' },
-        IterDiffHeader = { link = 'Title' },
+        IterDiffHeader = {
+            fg = color({ 'Normal' }, 'fg'),
+            bg = header_bg,
+            bold = true,
+        },
+        IterDiffHeaderRule = { fg = title },
         IterDiffHunk = { link = 'Comment' },
         IterDiffGap = { link = 'Folded' },
         IterDiffFiller = { link = 'NonText' },
