@@ -1,4 +1,4 @@
----@class Iter
+---@class IterModule
 ---@field drawer IterDrawer? the open status drawer
 ---@field current_review IterReview? the open review tab
 ---@field did_setup boolean
