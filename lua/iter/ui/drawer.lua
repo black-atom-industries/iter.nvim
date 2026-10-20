@@ -100,6 +100,7 @@ local HINTS = {
     { 'ignore', 'ignore' },
     { 'open', 'open' },
     { 'review', 'review' },
+    { 'reviewed', 'reviewed' },
     { 'mode', 'all files' },
     { 'split', 'split' },
     { 'help', 'help' },

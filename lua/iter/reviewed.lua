@@ -2,14 +2,14 @@ local git = require('iter.git')
 local store = require('iter.store')
 local util = require('iter.util')
 
----@alias IterViewedState 'viewed'|'changed'|'unviewed'
+---@alias IterReviewedState 'reviewed'|'changed'|'unreviewed'
 
----@class IterViewedSummary
----@field viewed integer
+---@class IterReviewedSummary
+---@field reviewed integer
 ---@field changed integer
 ---@field total integer
 
----@class IterViewedCacheEntry
+---@class IterReviewedCacheEntry
 ---@field stat string worktree stat the hash was taken at
 ---@field hash? string
 
@@ -19,7 +19,7 @@ local DELETED = 'deleted'
 
 -- Hashes by root and path. A file is hashed again only when its stat
 -- (mtime, size) differs from the one its cached hash was taken at.
----@type table<string, table<string, IterViewedCacheEntry>>
+---@type table<string, table<string, IterReviewedCacheEntry>>
 local cache = {}
 
 --- `git hash-object` of one file, for the paths a batch can't carry or the
@@ -117,24 +117,24 @@ function M.hashes(root, paths, fresh)
     return hashes
 end
 
----@param record? IterViewed
+---@param record? IterReviewed
 ---@param hash? string
----@return IterViewedState
+---@return IterReviewedState
 local function state_of(record, hash)
     if record == nil then
-        return 'unviewed'
+        return 'unreviewed'
     end
 
-    return record.hash == hash and 'viewed' or 'changed'
+    return record.hash == hash and 'reviewed' or 'changed'
 end
 
---- The state of every path: viewed when its record's hash is the worktree
---- hash, changed when it differs, unviewed without a record. The cache
+--- The state of every path: reviewed when its record's hash is the worktree
+--- hash, changed when it differs, unreviewed without a record. The cache
 --- keeps only `paths` afterwards.
 ---@param root string
 ---@param paths string[]
----@param records table<string, IterViewed>
----@return table<string, IterViewedState>
+---@param records table<string, IterReviewed>
+---@return table<string, IterReviewedState>
 function M.states(root, paths, records)
     local hashes = M.hashes(root, paths)
     local states, kept = {}, {}
@@ -149,11 +149,11 @@ function M.states(root, paths, records)
     return states
 end
 
---- Mark `path` viewed at its current content, or unviewed when it is
---- viewed already. The state is the one the file has now.
+--- Mark `path` reviewed at its current content, or unreviewed when it is
+--- reviewed already. The state is the one the file has now.
 ---@param root string
 ---@param path string
----@return IterViewedState? state
+---@return IterReviewedState? state
 ---@return string? error
 function M.toggle(root, path)
     local hash = M.hashes(root, { path }, true)[path]
@@ -165,14 +165,14 @@ function M.toggle(root, path)
     local state
 
     local _, err = store.update(root, function(data)
-        local record = data.viewed[path]
+        local record = data.reviewed[path]
 
         if record ~= nil and record.hash == hash then
-            data.viewed[path] = nil
-            state = 'unviewed'
+            data.reviewed[path] = nil
+            state = 'unreviewed'
         else
-            data.viewed[path] = { hash = hash, at = os.time() }
-            state = 'viewed'
+            data.reviewed[path] = { hash = hash, at = os.time() }
+            state = 'reviewed'
         end
     end)
 
@@ -183,16 +183,16 @@ function M.toggle(root, path)
     return state
 end
 
----@param states table<string, IterViewedState>
----@return IterViewedSummary
+---@param states table<string, IterReviewedState>
+---@return IterReviewedSummary
 function M.summary(states)
-    local summary = { viewed = 0, changed = 0, total = 0 }
+    local summary = { reviewed = 0, changed = 0, total = 0 }
 
     for _, state in pairs(states) do
         summary.total = summary.total + 1
 
-        if state == 'viewed' then
-            summary.viewed = summary.viewed + 1
+        if state == 'reviewed' then
+            summary.reviewed = summary.reviewed + 1
         elseif state == 'changed' then
             summary.changed = summary.changed + 1
         end

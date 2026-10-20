@@ -432,12 +432,12 @@ T['file_cell()']['a decor adds the mark slot and the count'] = function()
         change('a.txt'),
         0,
         16,
-        { mark = { '✓', 'IterViewed' }, count = 2 }
+        { mark = { '✓', 'IterReviewed' }, count = 2 }
     )
 
     eq(text, ' M ✓ a.txt  [2] ')
     eq(vim.fn.strdisplaywidth(text), 16)
-    eq(spans(line, 'IterViewed'), { { 3, 6 } })
+    eq(spans(line, 'IterReviewed'), { { 3, 6 } })
     eq(spans(line, 'IterDrawerCount'), { { #text - 5, #text } })
 end
 
@@ -520,24 +520,24 @@ T['progress_cell()']['bar, counts and the changed files'] = function()
     local line = { text = '', highlights = {} }
     local text = layout.progress_cell(
         line,
-        { viewed = 3, changed = 1, total = 8 },
+        { reviewed = 3, changed = 1, total = 8 },
         0,
         32
     )
 
-    eq(text, ' viewed ■■■□□□□□ 3 of 8 · ↻ 1   ')
-    eq(spans(line, 'IterViewed'), { { 8, 17 } })
+    eq(text, ' reviewed ■■■□□□□□ 3 of 8 · ↻ 1 ')
+    eq(spans(line, 'IterReviewed'), { { 10, 19 } })
     eq(
-        spans(line, 'IterViewedChanged'),
-        { { #' viewed ■■■□□□□□ 3 of 8', #text - 3 } }
+        spans(line, 'IterReviewedChanged'),
+        { { #' reviewed ■■■□□□□□ 3 of 8', #text - 1 } }
     )
 end
 
-T['progress_cell()']['fills by share, full only when all are viewed'] = function()
-    local function bar(viewed, total)
+T['progress_cell()']['fills by share, full only when all are reviewed'] = function()
+    local function bar(reviewed, total)
         local text = layout.progress_cell(
             { text = '', highlights = {} },
-            { viewed = viewed, changed = 0, total = total },
+            { reviewed = reviewed, changed = 0, total = total },
             0,
             40
         )
@@ -555,7 +555,7 @@ end
 T['progress_cell()']['drops the word when narrow'] = function()
     local text = layout.progress_cell(
         { text = '', highlights = {} },
-        { viewed = 1, changed = 1, total = 4 },
+        { reviewed = 1, changed = 1, total = 4 },
         0,
         24
     )

@@ -31,9 +31,9 @@ A Git staging and code review tool for Neovim.
   in the review diff and in normal file buffers. Annotations follow their code
   when it moves and turn outdated when it is gone.
 - **Annotations column** in the review drawer: every annotation in drawer
-  order with the viewed progress on top. Moving onto one shows it in the diff;
+  order with the reviewed progress on top. Moving onto one shows it in the diff;
   jump, edit and delete from there.
-- **Viewed marks** per file that drop back when the file changes afterwards.
+- **Reviewed marks** per file that drop back when the file changes afterwards.
 - **Export:** copy all annotations as a prompt for an agent, then clear them if
   you like.
 - **Saved per repository and branch**, shared by linked worktrees.
@@ -359,7 +359,7 @@ The drawer of the review tab (`review_drawer`):
 | `u`     | `unstage`       | Unstage the file                         |
 | `d`     | `discard`       | Discard changes in the file              |
 | `I`     | `ignore`        | Add the untracked file to .gitignore     |
-| `v`     | `viewed`        | Toggle viewed                            |
+| `r`     | `reviewed`      | Toggle reviewed                          |
 | `m`     | `mode`          | Toggle one file or all files             |
 | `\|`    | `split`         | Show the diff side by side               |
 | `-`     | `unified`       | Show the diff unified                    |
@@ -392,7 +392,7 @@ The diff pane of the review tab (`diff`):
 | `x`     | `delete`          | Delete the annotation                                           |
 | `<CR>`  | `expand`          | Expand the collapsed file or hidden context                     |
 | `gf`    | `goto_file`       | Go to the line in the file                                      |
-| `v`     | `viewed`          | Toggle viewed                                                   |
+| `r`     | `reviewed`        | Toggle reviewed                                                 |
 | `m`     | `mode`            | Toggle one file or all files                                    |
 | `\|`    | `split`           | Show the diff side by side                                      |
 | `-`     | `unified`         | Show the diff unified                                           |
@@ -401,7 +401,7 @@ The diff pane of the review tab (`diff`):
 | `q`     | `close`           | Close                                                           |
 | `?`     | `help`            | Show the keys                                                   |
 
-![The review tab: moving through the files, a annotates a line, v marks the file viewed, the Annotations column lists the annotation](docs/assets/review.webp)
+![The review tab: moving through the files, a annotates a line, r marks the file reviewed, the Annotations column lists the annotation](docs/assets/review.webp)
 
 The review drawer has two columns: the files on the left, Unstaged above
 Staged, and Annotations on the right in a window of its own that stays in
@@ -409,8 +409,8 @@ place while the file list scrolls. `j` and `k` move through both file
 sections; `h` and `l` switch between the files and Annotations, and each
 keeps its row. In narrow windows Unstaged, Staged and Annotations stack, and
 `h` and `l` step through them, skipping a file section without files. The
-Annotations column starts with the viewed progress (`viewed ■■■□□□□□ 3 of 8`,
-then `· ↻ n` for files changed since they were viewed) and lists every
+Annotations column starts with the reviewed progress (`reviewed ■■■□□□□□ 3 of 8`,
+then `· ↻ n` for files changed since they were reviewed) and lists every
 annotation in drawer file order, review annotations last: the file name with
 `:line`, `:first–last` or ` old` for a deleted line, then the start of the
 text. Outdated ones are dimmed. Moving onto an annotation shows its file in
@@ -426,7 +426,7 @@ file on its other side. A file opened in the diff pane, with `:edit` for
 example, opens in the tab the review came from, and the pane keeps its diff. A
 mode change shows in the diff header as `mode 100644 → 100755`; `s` on the file
 in the drawer stages it. An untracked file's diff header reads `untracked · +n`.
-In the review tab the header also shows the file's viewed state and its
+In the review tab the header also shows the file's reviewed state and its
 number of annotations, for an untracked file only when it has any.
 
 `m`, in the diff pane or the review drawer, shows every file of the review
@@ -435,18 +435,18 @@ header with a blank line between files. A file on both sides shows twice.
 The drawer selection follows the cursor from file to file, and selecting a
 file in the drawer puts its header at the top of the pane. `]f` and `[f`
 jump between the headers, `]c`, `[c`, `]a` and `[a` run across files, and
-staging, annotations, viewed, `gf` and hidden context work on the file
+staging, annotations, reviewed, `gf` and hidden context work on the file
 under the cursor. A visual selection over two files stages and annotates
 nothing. `m` again shows the selected file alone; the key hint line names
 the mode it switches to. The mode lasts until the
 review tab closes.
 
-In all-files mode a viewed file shows its header row alone (`✓ viewed`),
-with its stat and annotation count. `v` on a file collapses it, `v` on a
-collapsed header unviews and expands it, from the diff pane or the drawer.
-`<CR>` on a collapsed header shows the whole file and keeps it viewed, until
-`v` marks it viewed again or `m` enters the mode again. Entering the mode
-shows viewed files collapsed and files changed since they were viewed (`↻`)
+In all-files mode a reviewed file shows its header row alone (`✓ reviewed`),
+with its stat and annotation count. `r` on a file collapses it, `r` on a
+collapsed header unreviews and expands it, from the diff pane or the drawer.
+`<CR>` on a collapsed header shows the whole file and keeps it reviewed, until
+`r` marks it reviewed again or `m` enters the mode again. Entering the mode
+shows reviewed files collapsed and files changed since they were reviewed (`↻`)
 whole. `]f` and `[f` stop on collapsed headers; moving the drawer selection
 or an annotation preview leaves a collapsed file as it is, and `<CR>` on an
 annotation in one expands it.
@@ -455,7 +455,7 @@ annotation in one expands it.
 old version in a window on the left (`HEAD` for a staged file, `index` for an
 unstaged one), the new version on the right (`index` or `worktree`), each
 with its own line numbers, syntax and a clean buffer. The right header keeps
-the stat and the annotation count and shows the viewed state as its glyph
+the stat and the annotation count and shows the reviewed state as its glyph
 (`✓`, `↻`, `○`). The two windows scroll
 and move the cursor together. A deleted line and the added line it pairs
 with share a row, with the changed words highlighted; a line without a
@@ -509,8 +509,8 @@ fallback. Row backgrounds blend the diff colour 60 % towards `Normal`.
 | `IterHead`                   | Branch name in the drawer             | fg of `Identifier`, `Keyword`                                        |
 | `IterUnpushed`               | Unpushed commits and the ahead count  | fg of `Constant`, `Number`                                           |
 | `IterBehind`                 | Behind count                          | fg of `Removed`, `Error`                                             |
-| `IterViewed`                 | Viewed marks and progress             | fg of `Added`, `String`                                              |
-| `IterViewedChanged`          | Files changed since viewed            | fg of `DiagnosticWarn`, `WarningMsg`, `Constant`                     |
+| `IterReviewed`               | Reviewed marks and progress           | fg of `Added`, `String`                                              |
+| `IterReviewedChanged`        | Files changed since reviewed          | fg of `DiagnosticWarn`, `WarningMsg`, `Constant`                     |
 | `IterDrawer`                 | Drawer text                           | link to `Normal`                                                     |
 | `IterDrawerTitle`            | Drawer titles                         | link to `Title`                                                      |
 | `IterDrawerSelected`         | Selected drawer row                   | link to `Visual`                                                     |
@@ -536,7 +536,7 @@ fallback. Row backgrounds blend the diff colour 60 % towards `Normal`.
 
 ### Files
 
-Annotations and viewed marks live in
+Annotations and reviewed marks live in
 `stdpath('data')/iter/<repo>/<branch>.json`. Linked worktrees of one
 repository share them. The log is `stdpath('state')/iter/iter.log`.
 

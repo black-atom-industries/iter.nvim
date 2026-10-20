@@ -396,7 +396,7 @@ T['diff view']['a failed store read keeps the annotations'] = function()
 
     child.lua([[
         local path = require('iter.store').path(vim.fn.getcwd())
-        vim.fn.writefile({ '{"version":2,"annotations":[],"viewed":{}}' }, path)
+        vim.fn.writefile({ '{"version":3,"annotations":[],"reviewed":{}}' }, path)
         require('iter').current_review.drawer:refresh()
     ]])
 
