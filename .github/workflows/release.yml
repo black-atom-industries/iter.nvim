@@ -2,79 +2,31 @@ name: Release
 
 on:
   push:
-    tags:
-      - 'v*'
-  workflow_dispatch:
+    branches:
+      - main
 
 permissions:
   contents: write
-
-concurrency:
-  group: release-${{ github.ref_name }}
-  cancel-in-progress: false
+  pull-requests: write
+  actions: write
 
 jobs:
-  create-release:
+  release-please:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
+      - name: Open or update the release PR, or tag and publish the release
+        id: release
+        uses: googleapis/release-please-action@v5
         with:
-          fetch-depth: 0
+          config-file: .github/release-please-config.json
+          manifest-file: .github/.release-please-manifest.json
 
-      - name: Validate tag format
-        run: |
-          case "${GITHUB_REF_NAME}" in
-            v[0-9]*.[0-9]*.[0-9]*)
-              ;;
-            *)
-              echo "Expected semantic version tag like v0.2.0, got: ${GITHUB_REF_NAME}" >&2
-              exit 1
-              ;;
-          esac
-
-      - name: Ensure tag points to main history
-        run: |
-          git fetch origin main --force
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" "origin/main"; then
-            echo "Tag ${GITHUB_REF_NAME} does not point to a commit on origin/main" >&2
-            exit 1
-          fi
-
-      - name: Generate release notes
+      # A tag pushed with GITHUB_TOKEN starts no workflow, so nightly would keep
+      # naming the previous stable release until the next push to main.
+      - name: Refresh nightly against the new release
+        if: steps.release.outputs.release_created == 'true'
         env:
-          REPOSITORY: ${{ github.repository }}
-        run: |
-          previous_tag=""
-          while IFS= read -r tag; do
-            if [ "$tag" != "$GITHUB_REF_NAME" ]; then
-              previous_tag="$tag"
-              break
-            fi
-          done <<EOF
-          $(git tag --sort=-v:refname --list 'v*')
-          EOF
-
-          if [ -n "$previous_tag" ]; then
-            commit_range="${previous_tag}..${GITHUB_SHA}"
-            changelog_url="https://github.com/${REPOSITORY}/compare/${previous_tag}...${GITHUB_REF_NAME}"
-          else
-            commit_range="$GITHUB_SHA"
-            changelog_url="https://github.com/${REPOSITORY}/commits/${GITHUB_REF_NAME}"
-          fi
-
-          {
-            echo "## What's Changed"
-            echo
-            git log --reverse --pretty='* %s (`%h`)' "$commit_range"
-            echo
-            echo "**Full Changelog**: ${changelog_url}"
-          } > "$RUNNER_TEMP/release-notes.md"
-
-      - name: Publish GitHub release
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: ${{ github.ref_name }}
-          body_path: ${{ runner.temp }}/release-notes.md
-          make_latest: true
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh workflow run nightly.yml --ref main

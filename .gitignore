@@ -2,3 +2,6 @@ deps/
 plenary.nvim/
 diffs.nvim/
 /plans
+/node_modules
+/.claude/worktrees/
+/.claude/settings.local.json

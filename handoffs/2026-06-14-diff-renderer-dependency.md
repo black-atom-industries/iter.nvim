@@ -38,9 +38,10 @@ A diff plugin has three distinct concerns that are easy to conflate:
 3. **Diff rendering** — paints the diff in the editor. Treesitter syntax inside hunks, intra-line word highlights, line-number rails, extmark management, split-pane alignment. **This is what iter is currently outsourcing to `diffs.nvim`.**
 
 When someone (me, the docs, anyone) says "native vim diff," they could mean any of:
+
 - `vim.diff` (C function) — just math
 - Native nvim windows / extmarks / treesitter — just editor APIs
-- Neovim's built-in `:diffthis` + `vim.hl.diff` highlights — the *legacy* diff mode renderer
+- Neovim's built-in `:diffthis` + `vim.hl.diff` highlights — the _legacy_ diff mode renderer
 
 The third one is what would be "native diff rendering." It is **not** what iter uses in either stacked or split view. Both go through `diffs.nvim`'s own extmark-based renderer.
 
@@ -48,7 +49,7 @@ The third one is what would be "native diff rendering." It is **not** what iter 
 
 1. **"iter uses `@pierre/diffs` as a backend"** — false. The `pierre-style` line in `diffs.nvim`'s README is a layout-language reference, not a backend dependency. Pierre Computer Company (`pierrecomputer` on GitHub) and Barrett Ruth (author of `diffs.nvim`) are different people. iter has no relationship to `@pierre/diffs`.
 
-2. **"iter dropped native vim diffing"** — partially wrong framing. The diff *content* (`git diff` subprocess) is still native. The diff *algorithm* (`vim.diff` C function) is still native. What moved is the *renderer* (treesitter extraction, extmark painting, split alignment) — and only because iter replaced homegrown code with the `diffs.nvim` adapter.
+2. **"iter dropped native vim diffing"** — partially wrong framing. The diff _content_ (`git diff` subprocess) is still native. The diff _algorithm_ (`vim.diff` C function) is still native. What moved is the _renderer_ (treesitter extraction, extmark painting, split alignment) — and only because iter replaced homegrown code with the `diffs.nvim` adapter.
 
 3. **"iter's split view uses native vim diff rendering"** — wrong, but plausibly so. iter's `M.open_split_diff()` (in `lua/iter/ui/status/preview.lua:261`) requires `diffs_nvim.is_available()` and calls `vim.cmd('Diff ++layout=split')` — that is `diffs.nvim`'s split command, not Neovim's built-in diff mode. Grepping `diffs.nvim`'s entire `lua/` for `diffthis`, `diffoff`, `&diff`, or `diff_mode` returns zero matches. None of its three layouts (`unified`, `stacked`, `split`) call `:diffthis`. The "another instance" that told Nik about native diffing was probably referring to the C function `vim.diff`, not to Neovim's diff-mode rendering.
 
@@ -56,13 +57,13 @@ The third one is what would be "native diff rendering." It is **not** what iter 
 
 ## What we measured (concrete numbers)
 
-| Source | LOC | What it is |
-|---|---|---|
-| iter's current `diffs_nvim.lua` adapter | 41 | Just a call into diffs.nvim |
-| **minifugit's full renderer** (excl. parser) | **1,179** | `word_diff.lua` (109) + `syntax.lua` (319) + `render.lua` (187) + `split_align.lua` (143) + `position.lua` (421) |
-| diffs.nvim core (stacked + intra-line + parser) | 2,382 | `highlight.lua` (1,004) + `diff.lua` (437) + `parser.lua` (392) + `hunks.lua` (549) |
-| diffs.nvim with split | 3,842 | + `split.lua` (1,342) + `split_align.lua` (118) |
-| diffs.nvim total `lua/` | 13,852 | Includes commands, config, integrations, review mode, etc. — most of which iter doesn't need |
+| Source                                          | LOC       | What it is                                                                                                       |
+| ----------------------------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------- |
+| iter's current `diffs_nvim.lua` adapter         | 41        | Just a call into diffs.nvim                                                                                      |
+| **minifugit's full renderer** (excl. parser)    | **1,179** | `word_diff.lua` (109) + `syntax.lua` (319) + `render.lua` (187) + `split_align.lua` (143) + `position.lua` (421) |
+| diffs.nvim core (stacked + intra-line + parser) | 2,382     | `highlight.lua` (1,004) + `diff.lua` (437) + `parser.lua` (392) + `hunks.lua` (549)                              |
+| diffs.nvim with split                           | 3,842     | + `split.lua` (1,342) + `split_align.lua` (118)                                                                  |
+| diffs.nvim total `lua/`                         | 13,852    | Includes commands, config, integrations, review mode, etc. — most of which iter doesn't need                     |
 
 **The "actual renderer" Nik was asking about is ~1,179 lines of Lua.** That's the minifugit version. diffs.nvim's renderer is 3-4× larger because it has more layouts, more polish, and a public API iter doesn't need.
 
@@ -137,7 +138,7 @@ Three options Nik is weighing:
 
 1. How important is the polished diffs.nvim split view? If it's important, Option B. If iter can ship without a split view (or with a quick `vsplit + :diffthis`), Option A.
 2. How comfortable is Nik with owning ~1,200 LOC of renderer code he didn't write? It was working 24h ago, but minifugit will keep evolving and iter will need to either vendor it or re-fork periodically.
-3. Is "minimal homegrown stacked renderer" feasible in ~300-500 LOC? Probably yes — stacked is simpler than split, and Pierre-style polish comes mostly from intra-line word highlighting (one `vim.diff` call on word tokens) + treesitter syntax extraction (well-documented Neovim API). The Pierre-quality *gap* is mostly in split layout and the FFI-based `libvscode_diff` engine, both of which iter could skip.
+3. Is "minimal homegrown stacked renderer" feasible in ~300-500 LOC? Probably yes — stacked is simpler than split, and Pierre-style polish comes mostly from intra-line word highlighting (one `vim.diff` call on word tokens) + treesitter syntax extraction (well-documented Neovim API). The Pierre-quality _gap_ is mostly in split layout and the FFI-based `libvscode_diff` engine, both of which iter could skip.
 4. Should the healthcheck remain soft or be removed entirely once the hard dep is gone?
 
 ## Suggested skills for the next session
@@ -155,6 +156,7 @@ Three options Nik is weighing:
 - Not a refactor proposal in concrete form — that comes after the decision
 
 The next session should:
+
 1. Read this handoff
 2. Re-read the relevant files in iter
 3. Make the A/B/C decision with Nik
