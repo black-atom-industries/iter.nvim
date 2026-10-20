@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.0](https://github.com/black-atom-industries/iter.nvim/compare/v0.1.0...v0.2.0) (2026-10-20)
+
+
+### Features
+
+* **annotations:** annotate a file from any buffer, mapping recipe ([9446b17](https://github.com/black-atom-industries/iter.nvim/commit/9446b17963a5dc1e6508152a49733408639e8db3)), closes [#28](https://github.com/black-atom-industries/iter.nvim/issues/28)
+
+
+### Bug Fixes
+
+* **diff:** keep the file header in view across layout changes ([6b68b8d](https://github.com/black-atom-industries/iter.nvim/commit/6b68b8d5ce146ffe85b42d28b13219aa2fac4c29)), closes [#27](https://github.com/black-atom-industries/iter.nvim/issues/27)
+
 ## 0.1.0 (2026-10-20)
 
 ### Highlights
