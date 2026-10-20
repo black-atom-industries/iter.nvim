@@ -60,7 +60,7 @@ local words = require('iter.diff.words')
 ---@field marks_drawn table<integer, true> lines whose annotations are drawn
 ---@field focus? string id of the annotation drawn as focused
 ---@field new_follows boolean a staged file's index equals its worktree, for a section that doesn't say
----@field viewed? table<string, IterViewedState> state per path the header rows show; nil shows no state and no annotation count
+---@field reviewed? table<string, IterReviewedState> state per path the header rows show; nil shows no state and no annotation count
 ---@field on_cursor? fun()
 ---@field on_layout? fun()
 ---@field on_pane_replaced? fun(buf: integer, line: integer)
@@ -115,11 +115,11 @@ local ROW_HL = {
     del = 'IterDiffDelete',
 }
 
--- Header text and group per viewed state.
-local VIEWED_HEADER = {
-    viewed = { '✓ viewed', 'IterViewed' },
-    changed = { '↻ changed since viewed', 'IterViewedChanged' },
-    unviewed = { '○ not viewed', 'IterDrawerHint' },
+-- Header text and group per reviewed state.
+local REVIEWED_HEADER = {
+    reviewed = { '✓ reviewed', 'IterReviewed' },
+    changed = { '↻ changed since reviewed', 'IterReviewedChanged' },
+    unreviewed = { '○ not reviewed', 'IterDrawerHint' },
 }
 
 ---@type table<integer, IterDiffView>
@@ -584,13 +584,13 @@ local function fit_chunks(chunks, width)
 end
 
 --- Draw the header row of section `index`: the code letter, and at the
---- right the viewed state, a mode change, the stat (`untracked · +n` for
---- an untracked file) and, where the viewed state shows, the count of
+--- right the reviewed state, a mode change, the stat (`untracked · +n` for
+--- an untracked file) and, where the reviewed state shows, the count of
 --- annotations placed in the file, for an untracked file only when it has
 --- any. In the split layout each side names its version after the path,
---- and only the new side shows the right part, with the viewed state as its
+--- and only the new side shows the right part, with the reviewed state as its
 --- glyph. The right part sheds its parts from the left where it would cover
---- the path. Drawn again in place, so the viewed state and the count can
+--- the path. Drawn again in place, so the reviewed state and the count can
 --- change alone.
 ---@param index integer
 function View:decorate_header(index)
@@ -613,7 +613,7 @@ function View:decorate_header(index)
         end
     end
 
-    if self.viewed ~= nil and (count > 0 or not untracked) then
+    if self.reviewed ~= nil and (count > 0 or not untracked) then
         stat = string.format(
             '%s · %d %s',
             stat,
@@ -631,7 +631,7 @@ function View:decorate_header(index)
         })
     end
 
-    local state = VIEWED_HEADER[self.viewed and self.viewed[file.path]]
+    local state = REVIEWED_HEADER[self.reviewed and self.reviewed[file.path]]
 
     if state ~= nil then
         -- Half a window wide, the split layout shows the state's glyph only.
@@ -1255,11 +1255,11 @@ function View:set_annotations(annotations, root)
     end
 end
 
---- Show the viewed state of each file, by path, in its header row with the
+--- Show the reviewed state of each file, by path, in its header row with the
 --- count of its annotations; nil shows neither.
----@param states? table<string, IterViewedState>
-function View:set_viewed(states)
-    self.viewed = states
+---@param states? table<string, IterReviewedState>
+function View:set_reviewed(states)
+    self.reviewed = states
 
     if vim.api.nvim_buf_is_valid(self.buf) then
         for index in ipairs(self.document.sections) do

@@ -58,8 +58,8 @@ local FOREGROUNDS = {
     IterHead = { sources = { 'Identifier', 'Keyword' }, fallback = 0x61AFEF },
     IterUnpushed = { sources = { 'Constant', 'Number' }, fallback = 0xD19A66 },
     IterBehind = { sources = { 'Removed', 'Error' }, fallback = 0xE06C75 },
-    IterViewed = { sources = { 'Added', 'String' }, fallback = 0x98C379 },
-    IterViewedChanged = {
+    IterReviewed = { sources = { 'Added', 'String' }, fallback = 0x98C379 },
+    IterReviewedChanged = {
         sources = { 'DiagnosticWarn', 'WarningMsg', 'Constant' },
         fallback = 0xE5C07B,
     },

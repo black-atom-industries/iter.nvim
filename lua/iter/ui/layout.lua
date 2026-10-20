@@ -36,9 +36,9 @@ local render = require('iter.ui.render')
 ---@field mark? [string, string] glyph and group after the code letter
 ---@field count? integer shown as `[n]` at the end of the cell above 0
 
----@class IterLayoutProgress the viewed progress of the review
----@field viewed integer
----@field changed integer files changed since they were viewed
+---@class IterLayoutProgress the reviewed progress of the review
+---@field reviewed integer
+---@field changed integer files changed since they were reviewed
 ---@field total integer
 
 local M = {}
@@ -484,7 +484,7 @@ end
 ---@field outdated boolean
 ---@field label string location, from `annotation_label`
 
--- Cells of the viewed progress bar.
+-- Cells of the reviewed progress bar.
 M.PROGRESS_CELLS = 8
 
 --- The location an annotation row shows: `review` for the whole review,
@@ -540,10 +540,10 @@ function M.annotation_cell(line, item, first, width, label_width)
     return text
 end
 
---- The cell of the viewed progress: `viewed`, a bar whose filled share is
---- the viewed share, `<viewed> of <total>`, and `· ↻ <changed>` when files
---- changed since they were viewed. Too narrow for all of it, the word
---- `viewed` goes first.
+--- The cell of the reviewed progress: `reviewed`, a bar whose filled share is
+--- the reviewed share, `<reviewed> of <total>`, and `· ↻ <changed>` when files
+--- changed since they were reviewed. Too narrow for all of it, the word
+--- `reviewed` goes first.
 ---@param line IterRenderLine
 ---@param progress IterLayoutProgress
 ---@param first integer byte column the cell starts at
@@ -554,23 +554,23 @@ function M.progress_cell(line, progress, first, width)
     local filled = 0
 
     if progress.total > 0 then
-        filled = math.floor(progress.viewed * cells / progress.total + 0.5)
+        filled = math.floor(progress.reviewed * cells / progress.total + 0.5)
 
-        if progress.viewed > 0 then
+        if progress.reviewed > 0 then
             filled = math.max(filled, 1)
         end
 
-        if progress.viewed < progress.total then
+        if progress.reviewed < progress.total then
             filled = math.min(filled, cells - 1)
         end
     end
 
     local parts = {
-        { ' viewed ', 'IterDrawerHint' },
-        { string.rep('■', filled), 'IterViewed' },
+        { ' reviewed ', 'IterDrawerHint' },
+        { string.rep('■', filled), 'IterReviewed' },
         { string.rep('□', cells - filled), 'IterDrawerHint' },
         {
-            string.format(' %d of %d', progress.viewed, progress.total),
+            string.format(' %d of %d', progress.reviewed, progress.total),
             'IterDrawerHint',
         },
     }
@@ -578,7 +578,7 @@ function M.progress_cell(line, progress, first, width)
     if progress.changed > 0 then
         table.insert(parts, {
             string.format(' · ↻ %d', progress.changed),
-            'IterViewedChanged',
+            'IterReviewedChanged',
         })
     end
 

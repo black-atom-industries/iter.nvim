@@ -1,18 +1,18 @@
----@class IterViewed store.viewed[path]
+---@class IterReviewed store.reviewed[path]
 ---@field hash string git hash-object of the worktree file, 'deleted' when missing
 ---@field at integer
 
 ---@class IterStoreFile stdpath('data')/iter/<repo-id>/<branch>.json
----@field version 1
+---@field version 2
 ---@field annotations IterAnnotation[]
----@field viewed table<string, IterViewed>
+---@field reviewed table<string, IterReviewed>
 
 local git = require('iter.git')
 local util = require('iter.util')
 
 local M = {}
 
-local VERSION = 1
+local VERSION = 2
 
 local id_count = 0
 
@@ -46,7 +46,7 @@ local lock_warned = {}
 
 ---@return IterStoreFile
 local function empty()
-    return { version = VERSION, annotations = {}, viewed = {} }
+    return { version = VERSION, annotations = {}, reviewed = {} }
 end
 
 ---@param branch string
@@ -76,12 +76,12 @@ local function is_valid(data)
         end
     end
 
-    if type(data.viewed) ~= 'table' then
+    if type(data.reviewed) ~= 'table' then
         return false
     end
 
-    for path, viewed in pairs(data.viewed) do
-        if type(path) ~= 'string' or type(viewed) ~= 'table' then
+    for path, reviewed in pairs(data.reviewed) do
+        if type(path) ~= 'string' or type(reviewed) ~= 'table' then
             return false
         end
     end
@@ -215,7 +215,8 @@ local function write(path, data)
     local encoded = vim.json.encode({
         version = data.version,
         annotations = data.annotations,
-        viewed = next(data.viewed) == nil and vim.empty_dict() or data.viewed,
+        reviewed = next(data.reviewed) == nil and vim.empty_dict()
+            or data.reviewed,
     })
 
     local tmp =
@@ -513,7 +514,7 @@ function M.path(root)
     return vim.fs.joinpath(vim.fn.stdpath('data'), 'iter', id, name)
 end
 
---- The stored annotations and viewed records. A missing file reads as empty; a
+--- The stored annotations and reviewed records. A missing file reads as empty; a
 --- corrupt one is renamed aside with a warning and reads as empty.
 ---@param root string
 ---@return IterStoreFile?
@@ -752,15 +753,15 @@ function M.remove_annotations(root, ids)
     end)
 end
 
---- Store the viewed record of `path`, or drop it when `viewed` is nil.
+--- Store the reviewed record of `path`, or drop it when `reviewed` is nil.
 ---@param root string
 ---@param path string
----@param viewed IterViewed?
+---@param reviewed IterReviewed?
 ---@return IterStoreFile?
 ---@return string? error
-function M.set_viewed(root, path, viewed)
+function M.set_reviewed(root, path, reviewed)
     return M.update(root, function(data)
-        data.viewed[path] = viewed
+        data.reviewed[path] = reviewed
     end)
 end
 

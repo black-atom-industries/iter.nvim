@@ -116,7 +116,7 @@ local ANNOTATIONS = {
 -- The Annotations column as the drawer shows it at 120 columns.
 local LISTING = {
     'Annotations (8) · 1 outdated',
-    'viewed □□□□□□□□ 0 of 2',
+    'reviewed □□□□□□□□ 0 of 2',
     'n.txt:3     Rename the variable',
     'm.txt       Needs a test',
     'm.txt:3     Why this change?',
@@ -401,18 +401,18 @@ T['column']['dims outdated rows and titles with the outdated count'] = function(
     eq(groups['m.txt:3'], 'IterDrawerKey')
 end
 
-T['column']['the progress row follows viewed and changed files'] = function()
+T['column']['the progress row follows reviewed and changed files'] = function()
     open_review()
-    child.type_keys('v')
-    helpers.wait_until(child, R .. [[.viewed['n.txt'] == 'viewed']])
+    child.type_keys('r')
+    helpers.wait_until(child, R .. [[.reviewed['n.txt'] == 'reviewed']])
 
-    eq(column()[2], 'viewed ■■■■□□□□ 1 of 2')
+    eq(column()[2], 'reviewed ■■■■□□□□ 1 of 2')
 
     helpers.write_file(vim.fs.joinpath(repo, 'n.txt'), { 'changed' })
     child.lua([[require('iter').current_review:refresh_annotations()]])
-    helpers.wait_until(child, R .. [[.viewed['n.txt'] == 'changed']])
+    helpers.wait_until(child, R .. [[.reviewed['n.txt'] == 'changed']])
 
-    eq(column()[2], 'viewed □□□□□□□□ 0 of 2 · ↻ 1')
+    eq(column()[2], 'reviewed □□□□□□□□ 0 of 2 · ↻ 1')
 end
 
 T['column']['the header keeps the branch and counts files'] = function()
@@ -444,7 +444,7 @@ T['column']['l reaches the column, the progress row is skipped'] = function()
     eq(child.lua_get(R .. '.drawer.column'), 'unstaged')
     eq(
         footer(),
-        's stage  u unstage  d discard  I ignore  <CR> open  m all files  | split  ? help'
+        's stage  u unstage  d discard  I ignore  <CR> open  r reviewed  m all files  | split  ? help'
     )
 end
 
@@ -472,7 +472,7 @@ T['column']['without annotations the column shows the progress only'] = function
 
     eq(
         column(),
-        { 'Annotations (0)', 'viewed □□□□□□□□ 0 of 2' }
+        { 'Annotations (0)', 'reviewed □□□□□□□□ 0 of 2' }
     )
 
     child.type_keys('l')
@@ -501,7 +501,7 @@ T['column']['stacks below the breakpoint'] = function()
     eq(vim.list_slice(lines, 6, 9), {
         '',
         'Annotations (8) · 1 outdated',
-        'viewed □□□□□□□□ 0 of 2',
+        'reviewed □□□□□□□□ 0 of 2',
         'n.txt:3     Rename the variable',
     })
 
@@ -709,8 +709,8 @@ T['keys']['a refresh after <CR> keeps the diff cursor'] = function()
     down(2)
     child.type_keys('<CR>')
     wait_diff('staged m.txt')
-    child.type_keys('gg', 'v')
-    helpers.wait_until(child, R .. [[.viewed['m.txt'] == 'viewed']])
+    child.type_keys('gg', 'r')
+    helpers.wait_until(child, R .. [[.reviewed['m.txt'] == 'reviewed']])
 
     eq(child.api.nvim_get_current_win(), child.lua_get(R .. '.diff_win'))
     eq(diff_cursor(), 1)
@@ -802,7 +802,7 @@ T['keys']['deleting the last annotation leaves the progress row selected'] = fun
     helpers.wait_until(child, '#' .. R .. '.annotations == 0')
     eq(
         column(),
-        { 'Annotations (0)', 'viewed □□□□□□□□ 0 of 2' }
+        { 'Annotations (0)', 'reviewed □□□□□□□□ 0 of 2' }
     )
     eq(child.lua_get(R .. '.drawer.column'), 'annotations')
     eq(child.lua_get(R .. '.drawer.view:is_shown()'), true)
@@ -827,7 +827,7 @@ T['keys']['annotating in the diff adds a row'] = function()
     helpers.wait_until(child, '#' .. R .. '.annotations == 1')
     eq(column(), {
         'Annotations (1)',
-        'viewed □□□□□□□□ 0 of 2',
+        'reviewed □□□□□□□□ 0 of 2',
         'n.txt:3 A new note',
     })
 end
@@ -915,7 +915,7 @@ T['clean'][':Iter review on a clean tree selects the review annotation'] = funct
     eq(selected(), 'Overall looks good')
     eq(column(), {
         'Annotations (1)',
-        'viewed □□□□□□□□ 0 of 0',
+        'reviewed □□□□□□□□ 0 of 0',
         'review Overall looks good',
     })
 end

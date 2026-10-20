@@ -10,7 +10,7 @@ local patch = require('iter.diff.patch')
 local store = require('iter.store')
 local uri = require('iter.uri')
 local util = require('iter.util')
-local viewed = require('iter.viewed')
+local reviewed = require('iter.reviewed')
 
 ---@class IterReviewOpenOptions
 ---@field config IterConfig
@@ -28,9 +28,9 @@ local viewed = require('iter.viewed')
 ---@field buf integer empty buffer of the split and of the diff window without a diff
 ---@field drawer IterDrawer
 ---@field annotations IterAnnotation[] stored annotations
----@field records table<string, IterViewed> stored viewed records
----@field viewed table<string, IterViewedState> state per file path in the drawer
----@field expanded table<string, true> per path, viewed files shown whole in all-files mode
+---@field records table<string, IterReviewed> stored reviewed records
+---@field reviewed table<string, IterReviewedState> state per file path in the drawer
+---@field expanded table<string, true> per path, reviewed files shown whole in all-files mode
 ---@field fresh? boolean read the store on the next load whatever its stat says
 ---@field help? IterHelp help float of the diff pane
 ---@field preview_target? { id: string, file: IterChange } the annotation the Annotations column showed last and the file it showed it in
@@ -74,17 +74,17 @@ local ANNOTATION_HINTS = {
 
 ---@class IterReviewRow an item of the Annotations column
 ---@field key string
----@field progress? IterLayoutProgress set on the viewed progress row only
+---@field progress? IterLayoutProgress set on the reviewed progress row only
 ---@field annotation? IterAnnotation
 ---@field outdated? boolean
 ---@field label? string
 ---@field start? integer
 
--- Glyph and group per viewed state in a drawer row.
-local VIEWED_MARKS = {
-    viewed = { '✓', 'IterViewed' },
-    changed = { '↻', 'IterViewedChanged' },
-    unviewed = { '○', 'IterDrawerHint' },
+-- Glyph and group per reviewed state in a drawer row.
+local REVIEWED_MARKS = {
+    reviewed = { '✓', 'IterReviewed' },
+    changed = { '↻', 'IterReviewedChanged' },
+    unreviewed = { '○', 'IterDrawerHint' },
 }
 
 --- A normal window of `tab`: `preferred` when it is one there, else the
@@ -160,7 +160,7 @@ function Review.open(opts)
         buf = buf,
         annotations = {},
         records = {},
-        viewed = {},
+        reviewed = {},
         expanded = {},
         closed = false,
         on_annotations = opts.on_annotations,
@@ -252,11 +252,11 @@ function Review:view_handlers()
         expand = function()
             self:expand()
         end,
-        viewed = function()
+        reviewed = function()
             local file = self:shown_file()
 
             if file ~= nil then
-                self:toggle_viewed(file.path)
+                self:toggle_reviewed(file.path)
             end
         end,
         mode = function()
@@ -281,7 +281,7 @@ function Review:view_handlers()
 end
 
 --- On the header of a collapsed file, show the whole file until the next
---- `m` into all-files mode or `v` marks it viewed again; elsewhere expand
+--- `m` into all-files mode or `r` marks it reviewed again; elsewhere expand
 --- hidden context.
 function Review:expand()
     local view = self.drawer.view
@@ -536,19 +536,19 @@ local function item_count(counts, item)
     return count
 end
 
---- Read the stored annotations and viewed records through the store cache,
---- and the viewed state of every file in the drawer. Files whose stat is
+--- Read the stored annotations and reviewed records through the store cache,
+--- and the reviewed state of every file in the drawer. Files whose stat is
 --- unchanged are not hashed again.
 ---@param drawer IterDrawer
 ---@return boolean changed
 function Review:drawer_load(drawer)
     local root = drawer.changes.root
-    local before_annotations, before_viewed = self.annotations, self.viewed
+    local before_annotations, before_reviewed = self.annotations, self.reviewed
     local data = store.cached(root, self.fresh)
     local paths, seen = {}, {}
 
     self.fresh = nil
-    self.annotations, self.records = data.annotations, data.viewed
+    self.annotations, self.records = data.annotations, data.reviewed
 
     for _, item in ipairs(drawer:files()) do
         if not seen[item.path] then
@@ -557,7 +557,7 @@ function Review:drawer_load(drawer)
         end
     end
 
-    self.viewed = viewed.states(root, paths, self.records)
+    self.reviewed = reviewed.states(root, paths, self.records)
 
     local annotations_changed =
         not vim.deep_equal(before_annotations, self.annotations)
@@ -566,10 +566,11 @@ function Review:drawer_load(drawer)
         drawer.view:set_annotations(self.annotations, root)
     end
 
-    return annotations_changed or not vim.deep_equal(before_viewed, self.viewed)
+    return annotations_changed
+        or not vim.deep_equal(before_reviewed, self.reviewed)
 end
 
---- A file row shows its viewed mark after the code letter and its
+--- A file row shows its reviewed mark after the code letter and its
 --- annotation count at the end.
 ---@param _ IterDrawer
 ---@return fun(item: IterChange): IterLayoutDecor
@@ -578,7 +579,8 @@ function Review:drawer_decorator(_)
 
     return function(item)
         return {
-            mark = not item.dir and VIEWED_MARKS[self.viewed[item.path]] or nil,
+            mark = not item.dir and REVIEWED_MARKS[self.reviewed[item.path]]
+                or nil,
             count = item_count(counts, item),
         }
     end
@@ -590,7 +592,7 @@ end
 ---@param room integer
 ---@return [string, string][]
 function Review:drawer_header(_, _summary, room)
-    local total = viewed.summary(self.viewed).total
+    local total = reviewed.summary(self.reviewed).total
     local files =
         string.format('%d %s ', total, total == 1 and 'file' or 'files')
 
@@ -603,7 +605,7 @@ function Review:drawer_header(_, _summary, room)
     }
 end
 
---- The Annotations column: the viewed progress, then every annotation in
+--- The Annotations column: the reviewed progress, then every annotation in
 --- drawer file order, review annotations last. The progress row takes the
 --- selection only while there are no annotations.
 ---@param drawer IterDrawer
@@ -645,7 +647,7 @@ function Review:drawer_columns(drawer)
     end
 
     local items =
-        { { key = 'progress', progress = viewed.summary(self.viewed) } }
+        { { key = 'progress', progress = reviewed.summary(self.reviewed) } }
     vim.list_extend(items, rows)
 
     return {
@@ -1038,23 +1040,24 @@ function Review:drawer_rendered(drawer, count)
     end
 end
 
---- A viewed file shows its header row alone, unless `<CR>` or a jump to
+--- A reviewed file shows its header row alone, unless `<CR>` or a jump to
 --- one of its annotations expanded it.
 ---@param _ IterDrawer
 ---@param item IterChange
 ---@return boolean
 function Review:drawer_collapsed(_, item)
-    return self.viewed[item.path] == 'viewed' and not self.expanded[item.path]
+    return self.reviewed[item.path] == 'reviewed'
+        and not self.expanded[item.path]
 end
 
---- Show the viewed state of the shown files in their diff headers.
+--- Show the reviewed state of the shown files in their diff headers.
 ---@param drawer IterDrawer
 function Review:drawer_shown(drawer)
-    drawer.view:set_viewed(self.viewed)
+    drawer.view:set_reviewed(self.reviewed)
 end
 
 --- The review's drawer actions: `open` moves into the diff, and the
---- annotation and viewed actions work on the selected file.
+--- annotation and reviewed actions work on the selected file.
 ---@param drawer IterDrawer
 ---@param handlers table<string, fun()>
 function Review:drawer_handlers(drawer, handlers)
@@ -1111,8 +1114,8 @@ function Review:drawer_handlers(drawer, handlers)
     handlers.annotate_file = on_file(function(path)
         self:annotate_file(path)
     end)
-    handlers.viewed = on_file(function(path)
-        self:toggle_viewed(path)
+    handlers.reviewed = on_file(function(path)
+        self:toggle_reviewed(path)
     end)
     handlers.yank = function()
         require('iter').yank()
@@ -1130,14 +1133,14 @@ function Review:refresh_annotations()
     self.drawer:refresh()
 end
 
---- Toggle the viewed mark of `path` and refresh. In all-files mode a file
---- marked viewed collapses.
+--- Toggle the reviewed mark of `path` and refresh. In all-files mode a file
+--- marked reviewed collapses.
 ---@param path string
-function Review:toggle_viewed(path)
-    local _, err = viewed.toggle(self.drawer.changes.root, path)
+function Review:toggle_reviewed(path)
+    local _, err = reviewed.toggle(self.drawer.changes.root, path)
 
     if err ~= nil then
-        util.error('Cannot toggle viewed: ' .. err)
+        util.error('Cannot toggle reviewed: ' .. err)
         return
     end
 

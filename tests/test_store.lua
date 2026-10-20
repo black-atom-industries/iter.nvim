@@ -188,21 +188,21 @@ end
 T['load()'] = new_set()
 
 T['load()']['reads a missing file as empty'] = function()
-    eq(store.load(repo), { version = 1, annotations = {}, viewed = {} })
+    eq(store.load(repo), { version = 2, annotations = {}, reviewed = {} })
     eq(warnings, {})
 end
 
-T['load()']['round-trips annotations and viewed records'] = function()
+T['load()']['round-trips annotations and reviewed records'] = function()
     local saved = assert(store.put_annotation(repo, annotation('first')))
     assert(
-        store.set_viewed(repo, 'a.txt', { hash = 'abc123', at = 1700000000 })
+        store.set_reviewed(repo, 'a.txt', { hash = 'abc123', at = 1700000000 })
     )
 
     local data = assert(store.load(repo))
 
-    eq(data.version, 1)
+    eq(data.version, 2)
     eq(data.annotations, { saved })
-    eq(data.viewed, { ['a.txt'] = { hash = 'abc123', at = 1700000000 } })
+    eq(data.reviewed, { ['a.txt'] = { hash = 'abc123', at = 1700000000 } })
     eq(type(saved.id), 'string')
     eq(type(saved.created_at), 'number')
     eq(saved.updated_at, saved.created_at)
@@ -222,8 +222,8 @@ T['load()']['keeps a corrupt file aside and warns once'] = function()
     local path = assert(store.path(repo))
     write(path, '{ not json')
 
-    eq(store.load(repo), { version = 1, annotations = {}, viewed = {} })
-    eq(store.load(repo), { version = 1, annotations = {}, viewed = {} })
+    eq(store.load(repo), { version = 2, annotations = {}, reviewed = {} })
+    eq(store.load(repo), { version = 2, annotations = {}, reviewed = {} })
 
     eq(#warnings, 1)
     eq(warnings[1]:find('corrupt', 1, true) ~= nil, true)
@@ -240,13 +240,13 @@ T['load()']['treats a file of the wrong shape as corrupt'] = function()
     for _, text in ipairs({
         '[]',
         '"text"',
-        '{"version":1,"annotations":3,"viewed":{}}',
-        '{"version":1,"annotations":[],"viewed":7}',
-        '{"annotations":[],"viewed":{}}',
-        '{"version":1,"annotations":["x"],"viewed":{}}',
+        '{"version":2,"annotations":3,"reviewed":{}}',
+        '{"version":2,"annotations":[],"reviewed":7}',
+        '{"annotations":[],"reviewed":{}}',
+        '{"version":2,"annotations":["x"],"reviewed":{}}',
     }) do
         write(path, text)
-        eq(store.load(repo), { version = 1, annotations = {}, viewed = {} })
+        eq(store.load(repo), { version = 2, annotations = {}, reviewed = {} })
     end
 
     eq(#warnings, 6)
@@ -255,7 +255,7 @@ end
 
 T['load()']['leaves a file of a newer version alone'] = function()
     local path = assert(store.path(repo))
-    local text = '{"version":2,"annotations":[],"viewed":{}}'
+    local text = '{"version":3,"annotations":[],"reviewed":{}}'
     write(path, text)
 
     local data, err = store.load(repo)
@@ -366,13 +366,13 @@ T['writes']['give every annotation its own id'] = function()
     eq(vim.tbl_count(ids), 50)
 end
 
-T['writes']['clear a viewed record'] = function()
-    assert(store.set_viewed(repo, 'a.txt', { hash = 'h', at = 1 }))
-    assert(store.set_viewed(repo, 'b.txt', { hash = 'deleted', at = 2 }))
-    assert(store.set_viewed(repo, 'a.txt', nil))
+T['writes']['clear a reviewed record'] = function()
+    assert(store.set_reviewed(repo, 'a.txt', { hash = 'h', at = 1 }))
+    assert(store.set_reviewed(repo, 'b.txt', { hash = 'deleted', at = 2 }))
+    assert(store.set_reviewed(repo, 'a.txt', nil))
 
     eq(
-        assert(store.load(repo)).viewed,
+        assert(store.load(repo)).reviewed,
         { ['b.txt'] = { hash = 'deleted', at = 2 } }
     )
 end
@@ -388,12 +388,12 @@ T['writes']['replace the file by rename and leave no temp file'] = function()
     eq(entries(vim.fs.dirname(path)), { 'main.json' })
 end
 
-T['writes']['keep an empty viewed table an object'] = function()
+T['writes']['keep an empty reviewed table an object'] = function()
     assert(store.put_annotation(repo, annotation('first')))
 
     local text = assert(read(assert(store.path(repo))))
 
-    eq(text:find('"viewed":{}', 1, true) ~= nil, true)
+    eq(text:find('"reviewed":{}', 1, true) ~= nil, true)
 end
 
 T['writes']['fail outside a repository'] = function()
@@ -510,7 +510,7 @@ T['cached()']['keeps the data when a read fails'] = function()
     assert(store.put_annotation(repo, annotation('kept')))
     eq(bodies(store.cached(repo)), { 'kept' })
 
-    write(assert(store.path(repo)), '{"version":2,"annotations":[]}')
+    write(assert(store.path(repo)), '{"version":3,"annotations":[]}')
 
     eq(bodies(store.cached(repo)), { 'kept' })
 end
@@ -530,7 +530,7 @@ T['cached()']['starts empty on a branch whose store cannot be read'] = function(
     helpers.git(repo, { 'checkout', '--quiet', '-b', 'other' })
     write(
         assert(store.path(repo)),
-        '{"version":99,"annotations":[],"viewed":{}}'
+        '{"version":99,"annotations":[],"reviewed":{}}'
     )
 
     eq(store.cached(repo).annotations, {})

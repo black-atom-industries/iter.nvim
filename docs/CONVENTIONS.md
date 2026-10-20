@@ -6,7 +6,7 @@ These conventions apply to all project changes.
 
 iter is a Neovim-native staging and code review tool. It joins a minimal status menu (from
 [minifugit.nvim](https://github.com/vieitesss/minifugit.nvim)), [tuicr](https://github.com/agavra/tuicr)'s
-one-scroll review with annotations, viewed marks and an export for agents, and
+one-scroll review with annotations, reviewed marks and an export for agents, and
 [annotator.nvim](https://github.com/chpeters/annotator.nvim)'s annotations in normal buffers.
 
 Out of scope: pull requests, commits and remote sync (commit, push and pull stay with a Git plugin such as mini.git),
@@ -41,7 +41,7 @@ the review straight to an agent pane.
 - Syntax comes from a treesitter string parser per file version, cached per blob, with captures only for the rows
   shown. Word emphasis pairs changed lines with `vim.text.diff` and skips lines that mostly changed.
 - Hidden context is gap rows in the model that expand in batches, not folds.
-- A collapsed file (viewed, in all-files mode) is a document section of its header row alone, in both layouts,
+- A collapsed file (reviewed, in all-files mode) is a document section of its header row alone, in both layouts,
   not a fold. Its annotations are placed hidden on the header, so the header still counts them.
 - The renderer is pure Lua. A binary dependency (such as libvscode-diff) comes in only after Nik decides for it.
 - `Iter*` highlight groups derive from the colorscheme on every `ColorScheme` event.
@@ -64,8 +64,8 @@ the review straight to an agent pane.
   warning says so, and the next write of that file saves it first. Leaving Neovim waits for the lock up to the stale
   timeout and takes it over then; a change it still can't save is reported as lost. The review drawer and the buffer
   marks read through one cache per root (`store.cached`), read again when the file's stat or HEAD changes.
-- Viewed: viewed when the stored `git hash-object` of the worktree file equals the current one, changed when it
-  differs, unviewed without a record. Staging doesn't change it.
+- Reviewed: reviewed when the stored `git hash-object` of the worktree file equals the current one, changed when it
+  differs, unreviewed without a record. Staging doesn't change it.
 - Discard never touches the index or ignored files: an unstaged row restores from the index, an untracked row deletes
   only its untracked files, and the confirm names the paths. The Staged column has no discard.
 - The drawer float sits at the bottom of its pane (`relative = 'win'`, `anchor = 'SW'`) at `drawer.zindex`; the help
@@ -83,10 +83,10 @@ the review straight to an agent pane.
   list scrolls alone. The float opens, moves and closes it; the drawer closes when it is closed from outside, and
   focus moves into it only through `h` and `l`, opening the review on the Annotations column, and a resize that splits
   it off while an annotation is selected in the drawer. The drawer holds what the status and review
-  drawers share; the review tab plugs in its viewed marks, annotation counts, header, Annotations column, its preview
+  drawers share; the review tab plugs in its reviewed marks, annotation counts, header, Annotations column, its preview
   and spacer sizing as the drawer's extras (`IterDrawerExtras`). Columns the extras add come after the file columns;
   their items carry a `key`, and `Drawer:selected()` returns files only.
-- Viewed marks, annotation counts and the Annotations column show only in the review drawer.
+- Reviewed marks, annotation counts and the Annotations column show only in the review drawer.
 - iter's buffers carry `iter://` addresses as names, without buffer numbers (`iter.uri`): `BufReadCmd` on
   `iter://*` routes a buffer `:edit` made to what its name addresses and wipes it, after giving its window the previous
   buffer back. Each of iter's buffers is registered with the windows it belongs in and a redraw: `:edit` in one of

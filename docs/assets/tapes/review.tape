@@ -43,7 +43,7 @@ Type "Notify only once the timer is done?"
 Sleep 600ms
 Ctrl+S
 Sleep 1.5s
-Type "v"
+Type "r"
 Sleep 1.5s
 Ctrl+J
 Sleep 1s

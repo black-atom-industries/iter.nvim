@@ -696,13 +696,13 @@ T['keys']['gf in the left window opens the line that took its place'] = function
     )
 end
 
-T['keys']['v in the left window toggles viewed and keeps the split'] = function()
+T['keys']['r in the left window toggles reviewed and keeps the split'] = function()
     open_review()
     split()
     cursor_on('left', 'local v = 5')
-    child.type_keys('v')
+    child.type_keys('r')
 
-    helpers.wait_until(child, R .. [[.viewed['f.lua'] == 'viewed']])
+    helpers.wait_until(child, R .. [[.reviewed['f.lua'] == 'reviewed']])
     eq(child.lua_get(R .. [[.drawer.view.old ~= nil]]), true)
     eq(#left_lines(), #right_lines())
 end
