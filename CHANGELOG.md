@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.5.0](https://github.com/black-atom-industries/iter.nvim/compare/v0.4.0...v0.5.0) (2026-10-21)
+
+### Highlights
+
+#### A clear edge between the diff and the drawer
+
+The status drawer starts with a rule in the `Title` colour and puts its header row on a tinted band, so it no longer
+blends into the diff above it. The separators of a side-by-side diff now end on that rule. The drawer keeps its height and
+shows one file row less.
+
+In the review tab the drawer has a split of its own, and Neovim already draws a line above it, so the review drawer shows
+the band without the rule. The band is a new group, `IterDrawerHeader`, derived from `Title`.
+
+![The status drawer under a rule in the Title colour, its HEAD row on the tinted header band](https://raw.githubusercontent.com/black-atom-industries/iter.nvim/v0.5.0/docs/assets/changelog/0.5.0-drawer-header.webp)
+
+
+
+### Features
+
+* **drawer:** header on a band under a rule, like a file header ([dbdf14e](https://github.com/black-atom-industries/iter.nvim/commit/dbdf14e800bfd71c588ed3fb8c5cd1a433fcfab5))
+
+
+### Documentation
+
+* README clips at a 240-column viewport ([fdf6578](https://github.com/black-atom-industries/iter.nvim/commit/fdf6578ec7c9cc3166aa8e60b7b7162a673e974e))
+
 ## [0.4.0](https://github.com/black-atom-industries/iter.nvim/compare/v0.3.0...v0.4.0) (2026-10-21)
 
 ### Highlights
