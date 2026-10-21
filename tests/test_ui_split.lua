@@ -942,6 +942,45 @@ T['drawer']['panes stay even when a plugin equalizes on a new window'] = functio
     )
 end
 
+T['drawer']['side by side splits only the window it opens in'] = function()
+    local D = [[require('iter').drawer]]
+    child.lua([[
+        vim.api.nvim_create_autocmd('WinNew', {
+            callback = function()
+                local win = vim.api.nvim_get_current_win()
+                if vim.api.nvim_win_get_config(win).relative ~= '' then
+                    return
+                end
+                vim.schedule(function()
+                    vim.cmd.wincmd('=')
+                end)
+            end,
+        })
+        require('iter').setup({ diff = { layout = 'split' } })
+        vim.keymap.set('n', 'gs', function()
+            require('iter').status()
+        end)
+    ]])
+    child.cmd('vsplit')
+    vim.loop.sleep(100)
+    local other = child.lua_get([[vim.fn.win_getid(vim.fn.winnr('l'))]])
+    local width = child.lua_get([[vim.api.nvim_win_get_width(...)]], { other })
+
+    child.type_keys('gs')
+    helpers.wait_until(
+        child,
+        D .. [[ ~= nil and ]] .. D .. [[.view.old ~= nil]]
+    )
+    vim.loop.sleep(200)
+    eq(child.lua_get([[vim.api.nvim_win_get_width(...)]], { other }), width)
+
+    child.type_keys('q')
+    helpers.wait_until(child, D .. [[ == nil or ]] .. D .. [[.closed]])
+    vim.loop.sleep(200)
+    eq(child.lua_get([[vim.api.nvim_win_get_width(...)]], { other }), width)
+    eq(child.lua_get([[vim.wo.winfixwidth]]), false)
+end
+
 T['drawer']['| in the status drawer carries over to the review'] = function()
     local D = [[require('iter').drawer]]
     child.cmd('Iter')

@@ -36,6 +36,7 @@ local words = require('iter.diff.words')
 ---@field drawn table<integer, true> lines whose syntax and words this render requested
 ---@field marks_width? integer text width the marks were wrapped to
 ---@field autocmds? integer[] autocommands of the old side's pane
+---@field fixwidth? boolean the view window's 'winfixwidth' before the old side's pane opened
 
 ---@class IterDiffView: IterDiffPane
 ---@field document IterDocument the files shown and the line of each row
@@ -360,7 +361,12 @@ function View:open_old()
         headers = {},
         width = 1,
         drawn = {},
+        fixwidth = vim.wo[self.win].winfixwidth,
     }
+    -- Fixed widths keep an equalize (`CTRL-W =`, 'equalalways') off the two
+    -- panes, so the windows around them keep their widths.
+    vim.wo[win].winfixwidth = true
+    vim.wo[self.win].winfixwidth = true
     views[buf] = self
     keymap.attach(buf, 'diff', self.keys, self.handlers)
     self:watch_cursor(buf)
@@ -451,6 +457,11 @@ function View:close_old()
         pcall(vim.api.nvim_del_autocmd, id)
     end
 
+    -- Unfixed first, so the view's window takes back the old pane's width.
+    if util.is_valid_win(self.win) then
+        vim.wo[self.win].winfixwidth = old.fixwidth
+    end
+
     if util.is_valid_win(old.win) then
         if vim.api.nvim_get_current_win() == old.win then
             if util.is_valid_win(self.win) then
@@ -482,7 +493,11 @@ function View:even_widths()
     local half = math.floor((width + vim.api.nvim_win_get_width(self.win)) / 2)
 
     if width ~= half then
+        -- A fixed neighbor would make the old pane take its width from the
+        -- windows further away.
+        vim.wo[self.win].winfixwidth = false
         vim.api.nvim_win_set_width(old.win, half)
+        vim.wo[self.win].winfixwidth = true
     end
 end
 
