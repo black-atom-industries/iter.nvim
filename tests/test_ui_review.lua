@@ -255,11 +255,13 @@ T['open'][':Iter review opens the tab with the diff above the drawer'] = functio
     eq(config.win, child.lua_get(R .. '.spacer_win'))
     eq(config.anchor, 'SW')
     eq(config.zindex, 40)
+    -- No rule above the header: the split above draws its own line.
+    eq(config.border[2], '')
 
-    -- The float covers the whole spacer split: its rows plus the two chrome
-    -- rows are the spacer's rows.
+    -- The float covers the whole spacer split: its rows, the header's
+    -- winbar among them, plus the footer row are the spacer's rows.
     eq(
-        config.height + 2,
+        config.height + 1,
         child.lua_get('vim.api.nvim_win_get_height(' .. R .. '.spacer_win)')
     )
     eq(child.v.errmsg, '')
@@ -937,10 +939,13 @@ T['refresh']['a refresh in the background refits the spacer only'] = function()
         local spacer = vim.api.nvim_win_get_height(r.spacer_win)
         local total = spacer + vim.api.nvim_win_get_height(r.diff_win)
         local diff_row = vim.fn.win_screenpos(r.diff_win)[1]
+        local chrome = require('iter.ui.float').chrome_rows(false)
         return {
             spacer = spacer,
-            expected = math.max(3, math.floor(total * 0.3), math.min(math.min(#r.drawer.rows, 5) + 2, math.floor(total / 2))),
-            float = vim.api.nvim_win_get_config(r.drawer.win).height + 2,
+            expected = math.max(chrome + 1, math.floor(total * 0.3), math.min(math.min(#r.drawer.rows, 5) + chrome, math.floor(total / 2))),
+            -- The border's footer row; the header's winbar row counts in
+            -- the height.
+            float = vim.api.nvim_win_get_config(r.drawer.win).height + 1,
             spacer_row = vim.fn.win_screenpos(r.spacer_win)[1],
             below_diff = diff_row + vim.api.nvim_win_get_height(r.diff_win) + 1,
         }
@@ -1608,7 +1613,7 @@ end
 local function drawer_header()
     local text = child.lua_get([[(function()
         local text = ''
-        for _, chunk in ipairs(vim.api.nvim_win_get_config(]] .. R .. [[.drawer.win).title) do
+        for _, chunk in ipairs(]] .. R .. [[.drawer.float.opts.title) do
             text = text .. chunk[1]
         end
         return text
@@ -1976,7 +1981,7 @@ T['reviewed']['the status drawer shows no reviewed marks and maps no reviewed ke
     local state = child.lua_get([[(function()
         local d = require('iter').drawer
         local title = ''
-        for _, chunk in ipairs(vim.api.nvim_win_get_config(d.win).title) do
+        for _, chunk in ipairs(d.float.opts.title) do
             title = title .. chunk[1]
         end
         local reviewed_map = ''

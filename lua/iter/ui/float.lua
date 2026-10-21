@@ -2,12 +2,22 @@ local util = require('iter.util')
 
 local M = {}
 
+--- Rows `chrome` adds to the text: the header, the footer and, unless
+--- `rule` is false, the rule above the header.
+---@param rule? boolean
+---@return integer
+function M.chrome_rows(rule)
+    return rule == false and 2 or 3
+end
+
 -- Floats take the editor's background, not the colorscheme's float one.
 local WINHIGHLIGHT = table.concat({
     'NormalFloat:IterDrawer',
     'FloatBorder:IterDrawer',
     'FloatTitle:IterDrawer',
     'FloatFooter:IterDrawer',
+    'WinBar:IterDrawerHeader',
+    'WinBarNC:IterDrawerHeader',
 }, ',')
 
 ---@param win integer
@@ -26,8 +36,9 @@ end
 ---@field zindex integer
 ---@field height number up to 1 a fraction of the pane's height, else lines
 ---@field enter? boolean focus the float
----@field chrome? boolean a header row above and a hint row below the text
----@field title? [string, string][] header chunks, with `chrome`
+---@field chrome? boolean a rule and a header row above the text, a hint row below
+---@field rule? boolean the rule above the header, with `chrome`; true by default
+---@field title? [string, string][] header chunks in the winbar, with `chrome`
 ---@field footer? [string, string][] hint chunks, with `chrome`
 ---@field min_lines? integer text lines kept when `height` gives fewer
 ---@field strip? IterFloatStrip|false a window pinned under the text, with `chrome`
@@ -58,11 +69,20 @@ local function text_height(pane)
     return vim.fn.getwininfo(pane)[1].height
 end
 
--- Top and bottom edges only: one row each for the title and the footer.
-local CHROME_BORDER = { '', ' ', '', '', '', ' ', '', '' }
--- With a strip the title row stays on the float and the footer row moves
--- under the strip.
-local TITLE_BORDER = { '', ' ', '', '', '', '', '', '' }
+-- A rule above the header, as above a file header in the diff.
+local RULE = { '─', 'IterDiffHeaderRule' }
+
+--- Top and bottom edges only: one row each for the rule and the footer.
+--- With a strip the footer row moves under the strip.
+---@param opts IterFloatOpts
+---@param footer boolean
+---@return table
+local function chrome_border(opts, footer)
+    local top = opts.rule ~= false and RULE or ''
+
+    return { '', top, '', '', '', footer and ' ' or '', '', '' }
+end
+
 local FOOTER_BORDER = { '', '', '', '', '', ' ', '', '' }
 
 ---@param opts IterFloatOpts
@@ -84,7 +104,8 @@ end
 local function resolve_height(opts)
     local pane_height = text_height(opts.pane)
     local strip = strip_of(opts)
-    local reserved = (opts.chrome and 2 or 0) + (strip and strip.lines or 0)
+    local reserved = (opts.chrome and M.chrome_rows(opts.rule) or 0)
+        + (strip and strip.lines or 0)
     local height = opts.height
 
     if height <= 1 then
@@ -143,18 +164,18 @@ local function win_config(opts)
         return config
     end
 
-    config.title = opts.title or ''
-    config.title_pos = 'left'
+    -- The header's winbar row counts in the window's height.
+    config.height = height + 1
 
     if strip == nil then
-        config.border = CHROME_BORDER
+        config.border = chrome_border(opts, true)
         config.footer = opts.footer or ''
         config.footer_pos = 'left'
 
         return config
     end
 
-    config.border = TITLE_BORDER
+    config.border = chrome_border(opts, false)
 
     return config,
         {
@@ -174,6 +195,34 @@ local function win_config(opts)
         }
 end
 
+--- The winbar that shows `chunks` as the float's header.
+---@param chunks? [string, string][]
+---@return string
+local function winbar_of(chunks)
+    -- One column in, as the drawer's rows start.
+    local parts = { '%* ' }
+
+    for _, chunk in ipairs(chunks or {}) do
+        local text = chunk[1]:gsub('%%', '%%%%')
+        local hl = chunk[2] and ('%#' .. chunk[2] .. '#') or '%*'
+
+        table.insert(parts, hl .. text)
+    end
+
+    return table.concat(parts)
+end
+
+--- Show the header chunks in the float's winbar, with `chrome`.
+---@param win integer
+---@param opts IterFloatOpts
+local function place_header(win, opts)
+    local winbar = opts.chrome and winbar_of(opts.title) or ''
+
+    if vim.wo[win].winbar ~= winbar then
+        vim.wo[win].winbar = winbar
+    end
+end
+
 --- Open a float over the bottom of `opts.pane`, as wide as the pane.
 ---@param opts IterFloatOpts
 ---@return IterFloat
@@ -187,6 +236,7 @@ function M.open(opts)
     local config, strip_config = win_config(opts)
     local win = vim.api.nvim_open_win(opts.buf, opts.enter == true, config)
     paint(win)
+    place_header(win, opts)
 
     local self = setmetatable({
         win = win,
@@ -300,6 +350,7 @@ function Float:reposition(overrides)
     end
 
     vim.api.nvim_win_set_config(self.win, config)
+    place_header(self.win, self.opts)
     self:place_strip(strip_config)
     self:place_side()
 end
@@ -329,7 +380,7 @@ function Float:place_side()
         row = 0,
         col = side.col,
         width = math.max(1, width - side.col),
-        height = vim.api.nvim_win_get_height(self.win),
+        height = text_height(self.win),
         zindex = self.opts.zindex + 1,
         style = 'minimal',
         border = 'none',

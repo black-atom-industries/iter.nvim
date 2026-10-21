@@ -357,7 +357,8 @@ local function header_chunks(drawer)
         end
     end
 
-    local width = drawer:width()
+    -- The header starts one column in.
+    local width = drawer:width() - 1
 
     if drawer.context == 'status' then
         return status_header(drawer, table.concat(parts, ' · '), total, width)
@@ -531,6 +532,9 @@ function Drawer.open(opts)
         height = opts.height or opts.config.options.drawer.height,
         enter = true,
         chrome = true,
+        -- In the review the drawer has a split of its own, under the line
+        -- Neovim draws between splits.
+        rule = not review,
     })
     self.win = self.float.win
     vim.api.nvim_set_option_value(

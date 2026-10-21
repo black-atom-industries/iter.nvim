@@ -156,6 +156,7 @@ function M.apply()
         IterAnnotationSign = { link = 'Special' },
         IterDrawer = { link = 'Normal' },
         IterDrawerTitle = { link = 'Title' },
+        IterDrawerHeader = { bg = header_bg },
         IterDrawerSelected = { link = 'Visual' },
         IterDrawerKey = { link = 'Special' },
         IterDrawerHint = { link = 'Comment' },

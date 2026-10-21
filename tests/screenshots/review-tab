@@ -15,7 +15,7 @@
 14| 23  23   a23                                                                   
 15| 24  24   a24                                                                   
 16|iter://review/a.txt [-]                                                         
-17| HEAD main                                                               4 files
+17| HEAD main                                                              4 files 
 18| Unstaged (4)                                       │ Annotations (0)           
 19| M ○ a.txt                                          │ reviewed ▱▱▱▱▱▱▱▱▱ 0 of 4 
 20| M ○ b.txt                                          │                           
@@ -41,11 +41,11 @@
 14|55555555557777777777777777777777777777777777777777777777777777777777777777777777
 15|55555555557777777777777777777777777777777777777777777777777777777777777777777777
 16|00000000000000000000000000000000000000000000000000000000000000000000000000000000
-17|=66666>>>>6666666666666666666666666666666666666666666666666666666666666666666666
-18|?????????????========================================????????????????===========
-19|@A@B@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@=CCCCCCCCCCCCCCCCCCCCCCCCCC=
-20|=D=C============================================================================
-21|=E=C============================================================================
-22|=E=C============================================================================
-23|=F66666666F6666666666F6666666666F666666666FFFF6666666F66666666666F66666=========
-24|GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+17|=>>>>>????>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+18|@@@@@@@@@@@@@AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA@@@@@@@@@@@@@@@@AAAAAAAAAAA
+19|BCBDBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBAEEEEEEEEEEEEEEEEEEEEEEEEEEA
+20|AFAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+21|AGAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+22|AGAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+23|AH66666666H6666666666H6666666666H666666666HHHH6666666H66666666666H66666AAAAAAAAA
+24|IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII

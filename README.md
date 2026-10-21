@@ -548,39 +548,40 @@ event, so no colorscheme needs to define them.
   fallback.
 - Row backgrounds blend the diff colour 60 % towards `Normal`.
 
-| Group                        | Colours                               | Derived from                                                         |
-| ---------------------------- | ------------------------------------- | -------------------------------------------------------------------- |
-| `IterStage`                  | Staged files in the drawer            | fg of `Added`, `String`                                              |
-| `IterUnstage`                | Unstaged files in the drawer          | fg of `Removed`, `Error`                                             |
-| `IterUntracked`              | Untracked files                       | fg of `DiagnosticInfo`, `Directory`, `Identifier`                    |
-| `IterConflict`               | Files with merge conflicts            | fg of `DiagnosticError`, `ErrorMsg`, `Error`                         |
-| `IterHead`                   | Branch name in the drawer             | fg of `Identifier`, `Keyword`                                        |
-| `IterUnpushed`               | Unpushed commits and the ahead count  | fg of `Constant`, `Number`                                           |
-| `IterBehind`                 | Behind count                          | fg of `Removed`, `Error`                                             |
-| `IterReviewed`               | Reviewed marks and progress           | fg of `Added`, `String`                                              |
-| `IterReviewedChanged`        | Files changed since reviewed          | fg of `DiagnosticWarn`, `WarningMsg`, `Constant`                     |
-| `IterDrawer`                 | Drawer text                           | link to `Normal`                                                     |
-| `IterDrawerTitle`            | Drawer titles                         | link to `Title`                                                      |
-| `IterDrawerSelected`         | Selected drawer row                   | link to `Visual`                                                     |
-| `IterDrawerKey`              | Key hints                             | link to `Special`                                                    |
-| `IterDrawerHint`             | Dimmed drawer text                    | link to `Comment`                                                    |
-| `IterDrawerCount`            | Counts in section titles              | link to `Special`                                                    |
-| `IterDiffAdd`                | Added line rows                       | bg of `DiffAdd`, blended with `Normal`                               |
-| `IterDiffDelete`             | Deleted line rows                     | bg of `DiffDelete`, blended with `Normal`                            |
-| `IterDiffAddText`            | Changed words in added lines          | bg of `DiffAdd`                                                      |
-| `IterDiffDeleteText`         | Changed words in deleted lines        | bg of `DiffDelete`                                                   |
-| `IterDiffAddNr`              | Line number of added lines            | fg of `diffAdded`, `Added`, `DiffAdd`; bg as `IterDiffAdd`           |
-| `IterDiffDeleteNr`           | Line number of deleted lines          | fg of `diffRemoved`, `Removed`, `DiffDelete`; bg as `IterDiffDelete` |
-| `IterDiffNr`                 | Line number of context lines          | link to `LineNr`                                                     |
-| `IterDiffHeader`             | File header rows in the diff          | fg of `Normal`; bg of `Title` fg, blended with `Normal`; bold        |
-| `IterDiffHeaderRule`         | Rule above a file header, code letter | fg of `Title`                                                        |
-| `IterDiffHunk`               | Hunk headers and stats                | link to `Comment`                                                    |
-| `IterDiffGap`                | Collapsed unchanged lines             | link to `Folded`                                                     |
-| `IterDiffFiller`             | Filler rows beside a one-sided change | link to `NonText`                                                    |
-| `IterDiffAnnotation`         | Annotation text                       | link to `NormalFloat`                                                |
-| `IterDiffAnnotationOutdated` | Annotation whose lines changed        | link to `Comment`                                                    |
-| `IterDiffAnnotationFocus`    | Focused annotation                    | link to `Visual`                                                     |
-| `IterAnnotationSign`         | Annotation sign in the gutter         | link to `Special`                                                    |
+| Group                        | Colours                                              | Derived from                                                         |
+| ---------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------- |
+| `IterStage`                  | Staged files in the drawer                           | fg of `Added`, `String`                                              |
+| `IterUnstage`                | Unstaged files in the drawer                         | fg of `Removed`, `Error`                                             |
+| `IterUntracked`              | Untracked files                                      | fg of `DiagnosticInfo`, `Directory`, `Identifier`                    |
+| `IterConflict`               | Files with merge conflicts                           | fg of `DiagnosticError`, `ErrorMsg`, `Error`                         |
+| `IterHead`                   | Branch name in the drawer                            | fg of `Identifier`, `Keyword`                                        |
+| `IterUnpushed`               | Unpushed commits and the ahead count                 | fg of `Constant`, `Number`                                           |
+| `IterBehind`                 | Behind count                                         | fg of `Removed`, `Error`                                             |
+| `IterReviewed`               | Reviewed marks and progress                          | fg of `Added`, `String`                                              |
+| `IterReviewedChanged`        | Files changed since reviewed                         | fg of `DiagnosticWarn`, `WarningMsg`, `Constant`                     |
+| `IterDrawer`                 | Drawer text                                          | link to `Normal`                                                     |
+| `IterDrawerTitle`            | Drawer titles                                        | link to `Title`                                                      |
+| `IterDrawerHeader`           | Drawer header row, under its rule                    | bg of `Title` fg, blended with `Normal`                              |
+| `IterDrawerSelected`         | Selected drawer row                                  | link to `Visual`                                                     |
+| `IterDrawerKey`              | Key hints                                            | link to `Special`                                                    |
+| `IterDrawerHint`             | Dimmed drawer text                                   | link to `Comment`                                                    |
+| `IterDrawerCount`            | Counts in section titles                             | link to `Special`                                                    |
+| `IterDiffAdd`                | Added line rows                                      | bg of `DiffAdd`, blended with `Normal`                               |
+| `IterDiffDelete`             | Deleted line rows                                    | bg of `DiffDelete`, blended with `Normal`                            |
+| `IterDiffAddText`            | Changed words in added lines                         | bg of `DiffAdd`                                                      |
+| `IterDiffDeleteText`         | Changed words in deleted lines                       | bg of `DiffDelete`                                                   |
+| `IterDiffAddNr`              | Line number of added lines                           | fg of `diffAdded`, `Added`, `DiffAdd`; bg as `IterDiffAdd`           |
+| `IterDiffDeleteNr`           | Line number of deleted lines                         | fg of `diffRemoved`, `Removed`, `DiffDelete`; bg as `IterDiffDelete` |
+| `IterDiffNr`                 | Line number of context lines                         | link to `LineNr`                                                     |
+| `IterDiffHeader`             | File header rows in the diff                         | fg of `Normal`; bg of `Title` fg, blended with `Normal`; bold        |
+| `IterDiffHeaderRule`         | Rule above a file header and the drawer, code letter | fg of `Title`                                                        |
+| `IterDiffHunk`               | Hunk headers and stats                               | link to `Comment`                                                    |
+| `IterDiffGap`                | Collapsed unchanged lines                            | link to `Folded`                                                     |
+| `IterDiffFiller`             | Filler rows beside a one-sided change                | link to `NonText`                                                    |
+| `IterDiffAnnotation`         | Annotation text                                      | link to `NormalFloat`                                                |
+| `IterDiffAnnotationOutdated` | Annotation whose lines changed                       | link to `Comment`                                                    |
+| `IterDiffAnnotationFocus`    | Focused annotation                                   | link to `Visual`                                                     |
+| `IterAnnotationSign`         | Annotation sign in the gutter                        | link to `Special`                                                    |
 
 ### Files
 

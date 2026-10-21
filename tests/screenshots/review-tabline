@@ -15,7 +15,7 @@
 14| 23  23   a23                                                                                                           
 15| 24  24   a24                                                                                                           
 16|iter://review/a.txt [-]                                                                                                 
-17| HEAD main                                                                                                       4 files
+17| HEAD main                                                                                                      4 files 
 18| Unstaged (4)                                                                  │ Annotations (0)                        
 19| M ○ a.txt                                                                     │ reviewed ▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱ 0 of 4 
 20| M ○ b.txt                                                                     │                                        
@@ -41,11 +41,11 @@
 14|555555555577777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777
 15|555555555577777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777
 16|000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-17|=66666>>>>66666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666
-18|?????????????===================================================================????????????????========================
-19|=@=A============================================================================BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBC
-20|=@=A====================================================================================================================
-21|=D=A====================================================================================================================
-22|=D=A====================================================================================================================
-23|=EEEE6666666E6666666E666666666E6666666E66666666E66666===================================================================
-24|FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+17|=>>>>>????>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+18|@@@@@@@@@@@@@AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA@@@@@@@@@@@@@@@@AAAAAAAAAAAAAAAAAAAAAAAA
+19|ABACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDE
+20|ABACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+21|AFACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+22|AFACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+23|AGGGG6666666G6666666G666666666G6666666G66666666G66666AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+24|HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH

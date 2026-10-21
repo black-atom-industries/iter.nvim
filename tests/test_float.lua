@@ -206,7 +206,7 @@ T['side']['covers the text rows from its column, follows and closes with the flo
             row = vim.fn.screenpos(s, 1, 1).row - vim.fn.screenpos(f, 1, 1).row,
             col = vim.fn.screenpos(s, 1, 1).col - vim.fn.screenpos(f, 1, 1).col,
             width = vim.api.nvim_win_get_width(s) + 10 == vim.api.nvim_win_get_width(f),
-            height = vim.api.nvim_win_get_height(s) == vim.api.nvim_win_get_height(f),
+            height = vim.api.nvim_win_get_height(s) == vim.fn.getwininfo(f)[1].height,
             focusable = vim.api.nvim_win_get_config(s).focusable,
             unfocused = vim.api.nvim_get_current_win() ~= s,
         }

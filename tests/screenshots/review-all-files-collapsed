@@ -15,7 +15,7 @@
 14|~                                                                               
 15|~                                                                               
 16|iter://review#all [-]                                                           
-17| HEAD main                                                               3 files
+17| HEAD main                                                              3 files 
 18| Unstaged (3)                                       │ Annotations (0)           
 19| M ○ a.txt                                          │ reviewed ▰▰▰▱▱▱▱▱▱ 1 of 3 
 20| M ✓ b.txt                                          │                           
@@ -41,11 +41,11 @@
 14|55555555555555555555555555555555555555555555555555555555555555555555555555555555
 15|55555555555555555555555555555555555555555555555555555555555555555555555555555555
 16|================================================================================
-17|>66666????6666666666666666666666666666666666666666666666666666666666666666666666
-18|@@@@@@@@@@@@@>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>@@@@@@@@@@@@@@@@>>>>>>>>>>>
-19|ABACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA>DDDDDDDDDDEEEDDDDDDDDDDDDD>
-20|>F>E>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-21|>F>D>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-22|>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-23|>G66666666G6666666666G6666666666G666666666GGGG6666666G66666666666G66666>>>>>>>>>
-24|HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+17|>?????@@@@??????????????????????????????????????????????????????????????????????
+18|AAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBAAAAAAAAAAAAAAAABBBBBBBBBBB
+19|CDCECCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCBFFFFFFFFFFGGGFFFFFFFFFFFFFB
+20|BHBGBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+21|BHBFBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+22|BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+23|BI66666666I6666666666I6666666666I666666666IIII6666666I66666666666I66666BBBBBBBBB
+24|JJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ

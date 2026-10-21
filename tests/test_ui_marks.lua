@@ -507,7 +507,7 @@ T['counts']['the review drawer shows counts on rows and files in the header'] = 
 
     local title = child.lua_get([[(function()
         local text = ''
-        for _, chunk in ipairs(vim.api.nvim_win_get_config(]] .. R .. [[.drawer.win).title) do
+        for _, chunk in ipairs(]] .. R .. [[.drawer.float.opts.title) do
             text = text .. chunk[1]
         end
         return text
@@ -528,7 +528,7 @@ T['counts']['the status drawer shows no counts and no marks'] = function()
     local state = child.lua_get([[(function()
         local d = require('iter').drawer
         local title = ''
-        for _, chunk in ipairs(vim.api.nvim_win_get_config(d.win).title) do
+        for _, chunk in ipairs(d.float.opts.title) do
             title = title .. chunk[1]
         end
         local ns = vim.api.nvim_get_namespaces()['iter.diff.annotations']

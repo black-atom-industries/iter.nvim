@@ -245,6 +245,26 @@ T['open'][':Iter shows the columns side by side at 80 columns'] = function()
     helpers.expect_screenshot(child, 'drawer-80-columns')
 end
 
+T['open']['the header sits on a band under a rule, as file headers do'] = function()
+    open_drawer()
+
+    local chrome = child.lua_get([[(function()
+        local win = require('iter').drawer.win
+        local config = vim.api.nvim_win_get_config(win)
+        return {
+            rule = config.border[2],
+            winbar = vim.wo[win].winbar:match('HEAD') ~= nil,
+            band = vim.wo[win].winhighlight:match('WinBar:IterDrawerHeader') ~= nil,
+        }
+    end)()]])
+
+    eq(chrome, {
+        rule = { '─', 'IterDiffHeaderRule' },
+        winbar = true,
+        band = true,
+    })
+end
+
 T['open']['drawer windows take the Normal background, not the float one'] = function()
     child.lua([[
         vim.api.nvim_set_hl(0, 'Normal', { bg = 0x101010, fg = 0xcccccc })
@@ -942,7 +962,7 @@ T['float']['keeps its place after pane resizes'] = function()
     eq(last_row(d .. '.float.strip_win', 1), last_row(d .. '.pane'))
     -- The height share minus the chrome and the Recent commits leaves fewer
     -- rows than the minimum of file lines, so the minimum holds.
-    eq(child.lua_get('vim.api.nvim_win_get_height(' .. d .. '.win)'), 5)
+    eq(child.lua_get('vim.fn.getwininfo(' .. d .. '.win)[1].height'), 5)
     eq(selected(), 'unstaged deleted.txt')
 
     child.o.columns = 80
@@ -968,10 +988,11 @@ T['float']['sits above a float at zindex 20'] = function()
     local first = child.lua_get(
         [[vim.fn.getwininfo(require('iter').drawer.win)[1].winrow]]
     )
-    eq(vim.startswith(rows[first], ' HEAD main'), true)
-    eq(vim.startswith(rows[first + 1], ' Unstaged (5)'), true)
-    eq(vim.startswith(rows[first + 2], ' D deleted.txt'), true)
-    eq(rows[first + 2]:find('X', 1, true), nil)
+    eq(vim.startswith(rows[first], '────'), true)
+    eq(vim.startswith(rows[first + 1], ' HEAD main'), true)
+    eq(vim.startswith(rows[first + 2], ' Unstaged (5)'), true)
+    eq(vim.startswith(rows[first + 3], ' D deleted.txt'), true)
+    eq(rows[first + 3]:find('X', 1, true), nil)
     eq(rows[first - 1]:find('XXXX', 1, true) ~= nil, true)
 end
 
@@ -985,9 +1006,9 @@ T['float']['ends on the last pane row below a winbar'] = function()
 
     eq(last_row(d .. '.pane') < child.o.lines - 2, true)
     eq(last_row(d .. '.float.strip_win', 1), last_row(d .. '.pane'))
-    eq(vim.startswith(screen_lines()[first + 1], ' Unstaged (5)'), true)
+    eq(vim.startswith(screen_lines()[first + 1], ' HEAD main'), true)
+    eq(vim.startswith(screen_lines()[first + 2], ' Unstaged (5)'), true)
     eq(screen_lines()[1]:find('PANE WINBAR', 1, true) ~= nil, true)
-    eq(child.lua_get('vim.wo[' .. d .. '.win].winbar'), '')
 end
 
 T['float']['shows no global winbar of its own'] = function()
@@ -1000,7 +1021,8 @@ T['float']['shows no global winbar of its own'] = function()
 
     eq(last_row(d .. '.pane') < child.o.lines - 2, true)
     eq(last_row(d .. '.float.strip_win', 1), last_row(d .. '.pane'))
-    eq(vim.startswith(screen_lines()[first + 1], ' Unstaged (5)'), true)
+    eq(vim.startswith(screen_lines()[first + 1], ' HEAD main'), true)
+    eq(vim.startswith(screen_lines()[first + 2], ' Unstaged (5)'), true)
 end
 
 --- Text of the drawer float's header (title) and key hint line (footer).
@@ -1017,7 +1039,7 @@ local function chrome()
         local strip = require('iter').drawer.float.strip_win
         local footer = strip and vim.api.nvim_win_get_config(strip).footer
             or config.footer
-        return { header = text(config.title), hint = text(footer) }
+        return { header = text(require('iter').drawer.float.opts.title), hint = text(footer) }
     end)()]])
 
     result.header = result.header:gsub('%s%s%s+', '  '):gsub('%s+$', '')
@@ -1104,7 +1126,7 @@ T['header']['stacked with a long list, the header counts both sides'] = function
     local first = child.lua_get(
         [[vim.fn.getwininfo(require('iter').drawer.win)[1].winrow]]
     )
-    eq(vim.startswith(screen_lines()[first], ' HEAD main  '), true)
+    eq(vim.startswith(screen_lines()[first + 1], ' HEAD main  '), true)
     eq(vim.endswith(chrome().header, '20 unstaged · 1 staged'), true)
 end
 
@@ -1132,14 +1154,14 @@ T['header']['a narrow drawer with a long branch opens cleanly'] = function()
     )
     eq(chrome().header, 'HEAD feat/a-rather-long-branch-name')
 
-    -- Neovim cuts a title wider than the float from the left with `<`.
+    -- Neovim cuts a winbar wider than the float from the left with `<`.
     local info =
         child.lua_get('vim.fn.getwininfo(require("iter").drawer.win)[1]')
     eq(info.width, 30)
-    local row = child.get_screenshot().text[info.winrow]
+    local row = child.get_screenshot().text[info.winrow + 1]
     eq(
         table.concat(row, '', info.wincol, info.wincol + info.width - 1),
-        ' <eat/a-rather-long-branch-nam'
+        '<eat/a-rather-long-branch-name'
     )
 end
 
@@ -1183,7 +1205,7 @@ T['header']['stacked at 60 columns keeps HEAD and the branch whole'] = function(
 
     local info =
         child.lua_get('vim.fn.getwininfo(require("iter").drawer.win)[1]')
-    local row = child.get_screenshot().text[info.winrow]
+    local row = child.get_screenshot().text[info.winrow + 1]
     eq(
         vim.startswith(
             table.concat(row, '', info.wincol, info.wincol + info.width - 1),
@@ -1566,9 +1588,10 @@ local function strip_state()
             local info = vim.fn.getwininfo(strip)[1]
             local pane = vim.fn.getwininfo(d.pane)[1]
             result.focusable = vim.api.nvim_win_get_config(strip).focusable
-            -- A float's winrow is its top border: the float has a title
-            -- row, the strip only a footer row.
-            result.stacked = main.winrow + 1 + main.height == info.winrow
+            -- A float's winrow is its top border: the float has a rule row
+            -- and the header in its winbar, the strip only a footer row.
+            result.stacked = main.winrow + 1 + main.winbar + main.height
+                    == info.winrow
                 and info.winrow + info.height
                     == pane.winrow + pane.winbar + pane.height - 1
         end
@@ -1582,14 +1605,14 @@ T['commits']['the header shows ahead, behind and the upstream'] = function()
     eq(chrome().header, 'HEAD main  ↑2 ↓1  origin/main  1 change')
 
     local title = child.lua_get([[(function()
-        local config = vim.api.nvim_win_get_config(require('iter').drawer.win)
         local text = ''
-        for _, chunk in ipairs(config.title) do
+        for _, chunk in ipairs(require('iter').drawer.float.opts.title) do
             text = text .. chunk[1]
         end
         return text
     end)()]])
-    eq(vim.fn.strdisplaywidth(title), 100)
+    -- One column in, the header fills the rest of the 100-column drawer.
+    eq(vim.fn.strdisplaywidth(title), 99)
     eq(vim.endswith(title, ' 1 change '), true)
 end
 

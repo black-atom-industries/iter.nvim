@@ -426,7 +426,7 @@ T['column']['the header keeps the branch and counts files'] = function()
 
     local title = child.lua_get([[(function()
         local text = ''
-        for _, chunk in ipairs(vim.api.nvim_win_get_config(]] .. R .. [[.drawer.win).title) do
+        for _, chunk in ipairs(]] .. R .. [[.drawer.float.opts.title) do
             text = text .. chunk[1]
         end
         return text
@@ -434,7 +434,8 @@ T['column']['the header keeps the branch and counts files'] = function()
 
     eq(vim.startswith(title, 'HEAD main '), true)
     eq(vim.endswith(title, ' 2 files '), true)
-    eq(child.fn.strdisplaywidth(title), 120)
+    -- One column in, the header fills the rest of the 120-column drawer.
+    eq(child.fn.strdisplaywidth(title), 119)
 end
 
 T['column']['l reaches the column, the progress row is skipped'] = function()

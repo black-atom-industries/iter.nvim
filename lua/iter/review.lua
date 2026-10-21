@@ -2,6 +2,7 @@ local anchor = require('iter.annotations.anchor')
 local document = require('iter.diff.document')
 local Drawer = require('iter.ui.drawer')
 local editor = require('iter.annotations.editor')
+local float = require('iter.ui.float')
 local git = require('iter.git')
 local help = require('iter.ui.help')
 local layout = require('iter.ui.layout')
@@ -1036,10 +1037,15 @@ function Review:drawer_rendered(drawer, count)
     local total = current + vim.api.nvim_win_get_height(drawer.view.win)
     local option = drawer.config.options.drawer.height
     local base = option <= 1 and math.floor(total * option) or option
+    -- The review drawer has no rule: the split above it draws a line.
+    local chrome = float.chrome_rows(false)
     local height = math.max(
-        3,
+        chrome + 1,
         math.floor(base),
-        math.min(math.min(count, Drawer.MIN_LINES) + 2, math.floor(total / 2))
+        math.min(
+            math.min(count, Drawer.MIN_LINES) + chrome,
+            math.floor(total / 2)
+        )
     )
 
     if height ~= current then
