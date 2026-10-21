@@ -162,6 +162,9 @@ end, { desc = 'Annotate the review' })
 
 -- Open the review on its Annotations column
 vim.keymap.set('n', '<leader>al', iter.annotations, { desc = 'List the annotations' })
+
+-- Copy the annotations as a prompt
+vim.keymap.set('n', '<leader>ay', iter.yank, { desc = 'Yank the annotations' })
 ```
 
 Line and range annotations show in the buffer, as a sign on the line and the
