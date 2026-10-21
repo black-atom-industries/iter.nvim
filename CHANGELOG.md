@@ -2,6 +2,40 @@
 
 ## [0.4.0](https://github.com/black-atom-industries/iter.nvim/compare/v0.3.0...v0.4.0) (2026-10-21)
 
+### Highlights
+
+#### The diff layout follows the window width
+
+With `diff.layout = 'auto'` the diff shows side by side once the window is `diff.split_breakpoint` columns wide, and
+unified below that. It switches as the window resizes. `|` and `-` still pick a layout by hand, and that pick holds until a
+resize crosses the breakpoint. `'unified'` and `'split'` set the layout every session starts in.
+
+```lua
+require('iter').setup({
+    diff = {
+        layout = 'auto',        -- 'unified', 'split' or 'auto'
+        split_breakpoint = 120, -- diff width from which 'auto' shows side by side
+    },
+})
+```
+
+![In a full-width window the status drawer opens side by side; after :vsplit it opens unified in the half-width window and leaves the other one alone; after :only it opens side by side again](https://raw.githubusercontent.com/black-atom-industries/iter.nvim/v0.4.0/docs/assets/changelog/0.4.0-auto-layout.webp)
+
+#### Side by side stays in its window
+
+The old version opens inside the window the diff was in, so the windows next to it keep their width, also under `CTRL-W =`
+or an autocmd that equalizes windows. The status drawer covers both panes from the moment it opens, and its divider between
+Unstaged and Staged sits on the separator between the panes.
+
+#### The progress bar fills the Annotations column
+
+The bar next to `reviewed` takes the width the word and the counts leave, with at least 8 cells, and draws in `▰` and `▱`.
+
+#### Important fixes
+
+- The Annotations window no longer picks up a global `winborder`, which pushed it a row below the drawer's headers.
+
+
 
 ### Features
 
