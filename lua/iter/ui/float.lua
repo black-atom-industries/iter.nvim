@@ -135,6 +135,7 @@ local function win_config(opts)
         height = height,
         zindex = opts.zindex,
         style = 'minimal',
+        border = 'none',
         focusable = true,
     }
 
@@ -331,6 +332,7 @@ function Float:place_side()
         height = vim.api.nvim_win_get_height(self.win),
         zindex = self.opts.zindex + 1,
         style = 'minimal',
+        border = 'none',
         focusable = true,
     }
 

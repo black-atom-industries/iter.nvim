@@ -472,6 +472,20 @@ T['column']['h and l select again the file and the annotation they left'] = func
     eq(child.lua_get(R .. '.drawer:selected().side'), 'staged')
 end
 
+T['column']['takes no border from a global winborder'] = function()
+    child.o.winborder = 'solid'
+    open_review()
+
+    eq(
+        child.lua_get(
+            [[vim.api.nvim_win_get_config(]]
+                .. R
+                .. [[.drawer.float.side_win).border]]
+        ),
+        'none'
+    )
+end
+
 T['column']['without annotations the column shows the progress only'] = function()
     clear_store()
     open_review()
