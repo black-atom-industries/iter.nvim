@@ -15,8 +15,7 @@ loop:
 3. Copy the annotations out as a prompt.
 4. When the code changes again, see what is new since your last pass.
 
-iter does not commit, push or pull. Keep a Git plugin such as mini.git or
-fugitive for that.
+iter does not commit, push or pull. Keep a Git plugin such as [mini.git](https://github.com/nvim-mini/mini-git) for that.
 
 ![The review tab: moving through the files, a annotates a line, r marks the file reviewed and moves on, the Annotations column lists the annotation](docs/assets/review.webp)
 
