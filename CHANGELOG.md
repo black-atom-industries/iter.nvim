@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.4.0](https://github.com/black-atom-industries/iter.nvim/compare/v0.3.0...v0.4.0) (2026-10-21)
+
+
+### Features
+
+* **config:** diff.layout picks unified, split or auto by width ([4cd3344](https://github.com/black-atom-industries/iter.nvim/commit/4cd3344f2fac94cbb71c7ed009862c3c8b9ea3cf))
+* **review:** progress bar spans the Annotations column ([2eb35bf](https://github.com/black-atom-industries/iter.nvim/commit/2eb35bfbd0e01211d26867d803ad1268c7e45969))
+
+
+### Bug Fixes
+
+* **diff:** side by side splits only the window it opens in ([6c1a5e1](https://github.com/black-atom-industries/iter.nvim/commit/6c1a5e10e969ada120b534aebf5373d67ebe6e84))
+* **diff:** side-by-side panes line up with the drawer columns ([6a119f8](https://github.com/black-atom-industries/iter.nvim/commit/6a119f8ff3dc08d2849f2d5e2b3be669d645228c))
+* **drawer:** Annotations window ignores a global winborder ([8a07da7](https://github.com/black-atom-industries/iter.nvim/commit/8a07da7f662fd78eb54f82591e9c4d6fd5f1a47c))
+* **drawer:** status drawer spans both panes when it opens side by side ([7406d61](https://github.com/black-atom-industries/iter.nvim/commit/7406d61e75764ff9f671e4db66ed4114e0c06711))
+
+
+### Documentation
+
+* README as lists for processes and reference details ([f473c3d](https://github.com/black-atom-industries/iter.nvim/commit/f473c3d1e0b4a7aa847e1be0e55bb1dfd27bf76d))
+* yank in the annotation mapping recipe ([0bf4bb3](https://github.com/black-atom-industries/iter.nvim/commit/0bf4bb38c9e67c3da19726ac35139770d2386f7e))
+
 ## [0.3.0](https://github.com/black-atom-industries/iter.nvim/compare/v0.2.0...v0.3.0) (2026-10-20)
 
 ### Highlights
