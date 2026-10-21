@@ -902,6 +902,46 @@ T['drawer']['a status drawer opening side by side spans both panes'] = function(
     )
 end
 
+T['drawer']['panes stay even when a plugin equalizes on a new window'] = function()
+    local D = [[require('iter').drawer]]
+    child.lua([[
+        vim.api.nvim_create_autocmd('WinNew', {
+            callback = function()
+                local win = vim.api.nvim_get_current_win()
+                if vim.api.nvim_win_get_config(win).relative ~= '' then
+                    return
+                end
+                vim.schedule(function()
+                    vim.cmd.wincmd('=')
+                end)
+            end,
+        })
+        require('iter').setup({ diff = { layout = 'split' } })
+        vim.keymap.set('n', 'gs', function()
+            require('iter').status()
+        end)
+    ]])
+    child.type_keys('gs')
+    helpers.wait_until(
+        child,
+        D .. [[ ~= nil and ]] .. D .. [[.view.old ~= nil]]
+    )
+    vim.loop.sleep(200)
+
+    -- 100 columns leave 99 for both panes: the old side takes the smaller half,
+    -- as the drawer's Unstaged column does.
+    eq(
+        child.lua_get(
+            [[{ vim.api.nvim_win_get_width(]]
+                .. D
+                .. [[.view.old.win), vim.api.nvim_win_get_width(]]
+                .. D
+                .. [[.view.win) }]]
+        ),
+        { 49, 50 }
+    )
+end
+
 T['drawer']['| in the status drawer carries over to the review'] = function()
     local D = [[require('iter').drawer]]
     child.cmd('Iter')

@@ -338,9 +338,13 @@ function View:open_old()
         util.name_buf(buf, self.name .. '#old')
     end
 
+    -- Even from the start, as `even_widths` makes them: an equalize that a
+    -- plugin schedules on the new window then changes the widths, so the
+    -- WinResized that follows evens them again.
     local win = vim.api.nvim_open_win(buf, false, {
         split = 'left',
         win = self.win,
+        width = math.floor((vim.api.nvim_win_get_width(self.win) - 1) / 2),
     })
 
     -- A new window copies the jumplist of the window it opens from.
@@ -475,7 +479,7 @@ function View:even_widths()
     end
 
     local width = vim.api.nvim_win_get_width(old.win)
-    local half = math.ceil((width + vim.api.nvim_win_get_width(self.win)) / 2)
+    local half = math.floor((width + vim.api.nvim_win_get_width(self.win)) / 2)
 
     if width ~= half then
         vim.api.nvim_win_set_width(old.win, half)
