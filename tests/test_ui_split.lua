@@ -827,6 +827,60 @@ T['drawer']['| and - in the drawer switch the pane and keep the focus'] = functi
     eq(footer():find('| split', 1, true) ~= nil, true)
 end
 
+T['drawer']['diff.layout split opens the review side by side'] = function()
+    child.lua([[require('iter').setup({ diff = { layout = 'split' } })]])
+    open_review()
+
+    helpers.wait_until(child, R .. [[.drawer.view.old ~= nil]])
+    eq(child.lua_get(R .. [[.drawer.view.layout]]), 'split')
+    eq(#left_lines(), #right_lines())
+end
+
+--- Set the screen to `columns` and wait for the review's diff to show
+--- `layout`.
+---@param columns integer
+---@param layout IterDocLayout
+local function resize_to(columns, layout)
+    child.o.columns = columns
+    helpers.wait_until(
+        child,
+        R .. [[.drawer.view.layout == ']] .. layout .. [[']]
+    )
+end
+
+T['drawer']['diff.layout auto follows the width of the diff'] = function()
+    child.lua([[require('iter').setup({ diff = { layout = 'auto' } })]])
+    open_review()
+
+    eq(child.lua_get(R .. [[.drawer.view.layout]]), 'unified')
+
+    resize_to(160, 'split')
+    helpers.wait_until(child, R .. [[.drawer.view.old ~= nil]])
+    eq(#left_lines(), #right_lines())
+
+    resize_to(100, 'unified')
+    eq(child.lua_get(R .. [[.drawer.view.old == nil]]), true)
+end
+
+T['drawer']['under diff.layout auto, - holds until a resize crosses'] = function()
+    child.lua([[require('iter').setup({ diff = { layout = 'auto' } })]])
+    child.o.columns = 160
+    open_review()
+    helpers.wait_until(child, R .. [[.drawer.view.layout == 'split']])
+
+    split()
+    child.type_keys('-')
+    eq(child.lua_get(R .. [[.drawer.view.layout]]), 'unified')
+
+    -- Still past the breakpoint: the pick holds.
+    child.o.columns = 150
+    helpers.wait_until(child, [[vim.o.columns == 150]])
+    eq(child.lua_get(R .. [[.drawer.view.layout]]), 'unified')
+
+    resize_to(100, 'unified')
+    resize_to(160, 'split')
+end
+
 T['drawer']['| in the status drawer carries over to the review'] = function()
     local D = [[require('iter').drawer]]
     child.cmd('Iter')

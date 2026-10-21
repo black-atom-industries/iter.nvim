@@ -26,6 +26,8 @@ T['resolve()']['returns the defaults without options'] = function()
         expand_step = 20,
         syntax_max_lines = 20000,
         word_diff = true,
+        layout = 'unified',
+        split_breakpoint = 120,
         args = {},
     })
     eq(
@@ -150,6 +152,12 @@ T['resolve() errors']['on a wrong option type'] = function()
     expect_error(function()
         config.resolve({ drawer = 1 })
     end, 'opts%.drawer: expected table')
+end
+
+T['resolve() errors']['on a diff layout other than unified, split or auto'] = function()
+    expect_error(function()
+        config.resolve({ diff = { layout = 'stacked' } })
+    end, "opts%.diff%.layout must be 'unified', 'split' or 'auto'")
 end
 
 T['resolve() errors']['on a drawer height outside (0, 1]'] = function()

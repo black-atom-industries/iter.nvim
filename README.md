@@ -72,7 +72,8 @@ line numbers, and hidden context that `<CR>` expands.
 
 1. Read the file. `m` shows every file in one scroll, `|` shows old and new
    side by side. Both drawers keep the layout you picked last, for the whole
-   Neovim session.
+   Neovim session, or follow the window width with
+   [`diff.layout = 'auto'`](#configuration).
 2. Stage as you go: `s` and `u` take the hunk under the cursor, or in visual
    mode only the selected lines, applied like `git add -p`.
 3. `r` marks the file reviewed and moves on to the next file you haven't
@@ -399,6 +400,8 @@ require('iter').setup({
         expand_step = 20,          -- hidden context lines shown per expand
         syntax_max_lines = 20000,  -- longer files get no syntax highlighting
         word_diff = true,          -- highlight the changed words in changed lines
+        layout = 'unified',        -- layout a session starts in: 'unified', 'split' or 'auto'
+        split_breakpoint = 120,    -- diff width from which 'auto' shows the diff side by side
         args = {},                 -- extra flags for every `git diff`, see below
     },
     export = {
@@ -422,6 +425,11 @@ require('iter').setup({
 
 [`lua/iter/config/defaults.lua`](lua/iter/config/defaults.lua) is the source
 of truth. Unknown options, views or actions raise an error.
+
+`diff.layout = 'auto'` follows the width of the diff:
+
+- side by side from `diff.split_breakpoint` columns, unified below
+- `|` or `-` overrides it until a resize crosses the breakpoint
 
 `diff.args` adds flags to every `git diff` iter runs, for display and for
 staging. Only flags that keep hunks `git apply` can take back are allowed:

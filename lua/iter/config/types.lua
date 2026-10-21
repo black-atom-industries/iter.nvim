@@ -14,6 +14,8 @@
 ---@field expand_step? integer Hidden context lines revealed per expand
 ---@field syntax_max_lines? integer Files longer than this get no syntax
 ---@field word_diff? boolean
+---@field layout? IterLayoutOption Diff layout a Neovim session starts in, 'auto' to follow the width
+---@field split_breakpoint? integer Diff width from which 'auto' shows the diff side by side
 ---@field args? string[] Extra flags for every `git diff`, see the README for the allowed ones
 
 ---@class IterExportOptions
@@ -28,6 +30,8 @@
 
 ---@class IterIconsOptions
 ---@field annotation? string Shown before each annotation, '' for none
+
+---@alias IterLayoutOption 'unified'|'split'|'auto'
 
 ---@alias IterView 'drawer'|'review_drawer'|'diff'|'annotation'|'help'
 
@@ -45,7 +49,7 @@
 
 ---@class IterResolvedOptions
 ---@field drawer { height: number, zindex: integer, breakpoint: integer, wide_breakpoint: integer, commits: integer }
----@field diff { expand_step: integer, syntax_max_lines: integer, word_diff: boolean, args: string[] }
+---@field diff { expand_step: integer, syntax_max_lines: integer, word_diff: boolean, layout: IterLayoutOption, split_breakpoint: integer, args: string[] }
 ---@field export { intro: string }
 ---@field refresh { poll_ms: integer }
 ---@field confirm { discard: boolean, ignore: boolean }

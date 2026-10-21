@@ -55,6 +55,7 @@ local watch = require('iter.watch')
 ---@field help? IterHelp
 ---@field handlers table<string, fun()> drawer actions by name
 ---@field config IterConfig
+---@field auto? IterDocLayout the layout 'auto' picked for the last width, nil under any other `diff.layout`
 ---@field changes IterChanges
 ---@field recent? GitRecent the status drawer's recent commits, nil in the review or without a commit
 ---@field ages string the commit ages of the last render
@@ -87,11 +88,26 @@ Drawer.__index = Drawer
 Drawer.MIN_LINES = 5
 
 local SELECTED_NS = vim.api.nvim_create_namespace('iter.drawer.selected')
+
+--- The layout `diff.layout` 'auto' picks for `width` columns of diff, nil
+--- under any other `diff.layout`.
+---@param diff { layout: IterLayoutOption, split_breakpoint: integer }
+---@param width integer
+---@return IterDocLayout?
+local function auto_layout(diff, width)
+    if diff.layout ~= 'auto' then
+        return nil
+    end
+
+    return width >= diff.split_breakpoint and 'split' or 'unified'
+end
 local PREVIEW_DELAY_MS = 50
 -- The diff layout chosen last in any drawer; a new drawer starts in it, so
--- the choice holds for the Neovim session.
----@type IterDocLayout
-local diff_layout = 'unified'
+-- the choice holds for the Neovim session. Before any choice, a drawer starts
+-- in `diff.layout`. Under 'auto' a resize that crosses
+-- `diff.split_breakpoint` drops the choice.
+---@type IterDocLayout?
+local diff_layout = nil
 -- Width share of the stacked file columns beside the extras' columns.
 local FILES_WEIGHT = 3
 -- Diff rows that stand for a line of the file.
@@ -401,6 +417,10 @@ function Drawer.open(opts)
     local keys_view = context == 'review' and 'review_drawer' or 'drawer'
 
     local self = setmetatable({
+        auto = auto_layout(
+            opts.config.options.diff,
+            vim.api.nvim_win_get_width(view_win)
+        ),
         context = context,
         extras = opts.extras,
         keys_view = keys_view,
@@ -478,7 +498,8 @@ function Drawer.open(opts)
         icon = opts.config.options.icons.annotation,
         handlers = view_handlers,
         bufhidden = review and 'hide' or nil,
-        layout = diff_layout,
+        -- Under 'auto' `self.auto` is set, so the option is a layout here.
+        layout = diff_layout or self.auto or opts.config.options.diff.layout --[[@as IterDocLayout]],
         on_cursor = function()
             self:follow_view()
         end,
@@ -1330,6 +1351,14 @@ function Drawer:resized()
         return
     end
 
+    local auto = auto_layout(self.config.options.diff, self:diff_width())
+
+    if auto ~= nil and auto ~= self.auto then
+        self.auto = auto
+        diff_layout = nil
+        self.view:set_layout(auto)
+    end
+
     local mark = self:mark()
     self:render()
     self:restore_selection(mark)
@@ -1686,6 +1715,20 @@ function Drawer:set_all_files(on)
         self:load_all()
         self:shown()
     end
+end
+
+--- Columns of the diff: the view's window, and in the split layout the old
+--- side's window and the separator between them.
+---@return integer
+function Drawer:diff_width()
+    local width = vim.api.nvim_win_get_width(self.view.win)
+    local old = self.view.old
+
+    if old ~= nil and util.is_valid_win(old.win) then
+        width = width + vim.api.nvim_win_get_width(old.win) + 1
+    end
+
+    return width
 end
 
 --- Show diffs in `doc_layout`, here and in every drawer opened after.

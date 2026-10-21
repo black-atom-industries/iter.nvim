@@ -17,6 +17,8 @@ M.options = {
         expand_step = 20,
         syntax_max_lines = 20000,
         word_diff = true,
+        layout = 'unified',
+        split_breakpoint = 120,
         args = {},
     },
     export = {

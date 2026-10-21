@@ -22,6 +22,8 @@ local SCHEMA = {
         expand_step = 'integer',
         syntax_max_lines = 'integer',
         word_diff = 'boolean',
+        layout = 'string',
+        split_breakpoint = 'integer',
         args = 'table',
     },
     export = { intro = 'string' },
@@ -216,6 +218,17 @@ local function validate(opts)
 
     if commits ~= nil and commits < 0 then
         error('opts.drawer.commits must be 0 or more', 0)
+    end
+
+    local layout = opts.diff and opts.diff.layout
+
+    if
+        layout ~= nil
+        and layout ~= 'unified'
+        and layout ~= 'split'
+        and layout ~= 'auto'
+    then
+        error("opts.diff.layout must be 'unified', 'split' or 'auto'", 0)
     end
 
     if opts.diff and opts.diff.args ~= nil then
