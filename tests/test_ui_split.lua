@@ -881,6 +881,27 @@ T['drawer']['under diff.layout auto, - holds until a resize crosses'] = function
     resize_to(160, 'split')
 end
 
+T['drawer']['a status drawer opening side by side spans both panes'] = function()
+    local D = [[require('iter').drawer]]
+    child.lua([[require('iter').setup({ diff = { layout = 'split' } })]])
+    child.cmd('Iter')
+    helpers.wait_until(
+        child,
+        D .. [[ ~= nil and ]] .. D .. [[.view.old ~= nil]]
+    )
+
+    eq(
+        child.lua_get(
+            [[vim.api.nvim_win_get_config(]]
+                .. D
+                .. [[.win).win == ]]
+                .. D
+                .. [[.view.old.win]]
+        ),
+        true
+    )
+end
+
 T['drawer']['| in the status drawer carries over to the review'] = function()
     local D = [[require('iter').drawer]]
     child.cmd('Iter')

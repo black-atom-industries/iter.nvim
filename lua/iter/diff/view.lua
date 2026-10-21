@@ -1009,8 +1009,12 @@ local function line_text(pane, row, file)
     return row.text
 end
 
---- Open or close the old side's pane for the document's layout.
+--- Open or close the old side's pane for the document's layout. A pane
+--- that comes or goes changes the windows around the view, so `on_layout`
+--- runs then too.
 function View:arrange()
+    local had_old = self.old ~= nil
+
     if self.document.layout == 'split' and util.is_valid_win(self.win) then
         self:open_old()
         self.old.rows = self.document.old_rows
@@ -1018,6 +1022,10 @@ function View:arrange()
     else
         self:close_old()
         self.side = nil
+    end
+
+    if (self.old ~= nil) ~= had_old and self.on_layout ~= nil then
+        self.on_layout()
     end
 end
 
