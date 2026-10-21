@@ -116,7 +116,7 @@ local ANNOTATIONS = {
 -- The Annotations column as the drawer shows it at 120 columns.
 local LISTING = {
     'Annotations (8) · 1 outdated',
-    'reviewed □□□□□□□□ 0 of 2',
+    'reviewed ▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱ 0 of 2',
     'n.txt:3     Rename the variable',
     'm.txt       Needs a test',
     'm.txt:3     Why this change?',
@@ -406,13 +406,19 @@ T['column']['the progress row follows reviewed and changed files'] = function()
     child.type_keys('r')
     helpers.wait_until(child, R .. [[.reviewed['n.txt'] == 'reviewed']])
 
-    eq(column()[2], 'reviewed ■■■■□□□□ 1 of 2')
+    eq(
+        column()[2],
+        'reviewed ▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱▱ 1 of 2'
+    )
 
     helpers.write_file(vim.fs.joinpath(repo, 'n.txt'), { 'changed' })
     child.lua([[require('iter').current_review:refresh_annotations()]])
     helpers.wait_until(child, R .. [[.reviewed['n.txt'] == 'changed']])
 
-    eq(column()[2], 'reviewed □□□□□□□□ 0 of 2 · ↻ 1')
+    eq(
+        column()[2],
+        'reviewed ▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱ 0 of 2 · ↻ 1'
+    )
 end
 
 T['column']['the header keeps the branch and counts files'] = function()
@@ -470,10 +476,10 @@ T['column']['without annotations the column shows the progress only'] = function
     clear_store()
     open_review()
 
-    eq(
-        column(),
-        { 'Annotations (0)', 'reviewed □□□□□□□□ 0 of 2' }
-    )
+    eq(column(), {
+        'Annotations (0)',
+        'reviewed ▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱ 0 of 2',
+    })
 
     child.type_keys('l')
     eq(child.lua_get(R .. '.drawer.column'), 'annotations')
@@ -501,7 +507,7 @@ T['column']['stacks below the breakpoint'] = function()
     eq(vim.list_slice(lines, 6, 9), {
         '',
         'Annotations (8) · 1 outdated',
-        'reviewed □□□□□□□□ 0 of 2',
+        'reviewed ▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱ 0 of 2',
         'n.txt:3     Rename the variable',
     })
 
@@ -800,10 +806,10 @@ T['keys']['deleting the last annotation leaves the progress row selected'] = fun
     child.type_keys('x')
 
     helpers.wait_until(child, '#' .. R .. '.annotations == 0')
-    eq(
-        column(),
-        { 'Annotations (0)', 'reviewed □□□□□□□□ 0 of 2' }
-    )
+    eq(column(), {
+        'Annotations (0)',
+        'reviewed ▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱ 0 of 2',
+    })
     eq(child.lua_get(R .. '.drawer.column'), 'annotations')
     eq(child.lua_get(R .. '.drawer.view:is_shown()'), true)
 end
@@ -827,7 +833,7 @@ T['keys']['annotating in the diff adds a row'] = function()
     helpers.wait_until(child, '#' .. R .. '.annotations == 1')
     eq(column(), {
         'Annotations (1)',
-        'reviewed □□□□□□□□ 0 of 2',
+        'reviewed ▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱ 0 of 2',
         'n.txt:3 A new note',
     })
 end
@@ -915,7 +921,7 @@ T['clean'][':Iter review on a clean tree selects the review annotation'] = funct
     eq(selected(), 'Overall looks good')
     eq(column(), {
         'Annotations (1)',
-        'reviewed □□□□□□□□ 0 of 0',
+        'reviewed ▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱ 0 of 0',
         'review Overall looks good',
     })
 end

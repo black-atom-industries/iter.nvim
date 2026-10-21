@@ -525,11 +525,11 @@ T['progress_cell()']['bar, counts and the changed files'] = function()
         32
     )
 
-    eq(text, ' reviewed ■■■□□□□□ 3 of 8 · ↻ 1 ')
+    eq(text, ' reviewed ▰▰▰▱▱▱▱▱ 3 of 8 · ↻ 1 ')
     eq(spans(line, 'IterReviewed'), { { 10, 19 } })
     eq(
         spans(line, 'IterReviewedChanged'),
-        { { #' reviewed ■■■□□□□□ 3 of 8', #text - 1 } }
+        { { #' reviewed ▰▰▰▱▱▱▱▱ 3 of 8', #text - 1 } }
     )
 end
 
@@ -542,14 +542,29 @@ T['progress_cell()']['fills by share, full only when all are reviewed'] = functi
             40
         )
 
-        return vim.trim(text):match('[■□]+')
+        return vim.trim(text):match('[▰▱]+')
     end
 
-    eq(bar(0, 0), '□□□□□□□□')
-    eq(bar(0, 5), '□□□□□□□□')
-    eq(bar(1, 20), '■□□□□□□□')
-    eq(bar(19, 20), '■■■■■■■□')
-    eq(bar(4, 4), '■■■■■■■■')
+    eq(
+        bar(0, 0),
+        '▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱'
+    )
+    eq(
+        bar(0, 5),
+        '▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱'
+    )
+    eq(
+        bar(1, 20),
+        '▰▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱'
+    )
+    eq(
+        bar(19, 20),
+        '▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱'
+    )
+    eq(
+        bar(4, 4),
+        '▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰'
+    )
 end
 
 T['progress_cell()']['drops the word when narrow'] = function()
@@ -560,7 +575,7 @@ T['progress_cell()']['drops the word when narrow'] = function()
         24
     )
 
-    eq(text, ' ■■□□□□□□ 1 of 4 · ↻ 1  ')
+    eq(text, ' ▰▰▱▱▱▱▱▱▱ 1 of 4 · ↻ 1 ')
 end
 
 T['hints()'] = new_set()

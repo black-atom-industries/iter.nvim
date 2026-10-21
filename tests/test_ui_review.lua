@@ -1713,7 +1713,7 @@ T['reviewed']['rows start unreviewed, the header counts files, the column shows 
         'M ○ b.txt',
     })
     eq(drawer_header(), 'HEAD main 4 files')
-    eq(progress(), 'reviewed □□□□□□□□ 0 of 4')
+    eq(progress(), 'reviewed ▱▱▱▱▱▱▱▱▱ 0 of 4')
     eq(diff_header(), '○ not reviewed  +2 −2 · 0 annotations ')
 end
 
@@ -1789,7 +1789,7 @@ T['reviewed']['r in the drawer marks the selected file, R unmarks it'] = functio
 
     eq(drawer_rows()[2], 'M ✓ a.txt')
     eq(drawer_rows()[8], 'M ○ b.txt')
-    eq(progress(), 'reviewed ■■□□□□□□ 1 of 4')
+    eq(progress(), 'reviewed ▰▰▱▱▱▱▱▱▱ 1 of 4')
     eq(diff_header(), '✓ reviewed  +2 −2 · 0 annotations ')
     eq(child.lua_get('_G.notes'), {})
 
@@ -1798,7 +1798,7 @@ T['reviewed']['r in the drawer marks the selected file, R unmarks it'] = functio
 
     eq(selected(), 'unstaged a.txt')
 
-    eq(progress(), 'reviewed □□□□□□□□ 0 of 4')
+    eq(progress(), 'reviewed ▱▱▱▱▱▱▱▱▱ 0 of 4')
     eq(diff_header(), '○ not reviewed  +2 −2 · 0 annotations ')
 end
 
@@ -1846,7 +1846,7 @@ T['reviewed']['a file on both sides shows the mark on both rows'] = function()
     eq(drawer_rows()[2], 'M ○ a.txt')
     eq(drawer_rows()[8], 'M ✓ b.txt')
     eq(drawer_rows()[3], 'M ✓ b.txt')
-    eq(progress(), 'reviewed ■■□□□□□□ 1 of 4')
+    eq(progress(), 'reviewed ▰▰▱▱▱▱▱▱▱ 1 of 4')
 end
 
 T['reviewed']['staging keeps a file reviewed'] = function()
@@ -1863,7 +1863,7 @@ T['reviewed']['staging keeps a file reviewed'] = function()
 
     eq(drawer_rows()[2], 'M ○ b.txt')
     eq(drawer_rows()[7], 'M ✓ a.txt')
-    eq(progress(), 'reviewed ■■□□□□□□ 1 of 4')
+    eq(progress(), 'reviewed ▰▰▱▱▱▱▱▱▱ 1 of 4')
 end
 
 T['reviewed']['an edit from outside turns reviewed into changed'] = function()
@@ -1878,7 +1878,7 @@ T['reviewed']['an edit from outside turns reviewed into changed'] = function()
     wait_state('b.txt', 'changed')
 
     eq(drawer_rows()[3], 'M ↻ b.txt')
-    eq(progress(), '□□□□□□□□ 0 of 4 · ↻ 1')
+    eq(progress(), '▱▱▱▱▱▱▱▱▱▱▱▱ 0 of 4 · ↻ 1')
 
     select_item('unstaged', 'b.txt')
     wait_diff('unstaged b.txt')
@@ -1889,7 +1889,7 @@ T['reviewed']['an edit from outside turns reviewed into changed'] = function()
     select_item('unstaged', 'b.txt')
     wait_diff('unstaged b.txt')
     wait_diff_header('✓ reviewed')
-    eq(progress(), 'reviewed ■■□□□□□□ 1 of 4')
+    eq(progress(), 'reviewed ▰▰▱▱▱▱▱▱▱ 1 of 4')
 end
 
 T['reviewed']['an edit of the shown file updates the diff header'] = function()
@@ -1941,7 +1941,7 @@ T['reviewed']['each file of an untracked directory takes its own mark'] = functi
 
     eq(drawer_rows()[4], '? ○ c.txt')
     eq(drawer_rows()[5], '? ✓ d/x.txt')
-    eq(progress(), 'reviewed ■■□□□□□□ 1 of 4')
+    eq(progress(), 'reviewed ▰▰▱▱▱▱▱▱▱ 1 of 4')
 end
 
 T['reviewed']['reviewed marks survive a restart'] = function()
@@ -1958,7 +1958,7 @@ T['reviewed']['reviewed marks survive a restart'] = function()
 
     eq(drawer_rows()[2], 'M ✓ a.txt')
     eq(drawer_rows()[8], 'M ○ b.txt')
-    eq(progress(), 'reviewed ■■□□□□□□ 1 of 4')
+    eq(progress(), 'reviewed ▰▰▱▱▱▱▱▱▱ 1 of 4')
 end
 
 T['reviewed']['the status drawer shows no reviewed marks and maps no reviewed key'] = function()

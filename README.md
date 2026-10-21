@@ -200,7 +200,7 @@ the files scroll. `h` and `l` switch between them. In wide windows Unstaged and
 Staged sit side by side; in narrow windows the three stack. In both `h` and `l`
 step through them.
 
-The Annotations column starts with the progress (`reviewed ■■■□□□□□ 3 of 8`,
+The Annotations column starts with the progress (`reviewed ▰▰▰▱▱▱▱▱ 3 of 8`,
 then `· ↻ n` for files changed since they were reviewed), then every
 annotation in file order, review annotations last: the file with `:line`,
 `:first–last` or ` old` for a deleted line, and the start of the text.

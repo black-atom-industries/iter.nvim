@@ -484,8 +484,8 @@ end
 ---@field outdated boolean
 ---@field label string location, from `annotation_label`
 
--- Cells of the reviewed progress bar.
-M.PROGRESS_CELLS = 8
+-- Fewest cells of the reviewed progress bar.
+M.PROGRESS_MIN_CELLS = 8
 
 --- The location an annotation row shows: `review` for the whole review,
 --- the file's name for a file annotation, else `name:line` or
@@ -542,15 +542,30 @@ end
 
 --- The cell of the reviewed progress: `reviewed`, a bar whose filled share is
 --- the reviewed share, `<reviewed> of <total>`, and `· ↻ <changed>` when files
---- changed since they were reviewed. Too narrow for all of it, the word
---- `reviewed` goes first.
+--- changed since they were reviewed. The bar takes the width the rest leaves,
+--- down to `PROGRESS_MIN_CELLS`; below that, the word `reviewed` goes first.
 ---@param line IterRenderLine
 ---@param progress IterLayoutProgress
 ---@param first integer byte column the cell starts at
 ---@param width integer
 ---@return string
 function M.progress_cell(line, progress, first, width)
-    local cells = M.PROGRESS_CELLS
+    local word = ' reviewed '
+    local counts = string.format(' %d of %d', progress.reviewed, progress.total)
+    local changed = progress.changed > 0
+            and string.format(' · ↻ %d', progress.changed)
+        or ''
+
+    local function room()
+        return width - vim.fn.strdisplaywidth(word .. counts .. changed) - 1
+    end
+
+    -- A narrow cell keeps the numbers rather than the word.
+    if room() < M.PROGRESS_MIN_CELLS then
+        word = ' '
+    end
+
+    local cells = math.max(room(), M.PROGRESS_MIN_CELLS)
     local filled = 0
 
     if progress.total > 0 then
@@ -566,34 +581,19 @@ function M.progress_cell(line, progress, first, width)
     end
 
     local parts = {
-        { ' reviewed ', 'IterDrawerHint' },
-        { string.rep('■', filled), 'IterReviewed' },
-        { string.rep('□', cells - filled), 'IterDrawerHint' },
-        {
-            string.format(' %d of %d', progress.reviewed, progress.total),
-            'IterDrawerHint',
-        },
+        { word, 'IterDrawerHint' },
+        { string.rep('▰', filled), 'IterReviewed' },
+        { string.rep('▱', cells - filled), 'IterDrawerHint' },
+        { counts, 'IterDrawerHint' },
+        { changed, 'IterReviewedChanged' },
     }
 
-    if progress.changed > 0 then
-        table.insert(parts, {
-            string.format(' · ↻ %d', progress.changed),
-            'IterReviewedChanged',
-        })
-    end
-
-    local function joined()
-        return table.concat(vim.tbl_map(function(part)
+    local text = fit(
+        table.concat(vim.tbl_map(function(part)
             return part[1]
-        end, parts))
-    end
-
-    -- A narrow cell keeps the numbers rather than the word.
-    if vim.fn.strdisplaywidth(joined()) > width then
-        parts[1][1] = ' '
-    end
-
-    local text = fit(joined(), width)
+        end, parts)),
+        width
+    )
     local last = first + #text
     local at = 0
 
