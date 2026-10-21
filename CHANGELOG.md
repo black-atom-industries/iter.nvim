@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.0](https://github.com/black-atom-industries/iter.nvim/compare/v0.4.0...v0.5.0) (2026-10-21)
+
+
+### Features
+
+* **drawer:** header on a band under a rule, like a file header ([dbdf14e](https://github.com/black-atom-industries/iter.nvim/commit/dbdf14e800bfd71c588ed3fb8c5cd1a433fcfab5))
+
+
+### Documentation
+
+* README clips at a 240-column viewport ([fdf6578](https://github.com/black-atom-industries/iter.nvim/commit/fdf6578ec7c9cc3166aa8e60b7b7162a673e974e))
+
 ## [0.4.0](https://github.com/black-atom-industries/iter.nvim/compare/v0.3.0...v0.4.0) (2026-10-21)
 
 ### Highlights
