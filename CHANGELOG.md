@@ -4,14 +4,14 @@
 
 ### Highlights
 
-#### The drawer header reads like a file header
+#### A clear edge between the diff and the drawer
 
-The status drawer's header row sits on the same tinted band as a file header in the diff, under a rule in the `Title`
-colour. The rule closes the gap between the diff and the drawer, so the separators of a side-by-side diff end on a line.
-The drawer keeps its height and shows one file row less.
+The status drawer starts with a rule in the `Title` colour and puts its header row on a tinted band, so it no longer
+blends into the diff above it. The separators of a side-by-side diff now end on that rule. The drawer keeps its height and
+shows one file row less.
 
 In the review tab the drawer has a split of its own, and Neovim already draws a line above it, so the review drawer shows
-the band without the rule. The band is a new group, `IterDrawerHeader`, derived from `Title` like `IterDiffHeader`.
+the band without the rule. The band is a new group, `IterDrawerHeader`, derived from `Title`.
 
 ![The status drawer under a rule in the Title colour, its HEAD row on the tinted header band](https://raw.githubusercontent.com/black-atom-industries/iter.nvim/v0.5.0/docs/assets/changelog/0.5.0-drawer-header.webp)
 
