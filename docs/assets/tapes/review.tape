@@ -7,8 +7,8 @@ Set FontFamily "TX-02, FiraCode Nerd Font Mono"
 Set LineHeight 1.15
 Set Theme {"name":"Black Atom Minium Sienna Light","background":"#ece3da","foreground":"#3d393a","selection":"#d2c9c1","cursor":"#ff7b26","black":"#585455","red":"#f14d4c","green":"#819e00","yellow":"#cd7b00","blue":"#00a3e9","magenta":"#a49c9a","cyan":"#c4bcb9","white":"#c4bcb9","brightBlack":"#676261","brightRed":"#f14d4c","brightGreen":"#819e00","brightYellow":"#cd7b00","brightBlue":"#00a3e9","brightMagenta":"#a49c9a","brightCyan":"#c4bcb9","brightWhite":"#c4bcb9"}
 Set FontSize 18
-Set Width 1600
-Set Height 1000
+Set Width 2600
+Set Height 1450
 Set Padding 0
 Set Framerate 50
 Set TypingSpeed 80ms
