@@ -517,17 +517,18 @@ function View:sync(from)
 
     local lnum = vim.api.nvim_win_get_cursor(from.win)[1]
 
-    -- Scrollbind keeps the offset between the windows at the time it was
-    -- set; syncbind makes it 0 again.
-    vim.api.nvim_win_call(from.win, function()
-        vim.cmd('syncbind')
-    end)
-
     for _, pane in ipairs(self:panes()) do
         if pane ~= from and util.is_valid_win(pane.win) then
             vim.api.nvim_win_set_cursor(pane.win, { lnum, 0 })
         end
     end
+
+    -- Scrollbind keeps the offset between the windows at the time it was
+    -- set; syncbind makes it 0 again. It runs after the cursors move, since
+    -- moving a cursor scrolls its window to keep 'scrolloff'.
+    vim.api.nvim_win_call(from.win, function()
+        vim.cmd('syncbind')
+    end)
 end
 
 --- Show the documents in `layout` from now on, the one shown at once.

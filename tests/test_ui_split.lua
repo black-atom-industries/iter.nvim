@@ -491,6 +491,34 @@ T['sync']['the drawer scrolls both windows'] = function()
     eq(p[1][2] > 1, true)
 end
 
+T['sync']['the drawer scrolls both windows under scrolloff'] = function()
+    child.stop()
+    helpers.cleanup(repo)
+    local lines = numbered('line ', 1, 120)
+    repo = helpers.create_repo({ ['f.txt'] = lines })
+    for i = 1, 120, 3 do
+        lines[i] = 'changed ' .. i
+    end
+    helpers.write_file(vim.fs.joinpath(repo, 'f.txt'), lines)
+    helpers.start_child(child, repo, { lines = 30, columns = 100 })
+    stub_ui()
+    child.o.scrolloff = 5
+
+    open_review()
+    split()
+    child.type_keys('40G')
+    child.lua(
+        [[vim.api.nvim_set_current_win(require('iter').current_review.drawer.win)]]
+    )
+
+    child.type_keys('<C-d>')
+    child.type_keys('<C-u>')
+
+    local p = positions()
+
+    eq(p[1], p[2])
+end
+
 T['sync']['<CR> on a gap in the left window expands both sides'] = function()
     open_review()
     split()
