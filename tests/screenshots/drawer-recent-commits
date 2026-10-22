@@ -27,7 +27,7 @@
 26| ↑ 22cb175  docs: move scope into CONVENTIONS                                                    1h 
 27| ↑ fa5fa69  refactor(drawer): split ui/drawer.lua                                                2h 
 28|   d26c026  initial                                                                              1d 
-29| s stage  u unstage  d discard  I ignore  <CR> open  r review  m all files  | split  ? help         
+29| s stage  u unstage  d discard  I ignore  <CR> open  r review  = all files  | split  ? help         
 30|                                                                                                    
 
 --|---------|---------|---------|---------|---------|---------|---------|---------|---------|---------|

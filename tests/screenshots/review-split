@@ -27,7 +27,7 @@
 26| Staged (0)                                                       │                                 
 27|                                                                                                    
 28|                                                                                                    
-29| s stage  u unstage  d discard  I ignore  <CR> open  r reviewed  m all files  - unified  ? help     
+29| s stage  u unstage  d discard  I ignore  <CR> open  r reviewed  = all files  - unified  ? help     
 30|                                                                                                    
 
 --|---------|---------|---------|---------|---------|---------|---------|---------|---------|---------|

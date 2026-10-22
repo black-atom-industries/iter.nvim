@@ -1230,7 +1230,7 @@ T['all files']['m and | show every file on both sides'] = function()
 
     open_review()
     split()
-    child.type_keys('m')
+    child.type_keys('=')
     helpers.wait_until(child, R .. [[.drawer.view.document.sections[3] ~= nil]])
 
     local left, right = left_lines(), right_lines()
@@ -1276,7 +1276,7 @@ T['all files']['m and | show every file on both sides'] = function()
         return item and item.path == 'c.txt'
     end)()]])
 
-    child.type_keys('m')
+    child.type_keys('=')
     helpers.wait_until(child, R .. [[.drawer.view.document.sections[2] == nil]])
     eq(left_lines()[1], 'c.txt')
     eq(#left_lines(), #right_lines())

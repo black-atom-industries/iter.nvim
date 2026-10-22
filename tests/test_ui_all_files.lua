@@ -58,14 +58,14 @@ local function git_out(args)
 end
 
 --- Open the review, wait for the first file's diff, then switch to all
---- files with `m` in the drawer.
+--- files with `=` in the drawer.
 local function open_all()
     child.cmd('Iter review')
     helpers.wait_until(
         child,
         R .. [[ ~= nil and ]] .. R .. [[.drawer.view:is_shown()]]
     )
-    child.type_keys('m')
+    child.type_keys('=')
     helpers.wait_until(child, R .. [[.drawer.view.document.sections[3] ~= nil]])
 end
 
@@ -204,14 +204,14 @@ T['mode']['m toggles back to the selected file'] = function()
     child.type_keys('k')
     helpers.wait_until(child, R .. [[.drawer:selected().path == 'c.txt']])
 
-    child.type_keys('m')
+    child.type_keys('=')
 
     eq(child.lua_get(R .. [[.drawer.view.document.sections[2] == nil]]), true)
     eq(pane_lines(), { 'c.txt', '@@ -1 +1 @@', 'c', 'cx' })
     eq(cursor_row(), 'del c')
     eq(statusline(), 'review · c.txt · 3/3')
 
-    child.type_keys('m')
+    child.type_keys('=')
     eq(cursor_row(), 'del c')
     eq(statusline(), 'review · all files · c.txt · 3/3')
 end
@@ -261,10 +261,10 @@ T['mode']['the key hint line names the other mode'] = function()
         child,
         R .. [[ ~= nil and ]] .. R .. [[.drawer.view:is_shown()]]
     )
-    eq(child.lua_get(footer):find('m all files', 1, true) ~= nil, true)
+    eq(child.lua_get(footer):find('= all files', 1, true) ~= nil, true)
 
-    child.type_keys('m')
-    eq(child.lua_get(footer):find('m one file', 1, true) ~= nil, true)
+    child.type_keys('=')
+    eq(child.lua_get(footer):find('= one file', 1, true) ~= nil, true)
 end
 
 T['mode']['stays for the review tab until it closes'] = function()
@@ -579,7 +579,7 @@ T['annotations']['<CR> in the column jumps to the side the preview showed'] = fu
         child,
         R .. [[ ~= nil and ]] .. R .. [[.drawer.view:is_shown()]]
     )
-    child.type_keys('m')
+    child.type_keys('=')
     helpers.wait_until(child, R .. [[.drawer.view.document.sections[4] ~= nil]])
 
     cursor_on('b1x', 'add')
@@ -693,7 +693,7 @@ T['viewport']['a large review decorates only around the lines in view'] = functi
         child,
         R .. [[ ~= nil and ]] .. R .. [[.drawer.view:is_shown()]]
     )
-    child.type_keys('m')
+    child.type_keys('=')
     helpers.wait_until(
         child,
         R .. [[.drawer.view.document.sections[40] ~= nil]]
@@ -841,7 +841,7 @@ T['collapse']['entering all files collapses reviewed files, not changed ones'] =
     -- One file alone stays whole.
     eq(pane_lines(), { 'a.txt', '@@ -1 +1 @@', 'a', 'ax' })
 
-    child.type_keys('m')
+    child.type_keys('=')
     helpers.wait_until(child, R .. [[.drawer.view.document.sections[3] ~= nil]])
 
     eq(child.lua_get(R .. ".reviewed['b.txt']"), 'changed')
@@ -903,7 +903,7 @@ T['collapse']['<CR> expands a file on both sides at once'] = function()
         child,
         R .. [[ ~= nil and ]] .. R .. [[.drawer.view:is_shown()]]
     )
-    child.type_keys('m')
+    child.type_keys('=')
     helpers.wait_until(child, R .. [[.drawer.view.document.sections[4] ~= nil]])
     eq(child.lua_get(collapsed(2)), true)
     eq(child.lua_get(collapsed(4)), true)
@@ -942,9 +942,9 @@ T['collapse']['m into all files collapses an expanded reviewed file again'] = fu
     child.type_keys('<CR>')
     helpers.wait_until(child, 'not ' .. collapsed(2))
 
-    child.type_keys('m')
+    child.type_keys('=')
     helpers.wait_until(child, R .. [[.drawer.view.document.sections[2] == nil]])
-    child.type_keys('m')
+    child.type_keys('=')
     helpers.wait_until(child, R .. [[.drawer.view.document.sections[3] ~= nil]])
 
     eq(child.lua_get(collapsed(2)), true)

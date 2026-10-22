@@ -537,7 +537,7 @@ T['keys']['m, | and - switch the preview from the drawer and the pane'] = functi
     local D = [[require('iter').drawer]]
     local sections = D .. [[.view.document.sections]]
 
-    child.type_keys('m')
+    child.type_keys('=')
     helpers.wait_until(child, '#' .. sections .. ' > 1')
     eq(child.lua_get(D .. [[.all_files]]), true)
 
@@ -553,7 +553,7 @@ T['keys']['m, | and - switch the preview from the drawer and the pane'] = functi
     eq(child.lua_get(D .. [[.view.layout]]), 'split')
     child.type_keys('-')
     eq(child.lua_get(D .. [[.view.layout]]), 'unified')
-    child.type_keys('m')
+    child.type_keys('=')
     eq(child.lua_get(D .. [[.all_files]]), false)
     eq(child.lua_get('#' .. sections), 1)
 end
@@ -1051,7 +1051,7 @@ end
 local HINT =
     's stage  u unstage  d discard  I ignore  <CR> open  r review  ? help'
 local HINT_WIDE =
-    's stage  u unstage  d discard  I ignore  <CR> open  r review  m all files  | split  ? help'
+    's stage  u unstage  d discard  I ignore  <CR> open  r review  = all files  | split  ? help'
 
 ---@param options string Lua table passed to setup()
 local function setup(options)
@@ -1088,7 +1088,7 @@ T['header']['the hint follows remapped keys'] = function()
 
     eq(
         chrome().hint,
-        'S stage  u unstage  I ignore  <CR> open  r review  m all files  | split  ? help'
+        'S stage  u unstage  I ignore  <CR> open  r review  = all files  | split  ? help'
     )
 end
 
@@ -1247,7 +1247,7 @@ T['help']['? lists the current keys and closes on q, ? and <Esc>'] = function()
             ' u      Unstage the file',
             ' I      Add the untracked file to .gitignore',
             ' r      Open the review tab',
-            ' m      Toggle one file or all files',
+            ' =      Toggle one file or all files',
             ' |      Show the diff side by side',
             ' -      Show the diff unified',
             ' q      Close',

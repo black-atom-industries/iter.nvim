@@ -27,7 +27,7 @@
 26|                                                                               │ m.txt       Needs a test               
 27| Staged (1)                                                                    │ m.txt:3     Why this change?           
 28| M ○ m.txt                                                                 [5] │ m.txt:4–6   Extract a helper           
-29| s stage  u unstage  d discard  I ignore  <CR> open  r reviewed  m all files  | split  ? help                           
+29| s stage  u unstage  d discard  I ignore  <CR> open  r reviewed  = all files  | split  ? help                           
 30|                                                                                                                        
 
 --|---------|---------|---------|---------|---------|---------|---------|---------|---------|---------|---------|---------|

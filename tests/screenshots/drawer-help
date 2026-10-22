@@ -9,7 +9,7 @@
 08|~               │ u      Unstage the file                     │                 
 09|~               │ I      Add the untracked file to .gitignore │                 
 10|~               │ r      Open the review tab                  │                 
-11|~               │ m      Toggle one file or all files         │                 
+11|~               │ =      Toggle one file or all files         │                 
 12|~               │ |      Show the diff side by side           │                 
 13|────────────────│ -      Show the diff unified                │─────────────────
 14| HEAD main      │ q      Close                                │       6 changes 
@@ -21,7 +21,7 @@
 20|                ╰─────────────────────────────────────────────╯                 
 21| Recent commits                                                                 
 22| 021b9c0  initial                                                            2h 
-23| S stage  u unstage  I ignore  <CR> open  r review  m all files  | split  ? help
+23| S stage  u unstage  I ignore  <CR> open  r review  = all files  | split  ? help
 24|                                                                                
 
 --|---------|---------|---------|---------|---------|---------|---------|---------|

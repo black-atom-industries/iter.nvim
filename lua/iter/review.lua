@@ -289,7 +289,7 @@ function Review:view_handlers()
 end
 
 --- On the header of a collapsed file, show the whole file until the next
---- `m` into all-files mode or `r` marks it reviewed again; elsewhere expand
+--- `=` into all-files mode or `r` marks it reviewed again; elsewhere expand
 --- hidden context.
 function Review:expand()
     local view = self.drawer.view

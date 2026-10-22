@@ -69,7 +69,7 @@ The review tab has the review drawer below and the diff above. iter draws the
 diff itself, with treesitter syntax, the changed words emphasized, old and new
 line numbers, and hidden context that `<CR>` expands.
 
-1. Read the file. `m` shows every file in one scroll, `|` shows old and new
+1. Read the file. `=` shows every file in one scroll, `|` shows old and new
    side by side. Both drawers keep the layout you picked last, for the whole
    Neovim session, or follow the window width with
    [`diff.layout = 'auto'`](#configuration).
@@ -255,7 +255,7 @@ review came from. On a review annotation it opens the editor.
 A file opened in the diff pane with `:edit` opens in the tab the review came
 from.
 
-**All files.** `m` shows every file in one buffer in drawer order, each under
+**All files.** `=` shows every file in one buffer in drawer order, each under
 its header, until the review tab closes.
 
 - A file on both sides shows twice.
@@ -263,7 +263,7 @@ its header, until the review tab closes.
 - `]f` and `[f` jump between headers. `]c`, `[c`, `]a` and `[a` run across
   files.
 - A reviewed file shows its header alone. `<CR>` on that header opens it until
-  `r` or `m` closes it again.
+  `r` or `=` closes it again.
 
 **Side by side.** `|` shows the old version on the left and the new version on
 the right, scrolling together. The old version is `HEAD` for a staged file and
@@ -275,7 +275,7 @@ the right, scrolling together. The old version is `HEAD` for a staged file and
 - `s` and `u` work from either window.
 - `-`, or closing the left window, goes back to one pane.
 
-The status drawer's diff takes `m`, `|` and `-` too.
+The status drawer's diff takes `=`, `|` and `-` too.
 
 **Annotation float.**
 
@@ -308,7 +308,7 @@ The status drawer (`drawer`):
 | `d`     | `discard`      | Discard changes in the file          |
 | `I`     | `ignore`       | Add the untracked file to .gitignore |
 | `r`     | `review`       | Open the review tab                  |
-| `m`     | `mode`         | Toggle one file or all files         |
+| `=`     | `mode`         | Toggle one file or all files         |
 | `\|`    | `split`        | Show the diff side by side           |
 | `-`     | `unified`      | Show the diff unified                |
 | `q`     | `close`        | Close                                |
@@ -329,7 +329,7 @@ The review drawer (`review_drawer`):
 | `I`     | `ignore`        | Add the untracked file to .gitignore     |
 | `r`     | `reviewed`      | Mark reviewed and go to the next file    |
 | `R`     | `unreviewed`    | Remove the reviewed mark                 |
-| `m`     | `mode`          | Toggle one file or all files             |
+| `=`     | `mode`          | Toggle one file or all files             |
 | `\|`    | `split`         | Show the diff side by side               |
 | `-`     | `unified`       | Show the diff unified                    |
 | `A`     | `annotate_file` | Annotate the file                        |
@@ -363,7 +363,7 @@ The diff pane (`diff`), in the review tab and above the status drawer:
 | `gf`    | `goto_file`       | Go to the line in the file                                      |
 | `r`     | `reviewed`        | Mark reviewed and go to the next file                           |
 | `R`     | `unreviewed`      | Remove the reviewed mark                                        |
-| `m`     | `mode`            | Toggle one file or all files                                    |
+| `=`     | `mode`            | Toggle one file or all files                                    |
 | `\|`    | `split`           | Show the diff side by side                                      |
 | `-`     | `unified`         | Show the diff unified                                           |
 | `y`     | `yank`            | Copy the review                                                 |

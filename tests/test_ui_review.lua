@@ -1561,7 +1561,7 @@ T['hunks']['? in the diff pane lists its keys'] = function()
                 ' gf     Go to the line in the file',
                 ' r      Mark reviewed and go to the next file',
                 ' R      Remove the reviewed mark',
-                ' m      Toggle one file or all files',
+                ' =      Toggle one file or all files',
                 ' |      Show the diff side by side',
                 ' -      Show the diff unified',
                 ' y      Copy the review',
@@ -3157,7 +3157,7 @@ T['uri']['buffer names are stable and carry no numbers'] = function()
     })
 
     child.lua('vim.api.nvim_set_current_win(' .. R .. '.diff_win)')
-    child.type_keys('m')
+    child.type_keys('=')
     eq(
         child.lua_get('vim.api.nvim_buf_get_name(' .. R .. '.drawer.view.buf)'),
         'iter://review#all'
