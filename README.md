@@ -28,6 +28,7 @@ iter does not commit, push or pull. Keep a Git plugin such as [mini.git](https:/
   - [Hand back](#hand-back)
 - [Install](#install)
 - [Quick start](#quick-start)
+- [Launch from the shell](#launch-from-the-shell)
 - [Annotations outside iter](#annotations-outside-iter)
 - [Reference](#reference)
   - [Status drawer](#status-drawer)
@@ -152,8 +153,10 @@ plugin manager must not delay it until the first `:Iter`.
 
 `?` lists the keys of the view you are in.
 
-From the shell, Neovim opens an [address](#addresses) like a file, so the review
-starts straight from the repository:
+## Launch from the shell
+
+Neovim opens an [address](#addresses) like a file, so the review starts
+straight from the repository:
 
 ```sh
 nvim iter://review                # the review
