@@ -173,6 +173,10 @@ alias review='nvim iter://review'
 The review opens in a second tab. The first stays empty for the files you
 open from the review, and `:qa` quits both.
 
+> [!IMPORTANT]
+> Load iter at startup, as both [Install](#install) setups do, so Neovim can
+> open its addresses from the shell.
+
 ## Annotations outside iter
 
 iter maps keys only in its own buffers. To annotate from any buffer of a file
