@@ -24,6 +24,7 @@ local SCHEMA = {
         word_diff = 'boolean',
         layout = 'string',
         split_breakpoint = 'integer',
+        wrap = 'boolean',
         args = 'table',
     },
     export = { intro = 'string' },

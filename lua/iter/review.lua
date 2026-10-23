@@ -276,6 +276,9 @@ function Review:view_handlers()
         unified = function()
             self.drawer:set_layout('unified')
         end,
+        wrap = function()
+            self.drawer:toggle_wrap()
+        end,
         yank = function()
             require('iter').yank()
         end,

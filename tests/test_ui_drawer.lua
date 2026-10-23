@@ -1250,6 +1250,7 @@ T['help']['? lists the current keys and closes on q, ? and <Esc>'] = function()
             ' =      Toggle one file or all files',
             ' |      Show the diff side by side',
             ' -      Show the diff unified',
+            ' gw     Toggle wrapping long lines',
             ' q      Close',
             ' ?      Show the keys',
             ' <C-d>  Scroll the diff down',

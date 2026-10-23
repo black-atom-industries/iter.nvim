@@ -1564,6 +1564,7 @@ T['hunks']['? in the diff pane lists its keys'] = function()
                 ' =      Toggle one file or all files',
                 ' |      Show the diff side by side',
                 ' -      Show the diff unified',
+                ' gw     Toggle wrapping long lines',
                 ' y      Copy the review',
                 ' <C-j>  Focus the drawer',
                 ' q      Close',

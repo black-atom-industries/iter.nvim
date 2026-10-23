@@ -336,6 +336,7 @@ The status drawer (`drawer`):
 | `=`     | `mode`         | Toggle one file or all files         |
 | `\|`    | `split`        | Show the diff side by side           |
 | `-`     | `unified`      | Show the diff unified                |
+| `gw`    | `wrap`         | Toggle wrapping long lines           |
 | `q`     | `close`        | Close                                |
 | `?`     | `help`         | Show the keys                        |
 | `<C-d>` | `scroll_down`  | Scroll the diff down                 |
@@ -357,6 +358,7 @@ The review drawer (`review_drawer`):
 | `=`     | `mode`          | Toggle one file or all files             |
 | `\|`    | `split`         | Show the diff side by side               |
 | `-`     | `unified`       | Show the diff unified                    |
+| `gw`    | `wrap`          | Toggle wrapping long lines               |
 | `A`     | `annotate_file` | Annotate the file                        |
 | `e`     | `edit`          | Edit the annotation                      |
 | `x`     | `delete`        | Delete the annotation                    |
@@ -391,6 +393,7 @@ The diff pane (`diff`), in the review tab and above the status drawer:
 | `=`     | `mode`            | Toggle one file or all files                                    |
 | `\|`    | `split`           | Show the diff side by side                                      |
 | `-`     | `unified`         | Show the diff unified                                           |
+| `gw`    | `wrap`            | Toggle wrapping long lines                                      |
 | `y`     | `yank`            | Copy the review                                                 |
 | `<C-j>` | `focus_drawer`    | Focus the drawer                                                |
 | `q`     | `close`           | Close                                                           |
@@ -426,6 +429,7 @@ require('iter').setup({
         word_diff = true,          -- highlight the changed words in changed lines
         layout = 'unified',        -- layout a session starts in: 'unified', 'split' or 'auto'
         split_breakpoint = 120,    -- diff width from which 'auto' shows the diff side by side
+        wrap = false,              -- wrap long lines a session starts with, unified layout only
         args = {},                 -- extra flags for every `git diff`, see below
     },
     export = {

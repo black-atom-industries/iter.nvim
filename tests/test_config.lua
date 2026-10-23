@@ -28,6 +28,7 @@ T['resolve()']['returns the defaults without options'] = function()
         word_diff = true,
         layout = 'unified',
         split_breakpoint = 120,
+        wrap = false,
         args = {},
     })
     eq(

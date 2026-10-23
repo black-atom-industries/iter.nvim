@@ -16,6 +16,7 @@
 ---@field word_diff? boolean
 ---@field layout? IterLayoutOption Diff layout a Neovim session starts in, 'auto' to follow the width
 ---@field split_breakpoint? integer Diff width from which 'auto' shows the diff side by side
+---@field wrap? boolean Whether a Neovim session starts with long lines wrapped in the unified layout
 ---@field args? string[] Extra flags for every `git diff`, see the README for the allowed ones
 
 ---@class IterExportOptions
@@ -49,7 +50,7 @@
 
 ---@class IterResolvedOptions
 ---@field drawer { height: number, zindex: integer, breakpoint: integer, wide_breakpoint: integer, commits: integer }
----@field diff { expand_step: integer, syntax_max_lines: integer, word_diff: boolean, layout: IterLayoutOption, split_breakpoint: integer, args: string[] }
+---@field diff { expand_step: integer, syntax_max_lines: integer, word_diff: boolean, layout: IterLayoutOption, split_breakpoint: integer, wrap: boolean, args: string[] }
 ---@field export { intro: string }
 ---@field refresh { poll_ms: integer }
 ---@field confirm { discard: boolean, ignore: boolean }

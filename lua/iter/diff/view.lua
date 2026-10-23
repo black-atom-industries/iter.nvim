@@ -20,6 +20,7 @@ local words = require('iter.diff.words')
 ---@field name? string buffer name, see `set_name`
 ---@field bufhidden? string 'bufhidden' of the buffer, `wipe` by default
 ---@field layout? IterDocLayout layout the view starts in, `unified` by default
+---@field wrap? boolean wrap long lines in the unified layout
 ---@field on_cursor? fun() after the cursor moved in a window of the view while it is the current one
 ---@field on_layout? fun() after the layout changed
 ---@field on_pane_replaced? fun(buf: integer, line: integer) after another buffer took the old side's window, with that buffer and its cursor line; the pane is back in a window of its own
@@ -41,6 +42,7 @@ local words = require('iter.diff.words')
 ---@class IterDiffView: IterDiffPane
 ---@field document IterDocument the files shown and the line of each row
 ---@field layout IterDocLayout layout of the documents the view shows
+---@field wrap boolean long lines wrap in the unified layout
 ---@field old? IterDiffPane the old side, in the split layout
 ---@field name? string buffer name, see `set_name`
 ---@field files IterFileDiff[] the files of the document, in order
@@ -98,6 +100,7 @@ local WINOPTS = {
     foldcolumn = '0',
     foldenable = false,
     wrap = false,
+    linebreak = false,
     list = false,
     spell = false,
     statuscolumn = "%!v:lua.require'iter.diff.view'.statuscolumn()",
@@ -154,6 +157,7 @@ function View.new(opts)
     vim.validate('opts.name', opts.name, 'string', true)
     vim.validate('opts.bufhidden', opts.bufhidden, 'string', true)
     vim.validate('opts.layout', opts.layout, 'string', true)
+    vim.validate('opts.wrap', opts.wrap, 'boolean', true)
     vim.validate('opts.on_cursor', opts.on_cursor, 'function', true)
     vim.validate('opts.on_layout', opts.on_layout, 'function', true)
     vim.validate(
@@ -170,6 +174,7 @@ function View.new(opts)
         win = opts.win,
         document = document.build({}),
         layout = opts.layout or 'unified',
+        wrap = opts.wrap or false,
         files = {},
         rows = {},
         headers = {},
@@ -549,6 +554,24 @@ function View:set_layout(layout)
     if self.on_layout ~= nil then
         self.on_layout()
     end
+end
+
+--- Set 'wrap' and 'linebreak' of the view window: on in the unified layout
+--- when the view wraps, off in the split layout, whose panes align by buffer
+--- line.
+function View:apply_wrap()
+    if self:is_shown() then
+        local wrap = self.wrap and self.old == nil
+
+        set_winopts(self.win, { wrap = wrap, linebreak = wrap })
+    end
+end
+
+--- Wrap long lines in the unified layout from now on, or stop.
+---@param wrap boolean
+function View:set_wrap(wrap)
+    self.wrap = wrap
+    self:apply_wrap()
 end
 
 ---@param rows (IterDiffRow|IterDocSeparator)[]
@@ -1493,6 +1516,8 @@ function View:show_document(doc)
     for _, pane in ipairs(self:panes()) do
         set_winopts(pane.win, self.old and SPLIT_WINOPTS or WINOPTS)
     end
+
+    self:apply_wrap()
 
     local lnum = before ~= nil
         and row ~= nil

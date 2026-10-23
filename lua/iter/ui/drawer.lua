@@ -108,6 +108,10 @@ local PREVIEW_DELAY_MS = 50
 -- `diff.split_breakpoint` drops the choice.
 ---@type IterDocLayout?
 local diff_layout = nil
+-- Whether diffs wrap, chosen last in any drawer and held for the session
+-- like the layout. Before any choice, a drawer starts with `diff.wrap`.
+---@type boolean?
+local diff_wrap = nil
 -- Width share of the stacked file columns beside the extras' columns.
 local FILES_WEIGHT = 3
 -- Diff rows that stand for a line of the file.
@@ -486,6 +490,15 @@ function Drawer.open(opts)
         view_handlers.unified = function()
             self:set_layout('unified')
         end
+        view_handlers.wrap = function()
+            self:toggle_wrap()
+        end
+    end
+
+    local wrap = diff_wrap
+
+    if wrap == nil then
+        wrap = opts.config.options.diff.wrap
     end
 
     -- The review's diff pane belongs to the view, so a buffer that takes its
@@ -501,6 +514,7 @@ function Drawer.open(opts)
         bufhidden = review and 'hide' or nil,
         -- Under 'auto' `self.auto` is set, so the option is a layout here.
         layout = diff_layout or self.auto or opts.config.options.diff.layout --[[@as IterDocLayout]],
+        wrap = wrap,
         on_cursor = function()
             self:follow_view()
         end,
@@ -602,6 +616,7 @@ function Drawer:make_handlers()
         unified = function()
             self:set_layout('unified')
         end,
+        wrap = act('toggle_wrap'),
         close = act('close'),
         help = act('toggle_help'),
         scroll_down = function()
@@ -1740,6 +1755,17 @@ end
 function Drawer:set_layout(doc_layout)
     diff_layout = doc_layout
     self.view:set_layout(doc_layout)
+end
+
+--- Wrap long lines of the diff, or stop, here and in every drawer opened
+--- after. The split layout shows them unwrapped either way.
+function Drawer:toggle_wrap()
+    diff_wrap = not self.view.wrap
+    self.view:set_wrap(diff_wrap)
+
+    if diff_wrap and self.view.layout == 'split' then
+        util.warn('Wrap shows in the unified layout')
+    end
 end
 
 --- Select the file under the cursor of the all-files view in the drawer,

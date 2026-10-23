@@ -1,0 +1,63 @@
+--|---------|---------|---------|---------|---------|---------|---------|---------|---------|---------|
+01| [No Name]  4 i//review                                                                            X
+02|          M f.lua                                             ○ not reviewed  +1 −1 · 0 annotations 
+03|          @@ -1,6 +1,6 @@                                                                           
+04|  1   1   local v = 1                                                                               
+05|  2   2   local v = 2                                                                               
+06|  3     - local v = 3                                                                               
+07|      3 + local v = word1 + word2 + word3 + word4 + word5 + word6 + word7 + word8 + word9 +         
+08|          word10 + word11 + word12 + word13 + word14 + word15 + word16 + word17 + word18 + word19 + 
+09|          word20 + word21 + word22 + word23 + word24 + word25 + word26 + word27 + word28 + word29 + 
+10|          word30                                                                                    
+11|  4   4   local v = 4                                                                               
+12|  5   5   local v = 5                                                                               
+13|  6   6   local v = 6                                                                               
+14|          ··· 34 unchanged lines ···  <CR> expand                                                   
+15|~                                                                                                   
+16|~                                                                                                   
+17|~                                                                                                   
+18|~                                                                                                   
+19|~                                                                                                   
+20|~                                                                                                   
+21|iter://review/f.lua [-]                                                                             
+22| HEAD main                                                                                   1 file 
+23| Unstaged (1)                                                     │ Annotations (0)                 
+24| M ○ f.lua                                                        │ reviewed ▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱ 0 of 1 
+25|                                                                  │                                 
+26| Staged (0)                                                       │                                 
+27|                                                                                                    
+28|                                                                                                    
+29| s stage  u unstage  d discard  I ignore  <CR> open  r reviewed  = all files  | split  ? help       
+30|                                                                                                    
+
+--|---------|---------|---------|---------|---------|---------|---------|---------|---------|---------|
+01|0000000000012111111111110000000000000000000000000000000000000000000000000000000000000000000000000000
+02|3333333333333333333333333333333333333333333333333333333333333344444444444444444444444444444444444444
+03|5555555555666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666
+04|5555555555222227878787777777777777777777777777777777777777777777777777777777777777777777777777777777
+05|5555555555222227878787777777777777777777777777777777777777777777777777777777777777777777777777777777
+06|9999999999:::::;<;<;<;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+07|==========>>>>>?@?@?@@@@@?@?@@@@@?@?@@@@@?@?@@@@@?@?@@@@@?@?@@@@@?@?@@@@@?@?@@@@@?@?@@@@@?@?????????
+08|5555555555@@@@@@?@?@@@@@@?@?@@@@@@?@?@@@@@@?@?@@@@@@?@?@@@@@@?@?@@@@@@?@?@@@@@@?@?@@@@@@?@?@@@@@@?@?
+09|5555555555@@@@@@?@?@@@@@@?@?@@@@@@?@?@@@@@@?@?@@@@@@?@?@@@@@@?@?@@@@@@?@?@@@@@@?@?@@@@@@?@?@@@@@@?@?
+10|5555555555@@@@@@????????????????????????????????????????????????????????????????????????????????????
+11|5555555555222227878787777777777777777777777777777777777777777777777777777777777777777777777777777777
+12|5555555555222227878787777777777777777777777777777777777777777777777777777777777777777777777777777777
+13|5555555555222227878787777777777777777777777777777777777777777777777777777777777777777777777777777777
+14|5555555555AAAAAAAAAAAAAAAAAAAAAAAAAA6666666666666AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+15|5555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555
+16|5555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555
+17|5555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555
+18|5555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555
+19|5555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555
+20|5555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555
+21|0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+22|BCCCCCDDDDCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+23|EEEEEEEEEEEEEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEEEEEEEEEEEEEEEEFFFFFFFFFFFFFFFFF
+24|GHGIGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGFJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJF
+25|FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+26|EEEEEEEEEEEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+27|KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
+28|KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
+29|FL66666666L6666666666L6666666666L666666666LLLL6666666L66666666666L666666666666L66666666L66666FFFFFFF
+30|MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM

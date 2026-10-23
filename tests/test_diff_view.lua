@@ -412,6 +412,35 @@ T['borrowed window']['a split of the view drops them on another buffer'] = funct
     end
 end
 
+T['wrap'] = new_set()
+
+T['wrap']['opts.wrap wraps the window'] = function()
+    open_view(nil, '{ wrap = true }')
+
+    eq(child.wo.wrap, true)
+end
+
+T['wrap']['set_wrap toggles the window'] = function()
+    open_view()
+    eq(child.wo.wrap, false)
+
+    child.lua('_G.view:set_wrap(true)')
+    eq(child.wo.wrap, true)
+    eq(child.wo.linebreak, true)
+
+    child.lua('_G.view:set_wrap(false)')
+    eq(child.wo.wrap, false)
+end
+
+T['wrap']['the borrowed window gets its own wrap back'] = function()
+    local original = borrow_user_window()
+
+    child.lua('_G.view:set_wrap(true)')
+    child.lua('_G.view:close()')
+
+    eq(child.lua_get(GET_WINOPTS), original)
+end
+
 T['syntax and words'] = new_set()
 
 T['syntax and words']['del rows read the old version, the rest the new'] = function()

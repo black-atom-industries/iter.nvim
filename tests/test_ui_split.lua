@@ -1282,4 +1282,87 @@ T['all files']['m and | show every file on both sides'] = function()
     eq(#left_lines(), #right_lines())
 end
 
+T['wrap'] = new_set()
+
+--- Wrap of the diff window and, in the split layout, of the old side's.
+---@return boolean[]
+local function wraps()
+    return child.lua_get([[(function()
+        local v = ]] .. R .. [[.drawer.view
+        local out = { vim.wo[v.win].wrap }
+        if v.old ~= nil then
+            table.insert(out, vim.wo[v.old.win].wrap)
+        end
+        return out
+    end)()]])
+end
+
+--- Make line 3 of `f.lua` longer than the diff window.
+local function long_line()
+    local lines = numbered('local v = ', 1, 40)
+    lines[3] = 'local v = ' .. table.concat(numbered('word', 1, 30), ' + ')
+    helpers.write_file(vim.fs.joinpath(repo, 'f.lua'), lines)
+end
+
+T['wrap']['gw wraps the unified layout only'] = function()
+    open_review()
+    child.lua([[vim.api.nvim_set_current_win(]] .. R .. [[.diff_win)]])
+
+    child.type_keys('gw')
+    eq(wraps(), { true })
+
+    child.type_keys('|')
+    helpers.wait_until(child, R .. [[.drawer.view.old ~= nil]])
+    eq(wraps(), { false, false })
+
+    child.type_keys('-')
+    helpers.wait_until(child, R .. [[.drawer.view.old == nil]])
+    eq(wraps(), { true })
+
+    child.type_keys('gw')
+    eq(wraps(), { false })
+end
+
+T['wrap']['gw in the split layout warns and wraps back in unified'] = function()
+    open_review()
+    split()
+
+    child.type_keys('gw')
+    eq(wraps(), { false, false })
+    eq(
+        child.lua_get([[_G.notes[#_G.notes][1] ]]),
+        '[iter] Wrap shows in the unified layout'
+    )
+
+    child.type_keys('-')
+    helpers.wait_until(child, R .. [[.drawer.view.old == nil]])
+    eq(wraps(), { true })
+end
+
+T['wrap']['gw in the drawer wraps the diff'] = function()
+    open_review()
+
+    child.type_keys('gw')
+
+    eq(wraps(), { true })
+end
+
+T['wrap']['the next review starts wrapped'] = function()
+    open_review()
+    child.type_keys('gw')
+    child.lua(R .. [[:close()]])
+
+    open_review()
+
+    eq(wraps(), { true })
+end
+
+T['wrap']['screenshot of a wrapped line'] = function()
+    long_line()
+    open_review()
+    child.type_keys('gw')
+
+    helpers.expect_screenshot(child, 'review-wrap')
+end
+
 return T
