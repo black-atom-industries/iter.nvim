@@ -152,6 +152,24 @@ plugin manager must not delay it until the first `:Iter`.
 
 `?` lists the keys of the view you are in.
 
+From the shell, Neovim opens an [address](#addresses) like a file, so the review
+starts straight from the repository:
+
+```sh
+nvim iter://review                # the review
+nvim 'iter://review#all'          # in all-files mode
+nvim 'iter://review#annotations'  # on the Annotations column
+```
+
+An alias makes it a command of its own:
+
+```sh
+alias review='nvim iter://review'
+```
+
+The review opens in a second tab. The first stays empty for the files you
+open from the review, and `:qa` quits both.
+
 ## Annotations outside iter
 
 iter maps keys only in its own buffers. To annotate from any buffer of a file
