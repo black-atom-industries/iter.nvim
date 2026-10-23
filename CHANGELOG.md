@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.6.0](https://github.com/black-atom-industries/iter.nvim/compare/v0.5.0...v0.6.0) (2026-10-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* the default key of `mode` is `=`, it was `m`. Set `keys.drawer.mode`, `keys.review_drawer.mode` and `keys.diff.mode` to 'm' to keep it.
+
+### Features
+
+* = toggles one file or all files ([cecdcd6](https://github.com/black-atom-industries/iter.nvim/commit/cecdcd6c6b834dd43b2572a4b3d6627dc978cb3e))
+* **diff:** gw wraps long lines in the unified layout ([2afa271](https://github.com/black-atom-industries/iter.nvim/commit/2afa271a159c46126368ec44c46111cd86b9117d))
+
+
+### Bug Fixes
+
+* **diff:** side-by-side panes stay aligned under scrolloff ([7f4abe9](https://github.com/black-atom-industries/iter.nvim/commit/7f4abe902e56e3dee6b604d22999cac0e8dfe289))
+
+
+### Documentation
+
+* give launching from the shell its own section ([01942df](https://github.com/black-atom-industries/iter.nvim/commit/01942df4b90fb556580b2380bc68c4fb9caf6f3c))
+* link mini.git in the README ([1c55c76](https://github.com/black-atom-industries/iter.nvim/commit/1c55c767e070d3adc2928eb3b87f72486e599246))
+* note that launching from the shell needs iter loaded at startup ([4cd64c0](https://github.com/black-atom-industries/iter.nvim/commit/4cd64c0d53badb2b779775d6c7906e0fbaa25abc))
+* open the review straight from the shell ([e6c669f](https://github.com/black-atom-industries/iter.nvim/commit/e6c669f4f3ab7b998406117249a469252c846107))
+
 ## [0.5.0](https://github.com/black-atom-industries/iter.nvim/compare/v0.4.0...v0.5.0) (2026-10-21)
 
 ### Highlights
