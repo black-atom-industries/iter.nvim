@@ -236,8 +236,9 @@ local function annotation_scope()
 end
 
 --- Copy the annotations of the repository as text for an agent, then ask once
---- whether to clear them.
-function M.yank()
+--- whether to clear them. With `opts.ids`, copy only those annotations.
+---@param opts? { ids?: string[] }
+function M.yank(opts)
     local root, order = annotation_scope()
 
     if root == '' then
@@ -249,6 +250,7 @@ function M.yank()
         root = root,
         config = M.config,
         order = order,
+        ids = opts ~= nil and opts.ids or nil,
         on_clear = refresh_annotations,
     })
 end

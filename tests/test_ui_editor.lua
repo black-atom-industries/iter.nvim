@@ -792,18 +792,18 @@ T['edit and delete']['e without an annotation warns'] = function()
     eq(notes(), { '[iter] No annotation on this line' })
 end
 
-T['edit and delete']['x deletes after the confirm'] = function()
+T['edit and delete']['d deletes after the confirm'] = function()
     seed_line_annotation()
     open_review()
     diff_cursor('l4')
 
     child.lua('_G.confirm_answer = 2')
-    child.type_keys('x')
+    child.type_keys('d')
     eq(#stored(), 1)
     eq(child.lua_get('_G.confirms'), { 'Delete the annotation?\nold body' })
 
     child.lua('_G.confirm_answer = 1')
-    child.type_keys('x')
+    child.type_keys('d')
     eq(#stored(), 0)
     helpers.wait_until(child, [[#]] .. R .. [[.drawer.view.marks == 0]])
 end
@@ -844,14 +844,14 @@ T['edit and delete']['e in the review redraws the file buffer'] = function()
     eq(buffer_mark_texts(), { '▎ 󰆉 new body' })
 end
 
-T['edit and delete']['x in the review clears the mark of the file buffer'] = function()
+T['edit and delete']['d in the review clears the mark of the file buffer'] = function()
     seed_line_annotation()
     child.cmd('edit m.txt')
     eq(buffer_mark_texts(), { '▎ 󰆉 old body' })
 
     open_review()
     diff_cursor('l4')
-    child.type_keys('x')
+    child.type_keys('d')
 
     eq(#stored(), 0)
     eq(buffer_mark_texts(), {})

@@ -27,7 +27,7 @@
 26| Staged (1)                                                                    │ m.txt       Needs a test               
 27| M ○ m.txt                                                                 [5] │ m.txt:3     Why this change?           
 28|                                                                               │ m.txt:4–6   Extract a helper           
-29| <CR> jump  e edit  x delete  y yank  h files  ? help                                                                   
+29| <CR> jump  e edit  d delete  y yank  h files  ? help                                                                   
 30|                                                                                                                        
 
 --|---------|---------|---------|---------|---------|---------|---------|---------|---------|---------|---------|---------|

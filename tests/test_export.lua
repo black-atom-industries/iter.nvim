@@ -371,10 +371,10 @@ local function expect_copied()
     )
 end
 
-T['yank']['y in the drawer copies and clears on y'] = function()
+T['yank']['Y in the drawer copies all and clears on y'] = function()
     seed()
     open_review()
-    child.type_keys('y')
+    child.type_keys('Y')
     child.type_keys('y')
     helpers.wait_until(
         child,
@@ -387,7 +387,7 @@ end
 T['yank']['n keeps the annotations'] = function()
     seed()
     open_review()
-    child.type_keys('y')
+    child.type_keys('Y')
     child.type_keys('n')
     helpers.wait_until(child, [[#_G.echoes == 1 and vim.fn.mode() == 'n']])
     expect_copied()
@@ -397,7 +397,7 @@ end
 T['yank']['Enter keeps the annotations'] = function()
     seed()
     open_review()
-    child.type_keys('y')
+    child.type_keys('Y')
     child.type_keys('<CR>')
     helpers.wait_until(child, [[#_G.echoes == 1 and vim.fn.mode() == 'n']])
     eq(stored_count(), 2)
@@ -406,14 +406,14 @@ end
 T['yank']['Esc keeps the annotations'] = function()
     seed()
     open_review()
-    child.type_keys('y')
+    child.type_keys('Y')
     child.type_keys('<Esc>')
     helpers.wait_until(child, [[#_G.echoes == 1 and vim.fn.mode() == 'n']])
     expect_copied()
     eq(stored_count(), 2)
 end
 
-T['yank']['y in the diff pane works'] = function()
+T['yank']['Y in the diff pane works'] = function()
     seed()
     open_review()
     child.type_keys('<CR>')
@@ -421,7 +421,7 @@ T['yank']['y in the diff pane works'] = function()
         child,
         [[vim.api.nvim_get_current_win() == ]] .. R .. [[.diff_win]]
     )
-    child.type_keys('y')
+    child.type_keys('Y')
     child.type_keys('y')
     helpers.wait_until(
         child,
@@ -433,7 +433,7 @@ end
 T['yank']['clearing refreshes the review'] = function()
     seed()
     open_review()
-    child.type_keys('y')
+    child.type_keys('Y')
     child.type_keys('y')
     helpers.wait_until(
         child,
@@ -497,6 +497,66 @@ T['yank']['copies and clears annotations queued under a held lock'] = function()
     child.lua([[
         vim.uv.fs_unlink(require('iter.store').path(vim.fn.getcwd()) .. '.lock')
     ]])
+end
+
+--- The id of the stored annotation with `body`.
+---@param body string
+---@return string
+local function id_of(body)
+    return child.lua_get(
+        [[(function(body)
+            for _, a in ipairs(require('iter.store').load(vim.fn.getcwd()).annotations) do
+                if a.body == body then
+                    return a.id
+                end
+            end
+        end)(...)]],
+        { body }
+    )
+end
+
+T['yank']['ids copies only those annotations and asks about one'] = function()
+    seed()
+    child.lua_notify(
+        [[require('iter').yank({ ids = { ... } })]],
+        { id_of('Why this?') }
+    )
+    helpers.wait_until(child, [[#_G.echoes == 1]])
+    eq(child.lua_get('_G.echoes'), { 'Copied 1 annotation. Clear it? [y/N]' })
+    eq(child.fn.getreg('+'):find('Why this?', 1, true) ~= nil, true)
+    eq(child.fn.getreg('+'):find('Overall fine', 1, true), nil)
+    child.type_keys('n')
+    helpers.wait_until(child, [[vim.fn.mode() == 'n']])
+    eq(stored_count(), 2)
+end
+
+T['yank']['ids removes only those annotations on y'] = function()
+    seed()
+    child.lua_notify(
+        [[require('iter').yank({ ids = { ... } })]],
+        { id_of('Why this?') }
+    )
+    helpers.wait_until(child, [[#_G.echoes == 1]])
+    child.type_keys('y')
+    helpers.wait_until(
+        child,
+        [[#require('iter.store').load(vim.fn.getcwd()).annotations == 1]]
+    )
+    eq(
+        child.lua_get(
+            [[require('iter.store').load(vim.fn.getcwd()).annotations[1].body]]
+        ),
+        'Overall fine'
+    )
+end
+
+T['yank']['ids that match nothing warn'] = function()
+    seed()
+    child.lua([[require('iter').yank({ ids = {} })]])
+    eq(notes(), { '[iter] No annotations to copy' })
+    eq(child.lua_get('_G.echoes'), {})
+    eq(child.fn.getreg('"'), '')
+    eq(stored_count(), 2)
 end
 
 T['yank']['the API works without a review'] = function()

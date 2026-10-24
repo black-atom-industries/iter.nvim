@@ -128,9 +128,10 @@ local function ask_clear(n)
     vim.api.nvim_echo({
         {
             string.format(
-                'Copied %d annotation%s. Clear them? [y/N]',
+                'Copied %d annotation%s. %s [y/N]',
                 n,
-                n == 1 and '' or 's'
+                n == 1 and '' or 's',
+                n == 1 and 'Clear it?' or 'Clear them?'
             ),
         },
     }, false, {})
@@ -148,34 +149,48 @@ end
 ---@field root string
 ---@field config IterConfig
 ---@field order? string[] file paths in drawer order
+---@field ids? string[] copy only these annotations; all when omitted
 ---@field on_clear? fun() after the exported annotations are removed
 
---- Copy the stored annotations of `opts.root` and ask once whether to remove
---- them. Only the annotations that were copied are removed.
+--- Copy the stored annotations of `opts.root`, or those of `opts.ids`, and ask
+--- once whether to remove them. Only the annotations that were copied are
+--- removed.
 ---@param opts IterYankOptions
 function M.yank(opts)
     vim.validate('opts', opts, 'table')
 
-    local data = store.cached(opts.root, true)
+    local annotations = store.cached(opts.root, true).annotations
 
-    if #data.annotations == 0 then
+    if opts.ids ~= nil then
+        local wanted = {}
+
+        for _, id in ipairs(opts.ids) do
+            wanted[id] = true
+        end
+
+        annotations = vim.tbl_filter(function(annotation)
+            return wanted[annotation.id] == true
+        end, annotations)
+    end
+
+    if #annotations == 0 then
         util.warn('No annotations to copy')
         return
     end
 
-    copy(M.text(data.annotations, {
+    copy(M.text(annotations, {
         intro = opts.config.options.export.intro,
         order = opts.order,
         lines_of = list.reader(opts.root),
     }))
 
-    if not ask_clear(#data.annotations) then
+    if not ask_clear(#annotations) then
         return
     end
 
     local ids = vim.tbl_map(function(annotation)
         return annotation.id
-    end, data.annotations)
+    end, annotations)
     local _, remove_err = store.remove_annotations(opts.root, ids)
 
     if remove_err ~= nil then

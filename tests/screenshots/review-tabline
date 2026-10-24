@@ -21,7 +21,7 @@
 20| M ○ b.txt                                                                     │                                        
 21| ? ○ c.txt                                                                     │                                        
 22| ? ○ d/x.txt                                                                   │                                        
-23| <CR> jump  e edit  x delete  y yank  h files  ? help                                                                   
+23| <CR> jump  e edit  d delete  y yank  h files  ? help                                                                   
 24|                                                                                                                        
 
 --|---------|---------|---------|---------|---------|---------|---------|---------|---------|---------|---------|---------|

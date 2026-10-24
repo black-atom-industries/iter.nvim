@@ -67,7 +67,7 @@ local ANNOTATIONS = 'annotations'
 local ANNOTATION_HINTS = {
     { 'open', 'jump' },
     { 'edit', 'edit' },
-    { 'delete', 'delete' },
+    { 'discard', 'delete' },
     { 'yank', 'yank' },
     { 'column_left', 'files' },
     { 'help', 'help' },
@@ -280,6 +280,9 @@ function Review:view_handlers()
             self.drawer:toggle_wrap()
         end,
         yank = function()
+            self:yank_under_cursor()
+        end,
+        yank_all = function()
             require('iter').yank()
         end,
         close = function()
@@ -1123,9 +1126,17 @@ function Review:drawer_handlers(drawer, handlers)
     handlers.edit = on_annotation(function(item)
         self:open_editor(item.annotation)
     end)
-    handlers.delete = on_annotation(function(item)
+    local discard = handlers.discard
+    local delete = on_annotation(function(item)
         self:delete(item.annotation)
     end)
+    handlers.discard = function()
+        if drawer.column == ANNOTATIONS then
+            delete()
+        else
+            discard()
+        end
+    end
     handlers.review = nil
     handlers.annotate_file = on_file(function(path)
         self:annotate_file(path)
@@ -1137,6 +1148,21 @@ function Review:drawer_handlers(drawer, handlers)
         self:unmark_reviewed(path)
     end)
     handlers.yank = function()
+        local item = drawer:item()
+
+        if drawer.column == ANNOTATIONS then
+            if item ~= nil and item.annotation ~= nil then
+                require('iter').yank({ ids = { item.annotation.id } })
+                return
+            end
+        elseif item ~= nil and not item.dir then
+            self:yank_file(item)
+            return
+        end
+
+        require('iter').yank()
+    end
+    handlers.yank_all = function()
         require('iter').yank()
     end
     handlers.mode = function()
@@ -1718,10 +1744,46 @@ function Review:annotate_file(path)
     })
 end
 
+--- Copy the annotations of `file`, matched by its path or its original path.
+---@param file IterChange|IterFileDiff
+function Review:yank_file(file)
+    local ids = {}
+
+    for _, annotation in ipairs(self.annotations) do
+        local path = annotation.anchor.path
+
+        if path ~= nil and (path == file.path or path == file.orig_path) then
+            table.insert(ids, annotation.id)
+        end
+    end
+
+    require('iter').yank({ ids = ids })
+end
+
+--- Copy the annotation under the cursor of the diff pane, else the notes of
+--- the shown file.
+function Review:yank_under_cursor()
+    local annotation = self:find_annotation_under_cursor()
+
+    if annotation ~= nil then
+        require('iter').yank({ ids = { annotation.id } })
+        return
+    end
+
+    local file = self:shown_file()
+
+    if file == nil then
+        util.warn('No annotation or file under the cursor')
+        return
+    end
+
+    self:yank_file(file)
+end
+
 --- The first annotation placed below the cursor row of the diff pane, in
 --- the split layout one shown on the side of the current window first.
 ---@return IterAnnotation?
-function Review:annotation_under_cursor()
+function Review:find_annotation_under_cursor()
     local view = self.drawer.view
 
     if not view:is_shown() then
@@ -1745,12 +1807,19 @@ function Review:annotation_under_cursor()
         end
     end
 
-    if found ~= nil then
-        return found
+    return found
+end
+
+--- `find_annotation_under_cursor` that warns when there is none.
+---@return IterAnnotation?
+function Review:annotation_under_cursor()
+    local annotation = self:find_annotation_under_cursor()
+
+    if annotation == nil then
+        util.warn('No annotation on this line')
     end
 
-    util.warn('No annotation on this line')
-    return nil
+    return annotation
 end
 
 function Review:edit_annotation()

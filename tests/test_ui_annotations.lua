@@ -442,7 +442,7 @@ T['column']['l reaches the column, the progress row is skipped'] = function()
     open_column()
 
     eq(selected(), 'Rename the variable')
-    eq(footer(), '<CR> jump  e edit  x delete  y yank  h files  ? help')
+    eq(footer(), '<CR> jump  e edit  d delete  y yank  h files  ? help')
 
     child.type_keys('k')
     eq(selected(), 'Rename the variable')
@@ -500,7 +500,7 @@ T['column']['without annotations the column shows the progress only'] = function
     eq(child.lua_get(R .. '.drawer.column'), 'annotations')
     eq(selected(), vim.NIL)
 
-    child.type_keys('e', 'x', '<CR>')
+    child.type_keys('e', 'd', '<CR>')
     eq(notes(), {
         '[iter] No annotation selected',
         '[iter] No annotation selected',
@@ -713,6 +713,165 @@ T['preview']['a staged-only change of a file in both columns shows the staged di
     )
 end
 
+T['yank'] = new_set({
+    hooks = {
+        pre_case = function()
+            child.lua([[
+                _G.clip = {}
+                vim.g.clipboard = {
+                    name = 'test',
+                    copy = {
+                        ['+'] = function(lines) _G.clip = lines end,
+                        ['*'] = function(lines) _G.clip = lines end,
+                    },
+                    paste = {
+                        ['+'] = function() return { _G.clip, 'l' } end,
+                        ['*'] = function() return { _G.clip, 'l' } end,
+                    },
+                }
+                _G.echoes = {}
+                local echo = vim.api.nvim_echo
+                vim.api.nvim_echo = function(chunks, ...)
+                    table.insert(_G.echoes, chunks[1][1])
+                    return echo(chunks, ...)
+                end
+            ]])
+        end,
+    },
+})
+
+---@param text string
+---@return boolean
+local function copied(text)
+    return child.fn.getreg('+'):find(text, 1, true) ~= nil
+end
+
+---@return string[]
+local function stored_bodies()
+    return vim.tbl_map(function(annotation)
+        return annotation.body
+    end, stored())
+end
+
+T['yank']['y on an Annotations row copies that annotation'] = function()
+    open_column()
+    down(2)
+    child.type_keys('y')
+    helpers.wait_until(child, '#_G.echoes == 1')
+
+    eq(child.lua_get('_G.echoes'), { 'Copied 1 annotation. Clear it? [y/N]' })
+    eq(copied('Why this change?'), true)
+    eq(copied('Rename the variable'), false)
+
+    child.type_keys('y')
+    helpers.wait_until(child, '#' .. R .. '.annotations == 7')
+    eq(vim.tbl_contains(stored_bodies(), 'Why this change?'), false)
+end
+
+T['yank']['y on a file row copies the annotations of that file'] = function()
+    open_review()
+    child.type_keys('y')
+    helpers.wait_until(child, '#_G.echoes == 1')
+
+    eq(child.lua_get('_G.echoes'), { 'Copied 1 annotation. Clear it? [y/N]' })
+    eq(copied('Rename the variable'), true)
+    eq(copied('Why this change?'), false)
+    eq(copied('Overall looks good'), false)
+
+    child.type_keys('n')
+    helpers.wait_until(child, [[vim.fn.mode() == 'n']])
+    eq(#stored(), 8)
+end
+
+T['yank']['y on a renamed file row copies the annotations of its old path'] = function()
+    helpers.git(repo, { 'mv', 'c.txt', 'r.txt' })
+    open_review()
+    child.lua([[
+        local d = require('iter').current_review.drawer
+        for lnum, row in ipairs(d.rows) do
+            if row.staged ~= nil and row.staged.path == 'r.txt' then
+                vim.api.nvim_win_set_cursor(d.win, { lnum, 0 })
+                d:select(lnum, 'staged')
+                return
+            end
+        end
+        error('no row for r.txt')
+    ]])
+    eq(child.lua_get(R .. '.drawer:selected().orig_path'), 'c.txt')
+    child.type_keys('y')
+    helpers.wait_until(child, '#_G.echoes == 1')
+
+    eq(child.lua_get('_G.echoes'), { 'Copied 1 annotation. Clear it? [y/N]' })
+    eq(copied('Not in the changes'), true)
+    eq(copied('Rename the variable'), false)
+end
+
+T['yank']['Y copies all annotations and clears them on y'] = function()
+    open_column()
+    child.type_keys('Y')
+    helpers.wait_until(child, '#_G.echoes == 1')
+
+    eq(
+        child.lua_get('_G.echoes'),
+        { 'Copied 8 annotations. Clear them? [y/N]' }
+    )
+    eq(copied('Overall looks good'), true)
+    eq(copied('Rename the variable'), true)
+
+    child.type_keys('y')
+    helpers.wait_until(child, '#' .. R .. '.annotations == 0')
+    eq(#stored(), 0)
+end
+
+T['yank']['y in the diff pane copies the annotation under the cursor'] = function()
+    open_column()
+    down(2)
+    child.type_keys('<CR>')
+    wait_focus('Why this change?')
+    child.type_keys('y')
+    helpers.wait_until(child, '#_G.echoes == 1')
+
+    eq(child.lua_get('_G.echoes'), { 'Copied 1 annotation. Clear it? [y/N]' })
+    eq(copied('Why this change?'), true)
+    eq(copied('Extract a helper'), false)
+end
+
+T['yank']['y in the diff pane without an annotation copies the file'] = function()
+    open_review()
+    child.type_keys('<CR>')
+    child.lua([[vim.api.nvim_win_set_cursor(]] .. R .. [[.diff_win, { 1, 0 })]])
+    child.type_keys('y')
+    helpers.wait_until(child, '#_G.echoes == 1')
+
+    eq(child.lua_get('_G.echoes'), { 'Copied 1 annotation. Clear it? [y/N]' })
+    eq(copied('Rename the variable'), true)
+end
+
+T['yank']['Y in the diff pane copies all annotations'] = function()
+    open_review()
+    child.type_keys('<CR>')
+    child.type_keys('Y')
+    helpers.wait_until(child, '#_G.echoes == 1')
+
+    eq(
+        child.lua_get('_G.echoes'),
+        { 'Copied 8 annotations. Clear them? [y/N]' }
+    )
+    child.type_keys('n')
+    helpers.wait_until(child, [[vim.fn.mode() == 'n']])
+end
+
+T['yank']['d in the diff pane deletes the annotation under the cursor'] = function()
+    open_column()
+    down(2)
+    child.type_keys('<CR>')
+    wait_focus('Why this change?')
+    child.type_keys('d')
+    helpers.wait_until(child, '#' .. R .. '.annotations == 7')
+
+    eq(vim.tbl_contains(stored_bodies(), 'Why this change?'), false)
+end
+
 T['keys'] = new_set()
 
 T['keys']['<CR> jumps into the diff at the annotation'] = function()
@@ -784,10 +943,10 @@ T['keys']['e edits the annotation in the float'] = function()
     eq(column()[5], 'm.txt:3     Why this change? Please ex…')
 end
 
-T['keys']['x keeps the annotation when the confirm is declined'] = function()
+T['keys']['d keeps the annotation when the confirm is declined'] = function()
     open_column()
     child.lua([[_G.confirm_answer = 2]])
-    child.type_keys('x')
+    child.type_keys('d')
 
     eq(
         child.lua_get([[_G.confirms]]),
@@ -797,11 +956,11 @@ T['keys']['x keeps the annotation when the confirm is declined'] = function()
     eq(column(), LISTING)
 end
 
-T['keys']['x deletes and the next row takes the selection'] = function()
+T['keys']['d deletes and the next row takes the selection'] = function()
     open_column()
     down(2)
     wait_focus('Why this change?')
-    child.type_keys('x')
+    child.type_keys('d')
 
     helpers.wait_until(child, '#' .. R .. '.annotations == 7')
     eq(#stored(), 7)
@@ -818,7 +977,7 @@ T['keys']['deleting the last annotation leaves the progress row selected'] = fun
         { ANNOTATIONS[1] }
     )
     open_column()
-    child.type_keys('x')
+    child.type_keys('d')
 
     helpers.wait_until(child, '#' .. R .. '.annotations == 0')
     eq(column(), {
