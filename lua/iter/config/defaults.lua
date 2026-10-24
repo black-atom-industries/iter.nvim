@@ -26,6 +26,10 @@ M.options = {
         intro = 'I reviewed your changes and have these annotations.\n'
             .. 'Please address them.',
     },
+    annotate = {
+        side = 'right',
+        width = 40,
+    },
     refresh = {
         poll_ms = 2000,
     },
@@ -111,6 +115,15 @@ M.keys = {
         yank = 'y',
         yank_all = 'Y',
         focus_drawer = '<C-j>',
+        close = 'q',
+        help = '?',
+    },
+    annotate = {
+        jump = '<CR>',
+        yank = 'y',
+        yank_all = 'Y',
+        delete = 'd',
+        edit = 'e',
         close = 'q',
         help = '?',
     },

@@ -384,7 +384,10 @@ T['open'][':Iter status inside the review focuses its drawer'] = function()
 end
 
 T['open'][':Iter completes review'] = function()
-    eq(child.fn.getcompletion('Iter ', 'cmdline'), { 'review', 'status' })
+    eq(
+        child.fn.getcompletion('Iter ', 'cmdline'),
+        { 'annotate', 'review', 'status' }
+    )
     eq(child.fn.getcompletion('Iter re', 'cmdline'), { 'review' })
 end
 

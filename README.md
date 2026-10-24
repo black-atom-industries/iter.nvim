@@ -33,6 +33,7 @@ iter does not commit, push or pull. Keep a Git plugin such as [mini.git](https:/
 - [Reference](#reference)
   - [Status drawer](#status-drawer)
   - [Review tab](#review-tab)
+  - [Annotation sidebar](#annotation-sidebar)
   - [Keys](#keys)
   - [Configuration](#configuration)
   - [Lua API](#lua-api)
@@ -87,6 +88,11 @@ moved. In all-files mode a reviewed file collapses to its header.
 ### Annotate
 
 - `a` annotates the line or the visual range, `A` the whole file.
+- A charwise `v` selection annotates exactly the selected words (a passage);
+  `V`, a block selection and a plain cursor annotate whole lines. A passage
+  follows its words when the text around them changes. It turns outdated when
+  the words are gone or can't be told apart (the same words twice, with
+  nothing around them to say which one the note was on).
 - In normal file buffers, `require('iter').annotate()` does the same (see
   [Annotations outside iter](#annotations-outside-iter)).
 - Annotations follow their code when it moves and turn outdated when it is
@@ -97,13 +103,20 @@ reviewed progress on top. On a row:
 
 - moving onto it shows the annotation in the diff
 - `<CR>` jumps there
-- `e` edits, `x` deletes
+- `e` edits, `d` deletes after a confirm (`d` again confirms)
+- `y` copies the annotation, or the file's annotations on a file row; `Y`
+  copies all
+
+`:Iter annotate` lists every annotation of the repository in a sidebar beside
+the text you are reading (see [Annotation sidebar](#annotation-sidebar)).
 
 ### Hand back
 
-1. `y` copies the review as a prompt for an agent: an intro, then every
-   annotation with its `file:line` and the code it is on.
-2. iter asks whether to clear the annotations.
+1. `y` copies the annotation under the cursor, or the file's annotations, and
+   `Y` all of them, as a prompt for an agent: an intro, then every annotation
+   with its `file:line` and the code it is on. A passage names `file:line:col`
+   and quotes only its words.
+2. iter asks whether to clear what was copied.
 3. The agent works, the files change, and the next round starts.
 
 - Annotations and reviewed marks are saved per repository and branch. Linked
@@ -149,6 +162,7 @@ plugin manager must not delay it until the first `:Iter`.
 :Iter          " open the status drawer
 :Iter status   " the same
 :Iter review   " open the review tab, or switch to it
+:Iter annotate " open or close the annotation sidebar
 ```
 
 `?` lists the keys of the view you are in.
@@ -203,13 +217,49 @@ end, { desc = 'Annotate the review' })
 -- Open the review on its Annotations column
 vim.keymap.set('n', '<leader>al', iter.annotations, { desc = 'List the annotations' })
 
+-- Open or close the annotation sidebar
+vim.keymap.set('n', '<leader>as', iter.sidebar, { desc = 'Toggle the annotation sidebar' })
+
 -- Copy the annotations as a prompt
 vim.keymap.set('n', '<leader>ay', iter.yank, { desc = 'Yank the annotations' })
 ```
 
 - Line and range annotations show in the buffer: a sign on the line, the text
-  below it.
-- File and review annotations show in the review and in the export.
+  below it, and the annotated lines tinted (`IterAnnotationText`) across the
+  full window width, empty lines and wrapped rows included, so a range reads as
+  one block.
+- `v` annotates the selected words, and only they are tinted. `V` annotates
+  whole lines.
+- Annotations that are outdated, or on a file or the review, are not tinted.
+- File and review annotations show in the review, in the sidebar and in the
+  export.
+- The sidebar lists every annotation of the repository, whether or not the
+  file has changes.
+
+To step between the annotations of the current buffer, map
+`next_annotation()` and `prev_annotation()`. They land on the first annotated
+word, skip outdated annotations, and wrap around at the ends:
+
+```lua
+vim.keymap.set('n', ']a', function()
+    require('iter').next_annotation()
+end, { desc = 'Next annotation' })
+
+vim.keymap.set('n', '[a', function()
+    require('iter').prev_annotation()
+end, { desc = 'Previous annotation' })
+```
+
+Inside iter's diff pane, `]a` and `[a` already step through the annotations
+there.
+
+A sign shows only on the first row of a wrapped line. To draw the bar on every
+row of an annotated line, use iter's `statuscolumn()`. It shows what the
+default columns show (fold column, signs, line number):
+
+```lua
+vim.o.statuscolumn = "%!v:lua.require'iter'.statuscolumn()"
+```
 
 ## Reference
 
@@ -309,6 +359,37 @@ The status drawer's diff takes `=`, `|` and `-` too.
 - `<C-c>` drops the draft
 - `q` closes a saved annotation
 
+### Annotation sidebar
+
+`:Iter annotate` opens a vertical split at the right edge of the tab
+(`annotate.side`), 40 columns wide (`annotate.width`). It lists every
+annotation of the repository and branch, the same store the review uses. The
+sidebar keeps the repository it opened in.
+
+- The title counts the annotations and the outdated ones.
+- Each file has a header with its count, then its annotations: the file
+  annotation first (`file`), then by line (`12`, `12–15`, `12 old`), a passage
+  by line and column in characters (`12:5`). The first line of the text follows. Review annotations come last (`note`).
+- Outdated annotations are dimmed and keep their last known line.
+- The key hints sit at the bottom.
+
+The command toggles: in another window it focuses the sidebar, in the sidebar
+it closes it, and `q` closes it too.
+
+On a row:
+
+- `<CR>` opens the annotation in the window you came from and leaves the
+  sidebar open. On a file header it opens the file at line 1, on a review
+  annotation the editor.
+- `y` copies the annotation, or on a file header that file's annotations; `Y`
+  copies all. iter then asks whether to clear what was copied.
+- `e` edits, `d` deletes after a confirm; `d` again confirms.
+- `?` lists the keys.
+
+Every open sidebar redraws at once for a change made in Neovim, and within
+`refresh.poll_ms` for a change another program writes to the store, with the
+cursor kept on its annotation.
+
 ### Keys
 
 Keys are buffer-local and set per view. A value is a key, a list of keys, or
@@ -346,29 +427,29 @@ The status drawer (`drawer`):
 
 The review drawer (`review_drawer`):
 
-| Key     | Action          | Does                                     |
-| ------- | --------------- | ---------------------------------------- |
-| `<CR>`  | `open`          | Open the diff, or jump to the annotation |
-| `s`     | `stage`         | Stage or unstage the file                |
-| `u`     | `unstage`       | Unstage the file                         |
-| `d`     | `discard`       | Discard changes in the file              |
-| `I`     | `ignore`        | Add the untracked file to .gitignore     |
-| `r`     | `reviewed`      | Mark reviewed and go to the next file    |
-| `R`     | `unreviewed`    | Remove the reviewed mark                 |
-| `=`     | `mode`          | Toggle one file or all files             |
-| `\|`    | `split`         | Show the diff side by side               |
-| `-`     | `unified`       | Show the diff unified                    |
-| `gw`    | `wrap`          | Toggle wrapping long lines               |
-| `A`     | `annotate_file` | Annotate the file                        |
-| `e`     | `edit`          | Edit the annotation                      |
-| `x`     | `delete`        | Delete the annotation                    |
-| `y`     | `yank`          | Copy the review                          |
-| `q`     | `close`         | Close                                    |
-| `?`     | `help`          | Show the keys                            |
-| `<C-d>` | `scroll_down`   | Scroll the diff down                     |
-| `<C-u>` | `scroll_up`     | Scroll the diff up                       |
-| `h`     | `column_left`   | Select the column to the left            |
-| `l`     | `column_right`  | Select the column to the right           |
+| Key     | Action          | Does                                                                            |
+| ------- | --------------- | ------------------------------------------------------------------------------- |
+| `<CR>`  | `open`          | Open the diff, or jump to the annotation                                        |
+| `s`     | `stage`         | Stage or unstage the file                                                       |
+| `u`     | `unstage`       | Unstage the file                                                                |
+| `d`     | `discard`       | Discard changes in the file, or delete the annotation in the Annotations column |
+| `I`     | `ignore`        | Add the untracked file to .gitignore                                            |
+| `r`     | `reviewed`      | Mark reviewed and go to the next file                                           |
+| `R`     | `unreviewed`    | Remove the reviewed mark                                                        |
+| `=`     | `mode`          | Toggle one file or all files                                                    |
+| `\|`    | `split`         | Show the diff side by side                                                      |
+| `-`     | `unified`       | Show the diff unified                                                           |
+| `gw`    | `wrap`          | Toggle wrapping long lines                                                      |
+| `A`     | `annotate_file` | Annotate the file                                                               |
+| `e`     | `edit`          | Edit the annotation                                                             |
+| `y`     | `yank`          | Copy the annotation or file                                                     |
+| `Y`     | `yank_all`      | Copy all annotations                                                            |
+| `q`     | `close`         | Close                                                                           |
+| `?`     | `help`          | Show the keys                                                                   |
+| `<C-d>` | `scroll_down`   | Scroll the diff down                                                            |
+| `<C-u>` | `scroll_up`     | Scroll the diff up                                                              |
+| `h`     | `column_left`   | Select the column to the left                                                   |
+| `l`     | `column_right`  | Select the column to the right                                                  |
 
 The diff pane (`diff`), in the review tab and above the status drawer:
 
@@ -385,7 +466,7 @@ The diff pane (`diff`), in the review tab and above the status drawer:
 | `a`     | `annotate`        | Annotate the line or range (normal and visual mode)             |
 | `A`     | `annotate_file`   | Annotate the file                                               |
 | `e`     | `edit`            | Edit the annotation                                             |
-| `x`     | `delete`          | Delete the annotation                                           |
+| `d`     | `delete`          | Delete the annotation                                           |
 | `<CR>`  | `expand`          | Expand the collapsed file or hidden context                     |
 | `gf`    | `goto_file`       | Go to the line in the file                                      |
 | `r`     | `reviewed`        | Mark reviewed and go to the next file                           |
@@ -394,10 +475,23 @@ The diff pane (`diff`), in the review tab and above the status drawer:
 | `\|`    | `split`           | Show the diff side by side                                      |
 | `-`     | `unified`         | Show the diff unified                                           |
 | `gw`    | `wrap`            | Toggle wrapping long lines                                      |
-| `y`     | `yank`            | Copy the review                                                 |
+| `y`     | `yank`            | Copy the annotation or file                                     |
+| `Y`     | `yank_all`        | Copy all annotations                                            |
 | `<C-j>` | `focus_drawer`    | Focus the drawer                                                |
 | `q`     | `close`           | Close                                                           |
 | `?`     | `help`            | Show the keys                                                   |
+
+The annotation sidebar (`annotate`):
+
+| Key    | Action     | Does                        |
+| ------ | ---------- | --------------------------- |
+| `<CR>` | `jump`     | Jump to the annotation      |
+| `y`    | `yank`     | Copy the annotation or file |
+| `Y`    | `yank_all` | Copy all annotations        |
+| `d`    | `delete`   | Delete the annotation       |
+| `e`    | `edit`     | Edit the annotation         |
+| `q`    | `close`    | Close                       |
+| `?`    | `help`     | Show the keys               |
 
 The annotation float (`annotation`):
 
@@ -436,8 +530,12 @@ require('iter').setup({
         intro = 'I reviewed your changes and have these annotations.\n'
             .. 'Please address them.',
     },
+    annotate = {
+        side = 'right',   -- tab edge the sidebar opens on: 'left' or 'right'
+        width = 40,       -- sidebar columns, 10 or more
+    },
     refresh = {
-        poll_ms = 2000,   -- poll interval while a drawer is open
+        poll_ms = 2000,   -- poll interval while a drawer or the sidebar is open
     },
     confirm = {
         discard = true,   -- ask before discarding changes
@@ -483,9 +581,14 @@ iter.review()                        -- same as :Iter review
 iter.annotate()                      -- annotate the cursor line or the visual range
 iter.annotate({ scope = 'file' })    -- annotate the current buffer's file
 iter.annotate({ scope = 'review' })  -- annotate the whole review
+iter.next_annotation()               -- move to the next annotation of the buffer
+iter.prev_annotation()               -- move to the previous annotation of the buffer
 iter.annotations()                   -- open the review on its Annotations column
-iter.yank()                          -- copy the review as a prompt
+iter.sidebar()                       -- same as :Iter annotate
+iter.yank()                          -- copy the annotations as a prompt
+iter.yank({ ids = { id } })          -- copy only the annotations with these ids
 iter.statusline()                    -- text for your statusline
+iter.statuscolumn()                  -- a 'statuscolumn' with the bar on wrapped rows
 iter.uri()                           -- address of the review's diff cursor
 iter.open_uri(uri)                   -- open an iter:// address, unescaped
 iter.tabline()                       -- a 'tabline' that labels the review tab
@@ -493,9 +596,31 @@ iter.tabline()                       -- a 'tabline' that labels the review tab
 
 `annotate()` works in any buffer of a file inside a git repository.
 
+`next_annotation()` and `prev_annotation()` move the cursor of the current
+window to where the next or previous annotation of its buffer starts, ordered
+by line and column, and wrap around at the ends. Outdated, file and review
+annotations are skipped. A buffer without annotations warns
+`No annotations in this buffer`.
+
 `yank()` copies to the `+` and `"` registers: the `export.intro` text, then a
 numbered list with `file:line`, the annotated code and the annotation. Then it
-asks once whether to clear the annotations.
+asks once whether to clear the ones it copied. A passage lists `file:line:col`
+(the column counts characters from 1) and quotes only the selected words:
+
+````markdown
+1. chapter-3.md:77:12
+   ```markdown
+   the door that was never locked
+   ```
+   Who locked it, then?
+2. chapter-3.md:90-92
+   ```markdown
+   She waited.
+   The kettle cooled.
+   Nothing came.
+   ```
+   Cut one of these.
+````
 
 `statusline()` returns:
 
@@ -510,6 +635,15 @@ directory changes and shell commands.
 
 ```lua
 vim.o.statusline = "%f %m%=%{v:lua.require'iter'.statusline()} "
+```
+
+`statuscolumn()` returns a 'statuscolumn' format that shows the default
+columns. On the wrapped rows of an annotated line it draws the sign's bar in
+the sign column, so the bar runs down the whole line. iter never sets
+the global 'statuscolumn'; its own windows set a window-local one.
+
+```lua
+vim.o.statuscolumn = "%!v:lua.require'iter'.statuscolumn()"
 ```
 
 `uri()` returns `iter://review/<path>#L<n>` for the cursor in the review's
@@ -530,6 +664,7 @@ what it names in the repository of the current directory:
 | `iter://review/<path>#L<n>` | The same, with the cursor on worktree line `n`, revealed if it is hidden |
 | `iter://review#all`         | The review tab in all-files mode                                         |
 | `iter://review#annotations` | The review tab on its Annotations column                                 |
+| `iter://annotate`           | Opens the annotation sidebar, or focuses it                              |
 | `iter://annotation`         | The hidden annotation draft                                              |
 
 - A path outside the changes opens the view with a warning.
@@ -576,40 +711,42 @@ event, so no colorscheme needs to define them.
   fallback.
 - Row backgrounds blend the diff colour 60 % towards `Normal`.
 
-| Group                        | Colours                                              | Derived from                                                         |
-| ---------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------- |
-| `IterStage`                  | Staged files in the drawer                           | fg of `Added`, `String`                                              |
-| `IterUnstage`                | Unstaged files in the drawer                         | fg of `Removed`, `Error`                                             |
-| `IterUntracked`              | Untracked files                                      | fg of `DiagnosticInfo`, `Directory`, `Identifier`                    |
-| `IterConflict`               | Files with merge conflicts                           | fg of `DiagnosticError`, `ErrorMsg`, `Error`                         |
-| `IterHead`                   | Branch name in the drawer                            | fg of `Identifier`, `Keyword`                                        |
-| `IterUnpushed`               | Unpushed commits and the ahead count                 | fg of `Constant`, `Number`                                           |
-| `IterBehind`                 | Behind count                                         | fg of `Removed`, `Error`                                             |
-| `IterReviewed`               | Reviewed marks and progress                          | fg of `Added`, `String`                                              |
-| `IterReviewedChanged`        | Files changed since reviewed                         | fg of `DiagnosticWarn`, `WarningMsg`, `Constant`                     |
-| `IterDrawer`                 | Drawer text                                          | link to `Normal`                                                     |
-| `IterDrawerTitle`            | Drawer titles                                        | link to `Title`                                                      |
-| `IterDrawerHeader`           | Drawer header row, under its rule                    | bg of `Title` fg, blended with `Normal`                              |
-| `IterDrawerSelected`         | Selected drawer row                                  | link to `Visual`                                                     |
-| `IterDrawerKey`              | Key hints                                            | link to `Special`                                                    |
-| `IterDrawerHint`             | Dimmed drawer text                                   | link to `Comment`                                                    |
-| `IterDrawerCount`            | Counts in section titles                             | link to `Special`                                                    |
-| `IterDiffAdd`                | Added line rows                                      | bg of `DiffAdd`, blended with `Normal`                               |
-| `IterDiffDelete`             | Deleted line rows                                    | bg of `DiffDelete`, blended with `Normal`                            |
-| `IterDiffAddText`            | Changed words in added lines                         | bg of `DiffAdd`                                                      |
-| `IterDiffDeleteText`         | Changed words in deleted lines                       | bg of `DiffDelete`                                                   |
-| `IterDiffAddNr`              | Line number of added lines                           | fg of `diffAdded`, `Added`, `DiffAdd`; bg as `IterDiffAdd`           |
-| `IterDiffDeleteNr`           | Line number of deleted lines                         | fg of `diffRemoved`, `Removed`, `DiffDelete`; bg as `IterDiffDelete` |
-| `IterDiffNr`                 | Line number of context lines                         | link to `LineNr`                                                     |
-| `IterDiffHeader`             | File header rows in the diff                         | fg of `Normal`; bg of `Title` fg, blended with `Normal`; bold        |
-| `IterDiffHeaderRule`         | Rule above a file header and the drawer, code letter | fg of `Title`                                                        |
-| `IterDiffHunk`               | Hunk headers and stats                               | link to `Comment`                                                    |
-| `IterDiffGap`                | Collapsed unchanged lines                            | link to `Folded`                                                     |
-| `IterDiffFiller`             | Filler rows beside a one-sided change                | link to `NonText`                                                    |
-| `IterDiffAnnotation`         | Annotation text                                      | link to `NormalFloat`                                                |
-| `IterDiffAnnotationOutdated` | Annotation whose lines changed                       | link to `Comment`                                                    |
-| `IterDiffAnnotationFocus`    | Focused annotation                                   | link to `Visual`                                                     |
-| `IterAnnotationSign`         | Annotation sign in the gutter                        | link to `Special`                                                    |
+| Group                        | Colours                                                 | Derived from                                                                |
+| ---------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `IterStage`                  | Staged files in the drawer                              | fg of `Added`, `String`                                                     |
+| `IterUnstage`                | Unstaged files in the drawer                            | fg of `Removed`, `Error`                                                    |
+| `IterUntracked`              | Untracked files                                         | fg of `DiagnosticInfo`, `Directory`, `Identifier`                           |
+| `IterConflict`               | Files with merge conflicts                              | fg of `DiagnosticError`, `ErrorMsg`, `Error`                                |
+| `IterHead`                   | Branch name in the drawer                               | fg of `Identifier`, `Keyword`                                               |
+| `IterUnpushed`               | Unpushed commits and the ahead count                    | fg of `Constant`, `Number`                                                  |
+| `IterBehind`                 | Behind count                                            | fg of `Removed`, `Error`                                                    |
+| `IterReviewed`               | Reviewed marks and progress                             | fg of `Added`, `String`                                                     |
+| `IterReviewedChanged`        | Files changed since reviewed                            | fg of `DiagnosticWarn`, `WarningMsg`, `Constant`                            |
+| `IterSidebar`                | Annotation sidebar background                           | link to `NormalFloat`                                                       |
+| `IterDrawer`                 | Drawer text                                             | link to `Normal`                                                            |
+| `IterDrawerTitle`            | Drawer titles                                           | link to `Title`                                                             |
+| `IterDrawerHeader`           | Drawer header row, under its rule                       | bg of `Title` fg, blended with `Normal`                                     |
+| `IterDrawerSelected`         | Selected drawer row                                     | link to `Visual`                                                            |
+| `IterDrawerKey`              | Key hints                                               | link to `Special`                                                           |
+| `IterDrawerHint`             | Dimmed drawer text                                      | link to `Comment`                                                           |
+| `IterDrawerCount`            | Counts in section titles                                | link to `Special`                                                           |
+| `IterDiffAdd`                | Added line rows                                         | bg of `DiffAdd`, blended with `Normal`                                      |
+| `IterDiffDelete`             | Deleted line rows                                       | bg of `DiffDelete`, blended with `Normal`                                   |
+| `IterDiffAddText`            | Changed words in added lines                            | bg of `DiffAdd`                                                             |
+| `IterDiffDeleteText`         | Changed words in deleted lines                          | bg of `DiffDelete`                                                          |
+| `IterDiffAddNr`              | Line number of added lines                              | fg of `diffAdded`, `Added`, `DiffAdd`; bg as `IterDiffAdd`                  |
+| `IterDiffDeleteNr`           | Line number of deleted lines                            | fg of `diffRemoved`, `Removed`, `DiffDelete`; bg as `IterDiffDelete`        |
+| `IterDiffNr`                 | Line number of context lines                            | link to `LineNr`                                                            |
+| `IterDiffHeader`             | File header rows in the diff                            | fg of `Normal`; bg of `Title` fg, blended with `Normal`; bold               |
+| `IterDiffHeaderRule`         | Rule above a file header and the drawer, code letter    | fg of `Title`                                                               |
+| `IterDiffHunk`               | Hunk headers and stats                                  | link to `Comment`                                                           |
+| `IterDiffGap`                | Collapsed unchanged lines                               | link to `Folded`                                                            |
+| `IterDiffFiller`             | Filler rows beside a one-sided change                   | link to `NonText`                                                           |
+| `IterDiffAnnotation`         | Annotation text                                         | link to `NormalFloat`                                                       |
+| `IterDiffAnnotationOutdated` | Annotation whose lines changed                          | link to `Comment`                                                           |
+| `IterDiffAnnotationFocus`    | Focused annotation                                      | link to `Visual`                                                            |
+| `IterAnnotationSign`         | Annotation sign in the gutter                           | link to `Special`                                                           |
+| `IterAnnotationText`         | Annotated text: the words of a passage, else full lines | fg of `@function`, `Function`, blended 15 % into `Normal`; else `Visual` bg |
 
 ### Files
 

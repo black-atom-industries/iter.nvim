@@ -48,6 +48,16 @@ the review straight to an agent pane.
 - Annotations are `virt_lines` extmarks: line and range annotations under their last row, deleted-line annotations on
   the del row, file annotations on the header row.
 - Anchors resolve with one function: an exact block match at the stored lines first, then the match nearest to them.
+  A passage anchor (`quote` set, from a charwise `v` selection) also stores `start_col` and `end_col` (0-based bytes,
+  the end exclusive) and up to 40 bytes of text `before` and `after` the quote. It resolves by the quote, as plain text
+  on the word edges it had when stored: at the stored position when the context there is intact, else at the
+  occurrence whose surroundings match best. Two equally good occurrences, or several with no matching context, make it
+  outdated; one occurrence follows. An anchor without context takes the nearest occurrence. Resolving returns the
+  columns, and `follow` refreshes the context. People and agents see columns as 1-based characters, not bytes.
+- Annotated text is tinted with `IterAnnotationText`, from the lines `list.line_of` locates: the column range of a
+  passage, every line of a line or range annotation whole to the window's edge (`line_hl_group`, empty lines and wrapped rows included), nothing for outdated, file and review annotations. The
+  buffer marks and the diff view draw it at a priority under syntax and the visual selection. The colour is the
+  `@function` foreground blended into `Normal`.
   The new side follows the worktree file, the old side its `base` (`HEAD` or `index`).
 - Outdated has one rule, `iter.annotations.list.line_of`: an annotation with text is outdated when the content of the
   version it follows lacks that text; the worktree's content is the loaded buffer's, else the file's. The Annotations
@@ -106,8 +116,15 @@ the review straight to an agent pane.
   with itself.
 - The status header keeps `HEAD <branch>` whole and sheds from the right when it doesn't fit: the summary shrinks to
   the total, then goes, then the upstream, then the arrows.
-- The export and the Annotations column list annotations through `iter.annotations.list`: files in drawer order,
+- The export, the Annotations column and the sidebar list annotations through `iter.annotations.list`: files in drawer order,
   then other files by name, the review last; by line within a file, each resolved with `line_of`.
+- The annotation sidebar (`iter.ui.sidebar`) is a vertical split at the tab's edge, one per tabpage. Every sidebar
+  redraws through `refresh_annotations` and the store watcher.
+- `iter.annotations.statuscolumn` backs `require('iter').statuscolumn()`: a wrapped row of an annotated line draws the
+  sign's bar in the sign column. It reads the sign extmarks of the buffer marks once per render and text change, never
+  the store per row. iter never sets the global 'statuscolumn'; its own windows set a window-local one.
+- Every list of annotations yanks one with `y` and all with `Y`, then asks whether to clear what was copied. On a file
+  row `y` yanks that file's annotations.
 
 ## Project shape
 

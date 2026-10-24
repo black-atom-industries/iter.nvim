@@ -9,7 +9,7 @@ local util = require('iter.util')
 local M = {}
 
 ---@class IterUriTarget
----@field kind 'status'|'review'|'annotation'
+---@field kind 'status'|'review'|'annotation'|'annotate'
 ---@field path? string repository-relative path, for `status` too
 ---@field line? integer new-side line, from `#L<n>`
 ---@field view? 'all'|'annotations' the review's view, from `#all` or `#annotations`
@@ -88,6 +88,8 @@ function M.parse(name)
         return { kind = 'status', path = path }
     elseif kind == 'annotation' and path == nil then
         return { kind = 'annotation' }
+    elseif kind == 'annotate' then
+        return { kind = 'annotate' }
     elseif kind == 'review' then
         return {
             kind = 'review',
@@ -141,6 +143,7 @@ local function route(target, name)
         util.warn('Unknown address ' .. name)
     elseif
         target.kind ~= 'annotation'
+        and target.kind ~= 'annotate'
         and elsewhere(target.kind --[[@as 'status'|'review']])
     then
         return
@@ -152,6 +155,8 @@ local function route(target, name)
         if target.path ~= nil and drawer ~= nil and drawer:is_open() then
             drawer:reveal(target.path)
         end
+    elseif target.kind == 'annotate' then
+        iter.sidebar()
     elseif target.kind == 'annotation' then
         if not require('iter.annotations.editor').show() then
             util.warn('No annotation draft to show')

@@ -6,6 +6,9 @@ local subcommands = {
     review = function()
         require('iter').review()
     end,
+    annotate = function()
+        require('iter').sidebar()
+    end,
 }
 
 vim.api.nvim_create_user_command('Iter', function(args)

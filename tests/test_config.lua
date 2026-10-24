@@ -35,12 +35,27 @@ T['resolve()']['returns the defaults without options'] = function()
         resolved.options.export.intro,
         'I reviewed your changes and have these annotations.\nPlease address them.'
     )
+    eq(resolved.options.annotate, { side = 'right', width = 40 })
     eq(resolved.options.refresh.poll_ms, 2000)
     eq(resolved.options.confirm.discard, true)
     eq(resolved.options.icons, { annotation = '󰆉' })
     eq(resolved.debug, false)
     eq(resolved.keys.drawer.stage, { 's' })
     eq(resolved.keys.diff.next_hunk, { ']c' })
+    eq(resolved.keys.diff.yank, { 'y' })
+    eq(resolved.keys.diff.yank_all, { 'Y' })
+    eq(resolved.keys.diff.delete, { 'd' })
+    eq(resolved.keys.review_drawer.yank, { 'y' })
+    eq(resolved.keys.review_drawer.yank_all, { 'Y' })
+    eq(resolved.keys.annotate, {
+        jump = { '<CR>' },
+        yank = { 'y' },
+        yank_all = { 'Y' },
+        delete = { 'd' },
+        edit = { 'e' },
+        close = { 'q' },
+        help = { '?' },
+    })
     eq(resolved.keys.help.close, { 'q', '?', '<Esc>' })
 end
 
@@ -159,6 +174,33 @@ T['resolve() errors']['on a diff layout other than unified, split or auto'] = fu
     expect_error(function()
         config.resolve({ diff = { layout = 'stacked' } })
     end, "opts%.diff%.layout must be 'unified', 'split' or 'auto'")
+end
+
+T['resolve() errors']['on an annotate side other than left or right'] = function()
+    expect_error(function()
+        config.resolve({ annotate = { side = 'top' } })
+    end, "opts%.annotate%.side must be 'left' or 'right'")
+end
+
+T['resolve() errors']['on an annotate width below 10 or fractional'] = function()
+    expect_error(function()
+        config.resolve({ annotate = { width = 9 } })
+    end, 'opts%.annotate%.width must be 10 or more')
+
+    expect_error(function()
+        config.resolve({ annotate = { width = 20.5 } })
+    end, 'opts%.annotate%.width: expected integer')
+end
+
+T['resolve()']['accepts an annotate side, width and keys'] = function()
+    local resolved = config.resolve({
+        annotate = { side = 'left', width = 30 },
+        keys = { annotate = { delete = 'x', help = false } },
+    })
+
+    eq(resolved.options.annotate, { side = 'left', width = 30 })
+    eq(resolved.keys.annotate.delete, { 'x' })
+    eq(resolved.keys.annotate.help, {})
 end
 
 T['resolve() errors']['on a drawer height outside (0, 1]'] = function()
@@ -381,7 +423,10 @@ T['keymap']['actions() match the configurable keys of every view'] = function()
 
     local views = vim.tbl_keys(defaults.keys)
     table.sort(views)
-    eq(views, { 'annotation', 'diff', 'drawer', 'help', 'review_drawer' })
+    eq(
+        views,
+        { 'annotate', 'annotation', 'diff', 'drawer', 'help', 'review_drawer' }
+    )
 end
 
 T['health'] = new_set()

@@ -28,6 +28,7 @@ local SCHEMA = {
         args = 'table',
     },
     export = { intro = 'string' },
+    annotate = { side = 'string', width = 'integer' },
     refresh = { poll_ms = 'integer' },
     confirm = { discard = 'boolean', ignore = 'boolean' },
     icons = { annotation = 'string' },
@@ -230,6 +231,18 @@ local function validate(opts)
         and layout ~= 'auto'
     then
         error("opts.diff.layout must be 'unified', 'split' or 'auto'", 0)
+    end
+
+    local side = opts.annotate and opts.annotate.side
+
+    if side ~= nil and side ~= 'left' and side ~= 'right' then
+        error("opts.annotate.side must be 'left' or 'right'", 0)
+    end
+
+    local width = opts.annotate and opts.annotate.width
+
+    if width ~= nil and width < 10 then
+        error('opts.annotate.width must be 10 or more', 0)
     end
 
     if opts.diff and opts.diff.args ~= nil then

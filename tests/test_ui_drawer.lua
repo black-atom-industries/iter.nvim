@@ -354,7 +354,10 @@ T['open'][':Iter with an unknown subcommand errors'] = function()
 end
 
 T['open'][':Iter completes the subcommands'] = function()
-    eq(child.fn.getcompletion('Iter ', 'cmdline'), { 'review', 'status' })
+    eq(
+        child.fn.getcompletion('Iter ', 'cmdline'),
+        { 'annotate', 'review', 'status' }
+    )
     eq(child.fn.getcompletion('Iter st', 'cmdline'), { 'status' })
     eq(child.fn.getcompletion('Iter x', 'cmdline'), {})
 end

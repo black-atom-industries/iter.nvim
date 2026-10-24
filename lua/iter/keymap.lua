@@ -78,6 +78,15 @@ local ACTIONS = {
         { 'close', 'Close' },
         { 'help', 'Show the keys' },
     },
+    annotate = {
+        { 'jump', 'Jump to the annotation' },
+        { 'yank', 'Copy the annotation or file' },
+        { 'yank_all', 'Copy all annotations' },
+        { 'delete', 'Delete the annotation' },
+        { 'edit', 'Edit the annotation' },
+        { 'close', 'Close' },
+        { 'help', 'Show the keys' },
+    },
     annotation = {
         { 'save', 'Save the annotation and close the float', { 'n', 'i' } },
         { 'toggle', 'Toggle the draft', { 'n', 'i' } },

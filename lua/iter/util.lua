@@ -156,8 +156,9 @@ end
 ---@param path string
 ---@param line? integer
 ---@param name? string what the error names, the basename by default
+---@param col? integer 0-based byte column, clamped to the line
 ---@return boolean ok
-function M.edit_at(path, line, name)
+function M.edit_at(path, line, name, col)
     local current = vim.api.nvim_buf_get_name(0)
     local shown = current ~= ''
         and vim.fn.resolve(current) == vim.fn.resolve(path)
@@ -176,9 +177,12 @@ function M.edit_at(path, line, name)
     end
 
     if line ~= nil then
+        line = math.max(1, math.min(line, vim.api.nvim_buf_line_count(0)))
+        local text = vim.api.nvim_buf_get_lines(0, line - 1, line, false)[1]
+
         vim.api.nvim_win_set_cursor(
             0,
-            { math.max(1, math.min(line, vim.api.nvim_buf_line_count(0))), 0 }
+            { line, math.min(col or 0, math.max(0, #text - 1)) }
         )
     end
 

@@ -86,6 +86,7 @@ end
 --- Draw the stored annotations again in the review and in the buffers shown.
 local function refresh_annotations()
     refresh_review()
+    require('iter.ui.sidebar').refresh_all()
 
     for _, win in ipairs(vim.api.nvim_list_wins()) do
         require('iter.annotations.marks').render_buffer(
@@ -156,7 +157,7 @@ function M.annotate(opts)
             root = root,
             annotation = { scope = 'review', anchor = { side = 'new' } },
             config = M.config,
-            on_save = refresh_review,
+            on_save = refresh_annotations,
         })
         return
     end
@@ -179,7 +180,7 @@ function M.annotate(opts)
                 anchor = { path = target.path, side = 'new' },
             },
             config = M.config,
-            on_save = refresh_review,
+            on_save = refresh_annotations,
         })
         return
     end
@@ -200,10 +201,7 @@ function M.annotate(opts)
             }, lines),
         },
         config = M.config,
-        on_save = function()
-            marks.render_buffer(buf)
-            refresh_review()
-        end,
+        on_save = refresh_annotations,
     })
 end
 

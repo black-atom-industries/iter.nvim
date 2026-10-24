@@ -80,6 +80,8 @@ local function fit(text, width)
     return pad(kept .. '…', width)
 end
 
+M.fit = fit
+
 --- Highlight bytes `start` to `stop` of a cell that starts at byte column
 --- `first` and ends at `last`, cut to the cell.
 ---@param line IterRenderLine

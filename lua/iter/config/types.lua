@@ -22,6 +22,10 @@
 ---@class IterExportOptions
 ---@field intro? string Text placed before the exported annotations
 
+---@class IterAnnotateOptions
+---@field side? 'left'|'right' Side of the window the sidebar opens on
+---@field width? integer Columns of the sidebar, 10 or more
+
 ---@class IterRefreshOptions
 ---@field poll_ms? integer
 
@@ -34,7 +38,7 @@
 
 ---@alias IterLayoutOption 'unified'|'split'|'auto'
 
----@alias IterView 'drawer'|'review_drawer'|'diff'|'annotation'|'help'
+---@alias IterView 'drawer'|'review_drawer'|'diff'|'annotate'|'annotation'|'help'
 
 ---@alias IterKeyValue string|string[]|false
 
@@ -42,6 +46,7 @@
 ---@field drawer? IterDrawerOptions
 ---@field diff? IterDiffOptions
 ---@field export? IterExportOptions
+---@field annotate? IterAnnotateOptions
 ---@field refresh? IterRefreshOptions
 ---@field confirm? IterConfirmOptions
 ---@field icons? IterIconsOptions
@@ -52,6 +57,7 @@
 ---@field drawer { height: number, zindex: integer, breakpoint: integer, wide_breakpoint: integer, commits: integer }
 ---@field diff { expand_step: integer, syntax_max_lines: integer, word_diff: boolean, layout: IterLayoutOption, split_breakpoint: integer, wrap: boolean, args: string[] }
 ---@field export { intro: string }
+---@field annotate { side: 'left'|'right', width: integer }
 ---@field refresh { poll_ms: integer }
 ---@field confirm { discard: boolean, ignore: boolean }
 ---@field icons { annotation: string }

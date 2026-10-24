@@ -16,6 +16,8 @@ T['parse()'] = function()
     eq(uri.parse('iter://status/a.txt'), { kind = 'status', path = 'a.txt' })
     eq(uri.parse('iter://review'), { kind = 'review' })
     eq(uri.parse('iter://annotation'), { kind = 'annotation' })
+    eq(uri.parse('iter://annotate'), { kind = 'annotate' })
+    eq(uri.parse('iter://annotate/3'), { kind = 'annotate' })
     eq(
         uri.parse('iter://review/lua/a.lua'),
         { kind = 'review', path = 'lua/a.lua' }
