@@ -153,6 +153,71 @@ T['text']['lists a fixture store in exact text'] = function()
     )
 end
 
+T['text']['quotes only the words of a passage and names line and column'] = function()
+    local passage = anchor('a.lua', 2, 2, { 'local x = 1' })
+    passage.start_col = 6
+    passage.end_col = 7
+    passage.quote = 'x'
+
+    local multi = anchor('a.lua', 2, 4, { 'local x = 1', '', 'return x' })
+    multi.start_col = 6
+    multi.end_col = 6
+    multi.quote = 'x = 1\n\nreturn'
+
+    eq(
+        text({
+            { id = 'p', scope = 'line', body = 'Name it', anchor = passage },
+            { id = 'q', scope = 'range', body = 'Merge', anchor = multi },
+        }),
+        table.concat({
+            INTRO,
+            '',
+            '1. a.lua:2:7',
+            '   ```lua',
+            '   x',
+            '   ```',
+            '   Name it',
+            '2. a.lua:2:7',
+            '   ```lua',
+            '   x = 1',
+            '',
+            '   return',
+            '   ```',
+            '   Merge',
+        }, '\n')
+    )
+end
+
+T['text']['counts the column in characters'] = function()
+    local passage = anchor('a.lua', 1, 1, { 'äöü xyz' })
+    passage.start_col = 7
+    passage.end_col = 10
+    passage.quote = 'xyz'
+
+    local out = text(
+        { { id = 'p', scope = 'line', body = 'Hm', anchor = passage } },
+        nil,
+        { worktree = { ['a.lua'] = { 'äöü xyz' } } }
+    )
+
+    eq(out:find('\n1. a.lua:1:5\n', 1, true) ~= nil, true)
+end
+
+T['text']['moves a passage with its words'] = function()
+    local passage = anchor('a.lua', 1, 1, { 'x' })
+    passage.start_col = 0
+    passage.end_col = 1
+    passage.quote = 'x'
+
+    local out = text(
+        { { id = 'p', scope = 'line', body = 'Hm', anchor = passage } },
+        nil,
+        { worktree = { ['a.lua'] = { 'first', 'a x b' } } }
+    )
+
+    eq(out:find('\n1. a.lua:2:3\n', 1, true) ~= nil, true)
+end
+
 T['text']['resolves an old-side annotation against its base'] = function()
     local annotations = {
         {

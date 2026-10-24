@@ -59,6 +59,10 @@ local function heading(item)
     local loc = first == last and tostring(first) or (first .. '-' .. last)
     local marks = {}
 
+    if a.quote ~= nil then
+        loc = first .. ':' .. item.col
+    end
+
     if a.side == 'old' then
         table.insert(marks, 'old side')
     end
@@ -95,7 +99,11 @@ function M.text(annotations, opts)
             table.insert(out, n .. '. ' .. heading(item))
 
             if list.has_text(annotation) then
-                local code = vim.tbl_map(strip_cr, annotation.anchor.lines)
+                local anchor = annotation.anchor
+                local quote = anchor.quote
+                local text = quote ~= nil and vim.split(quote, '\n')
+                    or anchor.lines
+                local code = vim.tbl_map(strip_cr, text --[[@as string[] ]])
                 local fence = fence_for(code)
                 local filetype =
                     vim.filetype.match({ filename = annotation.anchor.path })

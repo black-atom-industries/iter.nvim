@@ -76,6 +76,8 @@ local NS = vim.api.nvim_create_namespace('iter.diff')
 local NS_SYNTAX = vim.api.nvim_create_namespace('iter.diff.syntax')
 local NS_WORDS = vim.api.nvim_create_namespace('iter.diff.words')
 local NS_ANNOTATIONS = vim.api.nvim_create_namespace('iter.diff.annotations')
+local NS_ANNOTATION_TEXT =
+    vim.api.nvim_create_namespace('iter.diff.annotation_text')
 
 -- Del and add rows draw below syntax, word emphasis above it, so an
 -- emphasis background also shows over a capture that sets one.
@@ -1088,7 +1090,13 @@ function View:render()
         end
 
         -- Cleared first: replacing the lines moves every extmark still there.
-        for _, ns in ipairs({ NS, NS_SYNTAX, NS_WORDS, NS_ANNOTATIONS }) do
+        for _, ns in ipairs({
+            NS,
+            NS_SYNTAX,
+            NS_WORDS,
+            NS_ANNOTATIONS,
+            NS_ANNOTATION_TEXT,
+        }) do
             vim.api.nvim_buf_clear_namespace(pane.buf, ns, 0, -1)
         end
 
@@ -1194,6 +1202,8 @@ function View:draw_marks(first, last)
     local panes = self:panes()
     local icon = self.icon
     local by_row, order = {}, {}
+    ---@type table<string, table<integer, integer>>
+    local line_rows = {}
 
     for _, pane in ipairs(panes) do
         pane.marks_width = self:text_width(pane)
@@ -1259,7 +1269,64 @@ function View:draw_marks(first, last)
             )
         end
 
+        for _, mark in ipairs(by_row[lnum]) do
+            self:highlight_text(mark, line_rows)
+        end
+
         self.marks_drawn[lnum] = true
+    end
+end
+
+--- Tint the text `mark`'s annotation is about, in the pane of its version:
+--- the rows showing the lines, a passage only in its columns. Hidden lines
+--- (a gap) and rows of the other version have no tint.
+---@param mark IterAnnotationMark
+---@param line_rows table<string, table<integer, integer>> rows by line, per section and version, filled as needed
+function View:highlight_text(mark, line_rows)
+    local span = mark.span
+
+    if span == nil then
+        return
+    end
+
+    local section = self.document.sections[mark.section]
+    local panes = self:panes()
+    local pane = panes[1]
+
+    if pane.side ~= nil then
+        pane = panes[span.field == 'old' and 1 or 2]
+    end
+
+    local rows = section.file.rows
+    local key = mark.section .. span.field
+    local lnums = line_rows[key]
+
+    if lnums == nil then
+        lnums = {}
+        line_rows[key] = lnums
+
+        for lnum, row in ipairs(rows) do
+            local line = row[span.field]
+
+            if line ~= nil and row.text ~= nil and row.kind ~= 'gap' then
+                lnums[line] = lnum
+            end
+        end
+    end
+
+    for _, range in
+        ipairs(marks.text_ranges(span, function(line)
+            local row = lnums[line]
+
+            return row and rows[row].text
+        end))
+    do
+        local lnum =
+            document.line_of(self.document, mark.section, lnums[range.line])
+
+        if lnum ~= nil then
+            marks.set_text(pane.buf, NS_ANNOTATION_TEXT, lnum - 1, range)
+        end
     end
 end
 
@@ -1267,6 +1334,7 @@ end
 function View:render_marks()
     for _, pane in ipairs(self:panes()) do
         vim.api.nvim_buf_clear_namespace(pane.buf, NS_ANNOTATIONS, 0, -1)
+        vim.api.nvim_buf_clear_namespace(pane.buf, NS_ANNOTATION_TEXT, 0, -1)
     end
 
     self:place_marks()

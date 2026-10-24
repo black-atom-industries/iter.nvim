@@ -9,6 +9,13 @@ local BLEND = 0.6
 -- Share of the title colour in the file header background; the rest is Normal.
 local HEADER_BLEND = 0.2
 
+-- Share of the function colour in annotated text; the rest is Normal.
+local TEXT_BLEND = 0.15
+
+-- Share of the Visual background in annotated text without a function
+-- colour; the rest is Normal.
+local TEXT_VISUAL_BLEND = 0.35
+
 ---@param color integer
 ---@param base integer
 ---@param alpha number
@@ -118,6 +125,13 @@ function M.apply()
     local header_bg =
         blend(title, base or (dark and 0x000000 or 0xffffff), HEADER_BLEND)
 
+    local text_base = base or (dark and 0x000000 or 0xffffff)
+    local function_fg = color({ '@function', 'Function' }, 'fg')
+    local visual = color({ 'Visual' }, 'bg') or (dark and 0x3a3a4a or 0xd0d8e8)
+    local text_bg = function_fg ~= nil
+            and blend(function_fg, text_base, TEXT_BLEND)
+        or blend(visual, text_base, TEXT_VISUAL_BLEND)
+
     -- Rows soften the diff colour towards Normal and words take it whole.
     -- Without a Normal background (transparent) rows take the diff colour
     -- whole and words mix in some of the sign colour instead.
@@ -154,6 +168,8 @@ function M.apply()
         IterDiffAnnotationOutdated = { link = 'Comment' },
         IterDiffAnnotationFocus = { link = 'Visual' },
         IterAnnotationSign = { link = 'Special' },
+        IterAnnotationText = { bg = text_bg },
+        IterSidebar = { link = 'NormalFloat' },
         IterDrawer = { link = 'Normal' },
         IterDrawerTitle = { link = 'Title' },
         IterDrawerHeader = { bg = header_bg },

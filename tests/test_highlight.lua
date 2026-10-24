@@ -33,6 +33,7 @@ T['apply()']['derives groups nothing defined'] = function()
 
     neq(hl('IterDiffAdd').bg, nil)
     eq(hl('IterDrawer').link, 'Normal')
+    eq(hl('IterSidebar').link, 'NormalFloat')
 end
 
 T['apply()']['keeps groups defined before iter'] = function()
@@ -82,6 +83,44 @@ T['apply()']['file and drawer headers take a band of the title colour and a rule
     eq(hl('IterDiffHeader').fg, 0xcccccc)
     eq(hl('IterDiffHeaderRule').fg, 0xffffff)
     eq(hl('IterDrawerHeader').bg, 0x333333)
+end
+
+T['apply()']['annotated text takes a faint share of the function colour over Normal'] = function()
+    vim.api.nvim_set_hl(0, 'Normal', { bg = 0x000000 })
+    vim.api.nvim_set_hl(0, 'Function', { fg = 0xc8c8c8 })
+    vim.api.nvim_set_hl(0, '@function', { link = 'Function' })
+    vim.api.nvim_set_hl(0, 'Visual', { bg = 0xffffff })
+
+    highlight.apply()
+
+    local part = math.floor(0xc8 * 0.15)
+    eq(hl('IterAnnotationText').bg, part * 0x10101)
+    eq(hl('IterAnnotationText').fg, nil)
+
+    vim.api.nvim_set_hl(0, 'Normal', { bg = 0xffffff })
+    vim.api.nvim_set_hl(0, '@function', { fg = 0x0000ff })
+    highlight.apply()
+
+    -- 15 % of blue over white: floor(0xff * .85) = 0xd8
+    eq(hl('IterAnnotationText').bg, 0xd8d8ff)
+end
+
+T['apply()']['annotated text falls back to Visual without a function colour'] = function()
+    vim.api.nvim_set_hl(0, 'Normal', { bg = 0x000000 })
+    vim.api.nvim_set_hl(0, 'Function', {})
+    vim.api.nvim_set_hl(0, '@function', {})
+    vim.api.nvim_set_hl(0, 'Visual', { bg = 0xc8c8c8 })
+
+    highlight.apply()
+
+    local part = math.floor(0xc8 * 0.35)
+    eq(hl('IterAnnotationText').bg, part * 0x10101)
+end
+
+T['apply()']['annotated text has a background without Normal and Visual'] = function()
+    highlight.apply()
+
+    neq(hl('IterAnnotationText').bg, nil)
 end
 
 T['setup()'] = new_set()

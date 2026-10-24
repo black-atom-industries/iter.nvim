@@ -9,13 +9,81 @@ local util = require('iter.util')
 ---@field lnum integer row the annotation sits below
 ---@field annotation IterAnnotation
 ---@field outdated boolean
+---@field span? IterAnnotationSpan the annotated text in the view's version, none when outdated
 ---@field section? integer section of the view's document, set by the view
 ---@field hidden? boolean in a collapsed section, `lnum` its header row; set by the view
 
+---@class IterAnnotationSpan
+---@field field 'old'|'new' the version the lines belong to
+---@field start integer
+---@field stop integer
+---@field start_col? integer passage only: 0-based byte column on `start`
+---@field end_col? integer passage only: exclusive byte column on `stop`
+
 local M = {}
+
+-- Under syntax highlighting (treesitter's 100) and the visual selection.
+M.TEXT_HL = 'IterAnnotationText'
+M.TEXT_PRIORITY = 10
+local TEXT_HL, TEXT_PRIORITY = M.TEXT_HL, M.TEXT_PRIORITY
 
 local BAR = '▎ '
 local OUTDATED = 'outdated · '
+
+--- The pieces `span` annotates: the column range of a passage, else every
+--- line whole, empty ones included (`whole`, no columns). `text_of` gives
+--- the text of a line, nil for one the view doesn't show, which is skipped.
+--- Empty column ranges are left out.
+---@param span { start: integer, stop: integer, start_col?: integer, end_col?: integer }
+---@param text_of fun(line: integer): string?
+---@return { line: integer, col?: integer, end_col?: integer, whole?: true }[]
+function M.text_ranges(span, text_of)
+    local ranges = {}
+
+    for line = span.start, span.stop do
+        local text = text_of(line)
+
+        if text ~= nil then
+            if span.start_col == nil then
+                table.insert(ranges, { line = line, whole = true })
+            else
+                local col = line == span.start and span.start_col or 0
+                local end_col = line == span.stop and span.end_col or #text
+                end_col = math.min(end_col, #text)
+
+                if end_col > col then
+                    table.insert(
+                        ranges,
+                        { line = line, col = col, end_col = end_col }
+                    )
+                end
+            end
+        end
+    end
+
+    return ranges
+end
+
+--- Tint `range` at buffer row `row`: the whole row to the window's edge, or
+--- the columns of a passage.
+---@param buf integer
+---@param ns integer
+---@param row integer 0-based
+---@param range { col?: integer, end_col?: integer, whole?: true }
+function M.set_text(buf, ns, row, range)
+    if range.whole then
+        vim.api.nvim_buf_set_extmark(buf, ns, row, 0, {
+            line_hl_group = TEXT_HL,
+            priority = TEXT_PRIORITY,
+        })
+    else
+        vim.api.nvim_buf_set_extmark(buf, ns, row, range.col, {
+            end_col = range.end_col,
+            hl_group = TEXT_HL,
+            priority = TEXT_PRIORITY,
+        })
+    end
+end
 
 --- The row showing line `line` of the old (`field` 'old') or new version:
 --- a row with that number, else the gap hiding it.
@@ -66,6 +134,7 @@ end
 ---@param lines_of? IterLinesOf
 ---@return integer? lnum
 ---@return boolean outdated
+---@return IterAnnotationSpan? span
 local function locate(file, annotation, new_follows, lines_of)
     local a = annotation.anchor
 
@@ -105,12 +174,20 @@ local function locate(file, annotation, new_follows, lines_of)
 
     local _, _, outdated = list.line_of(annotation, followed)
     local stop = a.end_line
+    local span
 
     if lines ~= nil then
-        local start, found = anchor.resolve(a, lines)
+        local start, found, start_col, end_col = anchor.resolve(a, lines)
 
         if start ~= nil then
             stop = found
+            span = {
+                field = old and 'old' or 'new',
+                start = start,
+                stop = found,
+                start_col = start_col,
+                end_col = end_col,
+            }
         elseif not follows then
             return nil, false
         end
@@ -118,7 +195,7 @@ local function locate(file, annotation, new_follows, lines_of)
 
     local lnum = stop and row_of(file.rows, old and 'old' or 'new', stop)
 
-    return lnum or header_of(file.rows), outdated
+    return lnum or header_of(file.rows), outdated, not outdated and span or nil
 end
 
 --- The annotations of `file` with the row each sits below, in row order and
@@ -144,12 +221,16 @@ function M.place(file, annotations, opts)
     local order = {}
 
     for index, annotation in ipairs(annotations) do
-        local lnum, outdated =
+        local lnum, outdated, span =
             locate(file, annotation, new_follows, opts.lines_of)
 
         if lnum ~= nil then
-            local mark =
-                { lnum = lnum, annotation = annotation, outdated = outdated }
+            local mark = {
+                lnum = lnum,
+                annotation = annotation,
+                outdated = outdated,
+                span = span,
+            }
             order[mark] = index
             table.insert(result, mark)
         end
@@ -259,7 +340,8 @@ end
 -- holds `{ root, path }`, or false for a buffer that is not a repo file, so
 -- each buffer is checked once and the state dies with the buffer.
 
-local SIGN = '▍'
+M.SIGN = '▍'
+local SIGN = M.SIGN
 local TARGET = 'iter_annotation_target'
 local WIDTH = 'iter_annotation_width'
 
@@ -333,6 +415,8 @@ end
 ---@param buf integer
 ---@param win integer
 local function render(buf, win)
+    require('iter.annotations.statuscolumn').invalidate(buf)
+
     local target = target_of(buf)
 
     if target == nil then
@@ -372,11 +456,19 @@ local function render(buf, win)
 
     local width = math.max(1, wininfo.width - indent)
     local pad = { string.rep(' ', indent) }
+    -- With a sign column the note's bar sits in it, under the sign's, and the
+    -- text starts at the buffer text.
+    local fold = tonumber(vim.wo[win].foldcolumn) or 0
+    local in_sign_column = signcolumn ~= 'no'
+        and not vim.startswith(signcolumn, 'number')
+        and indent > fold
 
     vim.api.nvim_buf_clear_namespace(buf, buffer_ns, 0, -1)
 
     for _, annotation in ipairs(annotations) do
-        local start, stop, outdated = list.line_of(annotation, lines)
+        local start, stop, outdated, start_col, end_col =
+            list.line_of(annotation, lines)
+        local found = start ~= nil and not outdated
 
         if start == nil then
             stop =
@@ -397,16 +489,49 @@ local function render(buf, win)
             })
         end
 
+        if found then
+            ---@cast start integer
+            ---@cast stop integer
+            local span = {
+                start = start,
+                stop = stop,
+                start_col = start_col,
+                end_col = end_col,
+            }
+
+            for _, range in
+                ipairs(M.text_ranges(span, function(line)
+                    return lines[line]
+                end))
+            do
+                M.set_text(buf, buffer_ns, range.line - 1, range)
+            end
+        end
+
         local virt_lines = M.lines(
             annotation,
             outdated,
-            width,
+            in_sign_column and width + vim.fn.strdisplaywidth(BAR) or width,
             false,
             require('iter').config.options.icons.annotation
         )
 
         for _, line in ipairs(virt_lines) do
-            table.insert(line, 1, pad)
+            if in_sign_column then
+                table.remove(line, 1)
+                table.insert(line, 1, {
+                    string.rep(' ', fold),
+                })
+                table.insert(line, 2, { SIGN, group })
+                table.insert(line, 3, {
+                    string.rep(
+                        ' ',
+                        indent - fold - vim.fn.strdisplaywidth(SIGN)
+                    ),
+                })
+            else
+                table.insert(line, 1, pad)
+            end
         end
 
         vim.api.nvim_buf_set_extmark(buf, buffer_ns, stop - 1, 0, {
@@ -487,6 +612,33 @@ function M.target(buf)
     return target_of(buf)
 end
 
+--- The signs of `buf`: sign highlight group by 1-based line.
+---@param buf integer
+---@return table<integer, string>
+function M.signs(buf)
+    local signs = {}
+
+    for _, mark in
+        ipairs(
+            vim.api.nvim_buf_get_extmarks(
+                buf,
+                buffer_ns,
+                0,
+                -1,
+                { type = 'sign', details = true }
+            )
+        )
+    do
+        local group = mark[4].sign_hl_group
+
+        if group ~= nil then
+            signs[mark[2] + 1] = group
+        end
+    end
+
+    return signs
+end
+
 --- Draw the annotations of `buf` again in a normal window showing it.
 ---@param buf integer
 function M.render_buffer(buf)
@@ -539,15 +691,25 @@ function M.watch_buffers()
     })
     -- A reload after an outside change (`:checktime`, 'autoread') replaces
     -- the lines but keeps the extmarks where they were, and fires no
-    -- `BufWinEnter`.
+    -- `BufWinEnter`. The annotations are re-anchored against the new lines.
     vim.api.nvim_create_autocmd('FileChangedShellPost', {
         group = group,
         callback = function(args)
+            if target_of(args.buf) ~= nil then
+                reanchor(args.buf)
+            end
+
             local win = normal_win_of(args.buf)
 
             if win ~= nil then
                 render(args.buf, win)
             end
+        end,
+    })
+    vim.api.nvim_create_autocmd('BufWipeout', {
+        group = group,
+        callback = function(args)
+            require('iter.annotations.statuscolumn').invalidate(args.buf)
         end,
     })
     vim.api.nvim_create_autocmd('BufFilePost', {

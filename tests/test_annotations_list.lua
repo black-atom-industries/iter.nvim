@@ -69,4 +69,30 @@ T['line_of()']['falls back to the stored flag only without content'] = function(
     eq({ list.line_of(annotation, nil) }, { nil, nil, false })
 end
 
+T['line_of()']['returns the columns of a passage'] = function()
+    local annotation = {
+        scope = 'line',
+        anchor = {
+            path = 'a.txt',
+            side = 'new',
+            start_line = 1,
+            end_line = 1,
+            lines = { 'one two' },
+            start_col = 4,
+            end_col = 7,
+            quote = 'two',
+        },
+        outdated = false,
+    }
+
+    eq({ list.line_of(annotation, { 'x', 'so one two' }) }, {
+        2,
+        2,
+        false,
+        7,
+        10,
+    })
+    eq({ list.line_of(annotation, { 'one' }) }, { nil, nil, true })
+end
+
 return T

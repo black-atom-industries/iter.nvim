@@ -193,10 +193,53 @@ local function placed()
                 end
                 table.insert(lines, (text:gsub('%s+$', '')))
             end
-            table.insert(result, (mark[2] + 1) .. ' ' .. table.concat(lines, '|'))
+            if mark[4].virt_lines ~= nil then
+                table.insert(result, (mark[2] + 1) .. ' ' .. table.concat(lines, '|'))
+            end
         end
         return result
     end)()]])
+end
+
+--- The text each `IterAnnotationText` extmark of `buf` covers, as
+--- `<text>@<start col>-<end col>` per line it spans, in buffer order; a
+--- whole-line tint is `<text>@line`.
+---@param buf_expr string Lua expression of the buffer, in the child
+---@param ns_name string
+---@return string[]
+local function text_marks(buf_expr, ns_name)
+    return child.lua_get(string.format(
+        [[(function()
+        local buf = %s
+        local ns = vim.api.nvim_get_namespaces()[%q]
+        local result = {}
+        for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
+            local d = mark[4]
+            if d.line_hl_group == 'IterAnnotationText' then
+                local text = vim.api.nvim_buf_get_lines(buf, mark[2], mark[2] + 1, false)[1]
+                table.insert(result, text .. '@line')
+            elseif d.hl_group == 'IterAnnotationText' then
+                for row = mark[2], d.end_row or mark[2] do
+                    local text = vim.api.nvim_buf_get_lines(buf, row, row + 1, false)[1]
+                    local from = row == mark[2] and mark[3] or 0
+                    local to = row == (d.end_row or mark[2]) and d.end_col or #text
+                    table.insert(result, text .. '@' .. from .. '-' .. to)
+                end
+            end
+        end
+        return result
+    end)()]],
+        buf_expr,
+        ns_name
+    ))
+end
+
+---@return string[]
+local function diff_text_marks()
+    return text_marks(
+        [[require('iter').current_review.drawer.view.buf]],
+        'iter.diff.annotation_text'
+    )
 end
 
 ---@return integer
@@ -238,6 +281,41 @@ T['diff view']['shows each annotation kind under its row'] = function()
     eq(child.v.errmsg, '')
 
     helpers.expect_screenshot(child, 'marks-diff')
+end
+
+T['diff view']['tints the annotated lines of the new side and no outdated one'] = function()
+    seed(ANNOTATIONS)
+    open_review()
+
+    eq(diff_text_marks(), {
+        'l1@line',
+        'l4@line',
+        'l5@line',
+        'l6@line',
+        'l8@line',
+    })
+end
+
+T['diff view']['tints the words of a passage in their columns'] = function()
+    seed({
+        {
+            scope = 'line',
+            body = 'Passage',
+            anchor = {
+                path = 'm.txt',
+                side = 'new',
+                start_line = 3,
+                end_line = 3,
+                lines = { 'l3 new' },
+                start_col = 3,
+                end_col = 6,
+                quote = 'new',
+            },
+        },
+    })
+    open_review()
+
+    eq(diff_text_marks(), { 'l3 new@3-6' })
 end
 
 T['diff view']['icons.annotation = "" leaves the bar and text only'] = function()
@@ -639,18 +717,112 @@ T['normal buffer']['shows line and range annotations with signs'] = function()
 
     eq(buffer_marks(), {
         '1 sign',
-        '1 ▎ 󰆉 Line annotation',
+        '1 ▍     󰆉 Line annotation',
         '4 sign',
         '5 sign',
         '6 sign',
-        '6 ▎ 󰆉 A range annotation that is long enough to wrap at the width of the'
-            .. '|▎   diff window, which is eighty columns minus the rail',
+        '6 ▍     󰆉 A range annotation that is long enough to wrap at the width of the diff'
+            .. '|▍       window, which is eighty columns minus the rail',
         '9 sign',
-        '9 ▎ 󰆉 outdated · Outdated annotation',
+        '9 ▍     󰆉 outdated · Outdated annotation',
     })
     eq(child.v.errmsg, '')
 
     helpers.expect_screenshot(child, 'marks-buffer')
+end
+
+T['normal buffer']['tints the annotated lines and the words of a passage'] = function()
+    seed({
+        ANNOTATIONS[1],
+        ANNOTATIONS[2],
+        {
+            scope = 'line',
+            body = 'Passage',
+            anchor = {
+                path = 'm.txt',
+                side = 'new',
+                start_line = 3,
+                end_line = 3,
+                lines = { 'l3 new' },
+                start_col = 1,
+                end_col = 4,
+                quote = '3 n',
+            },
+        },
+    })
+    setup_iter()
+    child.cmd('edit m.txt')
+
+    eq(text_marks('0', 'iter.buffer.annotations'), {
+        'l1@line',
+        'l3 new@1-4',
+        'l4@line',
+        'l5@line',
+        'l6@line',
+    })
+end
+
+T['normal buffer']['tints every line of a range whole, an empty one too'] = function()
+    child.lua([[
+        local lines = {}
+        for i = 1, 5 do lines[i] = 'l' .. i end
+        lines[3] = ''
+        vim.fn.writefile(lines, 'm.txt')
+    ]])
+    seed({
+        {
+            scope = 'range',
+            body = 'Range',
+            anchor = {
+                path = 'm.txt',
+                side = 'new',
+                start_line = 2,
+                end_line = 4,
+                lines = { 'l2', '', 'l4' },
+            },
+        },
+    })
+    setup_iter()
+    child.cmd('edit m.txt')
+
+    eq(text_marks('0', 'iter.buffer.annotations'), {
+        'l2@line',
+        '@line',
+        'l4@line',
+    })
+end
+
+T['normal buffer']['tints nothing for outdated, file and review annotations'] = function()
+    seed({ ANNOTATIONS[3], ANNOTATIONS[5], ANNOTATIONS[8] })
+    setup_iter()
+    child.cmd('edit m.txt')
+
+    eq(text_marks('0', 'iter.buffer.annotations'), {})
+end
+
+T['normal buffer']['tints a passage where it moved'] = function()
+    seed({
+        {
+            scope = 'line',
+            body = 'Passage',
+            anchor = {
+                path = 'm.txt',
+                side = 'new',
+                start_line = 3,
+                end_line = 3,
+                lines = { 'l3 new' },
+                start_col = 3,
+                end_col = 6,
+                quote = 'new',
+            },
+        },
+    })
+    setup_iter()
+    child.cmd('edit m.txt')
+    child.api.nvim_buf_set_lines(0, 2, 3, false, { 'now l3 new again' })
+    child.cmd('write')
+
+    eq(text_marks('0', 'iter.buffer.annotations'), { 'now l3 new again@7-10' })
 end
 
 T['normal buffer']['nothing shows without setup()'] = function()
@@ -671,7 +843,7 @@ T['normal buffer']['setup() shows the buffers already in windows'] = function()
     child.cmd('edit m.txt')
     setup_iter()
 
-    eq(buffer_marks(), { '1 sign', '1 ▎ 󰆉 Line annotation' })
+    eq(buffer_marks(), { '1 sign', '1 ▍ 󰆉 Line annotation' })
 end
 
 T['normal buffer']['saving after inserting lines above moves the annotations'] = function()
@@ -686,7 +858,7 @@ T['normal buffer']['saving after inserting lines above moves the annotations'] =
         ANNOTATIONS[2].body .. ' 6-8',
     })
     eq(buffer_marks()[1], '3 sign')
-    eq(buffer_marks()[2], '3 ▎ 󰆉 Line annotation')
+    eq(buffer_marks()[2], '3 ▍ 󰆉 Line annotation')
     eq(buffer_marks()[5], '8 sign')
 end
 
@@ -705,13 +877,49 @@ T['normal buffer']['a reload after an outside edit moves the marks'] = function(
     eq(child.api.nvim_buf_get_lines(0, 0, 1, false), { 'agent b' })
     eq(buffer_marks(), {
         '3 sign',
-        '3 ▎ 󰆉 Line annotation',
+        '3 ▍ 󰆉 Line annotation',
         '6 sign',
         '7 sign',
         '8 sign',
-        '8 ▎ 󰆉 A range annotation that is long enough to wrap at the width of the diff'
-            .. '|▎   window, which is eighty columns minus the rail',
+        '8 ▍ 󰆉 A range annotation that is long enough to wrap at the width of the diff'
+            .. '|▍   window, which is eighty columns minus the rail',
     })
+end
+
+T['normal buffer']['a reload after an outside edit persists the moved passage'] = function()
+    child.lua([[
+        local lines = vim.fn.readfile('m.txt')
+        local anchor = require('iter.annotations.anchor').create({
+            path = 'm.txt',
+            side = 'new',
+            start_line = 3,
+            end_line = 3,
+            start_col = 3,
+            end_col = 6,
+        }, lines)
+        assert(require('iter.store').put_annotation(vim.fn.getcwd(), {
+            scope = 'line',
+            body = 'Passage',
+            outdated = false,
+            anchor = anchor,
+        }))
+    ]])
+    setup_iter()
+    child.cmd('edit m.txt')
+
+    local lines = child.api.nvim_buf_get_lines(0, 0, -1, false)
+    table.insert(lines, 1, 'agent a')
+    lines[4] = 'now ' .. lines[4]
+    helpers.write_file(vim.fs.joinpath(repo, 'm.txt'), lines)
+    child.o.autoread = true
+    child.cmd('checktime')
+
+    local anchor = child.lua_get(
+        [[require('iter.store').load(vim.fn.getcwd()).annotations[1].anchor]]
+    )
+    eq({ anchor.start_line, anchor.start_col, anchor.end_col }, { 4, 7, 10 })
+    eq(anchor.lines, { 'now l3 new' })
+    eq(anchor.before, 'agent a\nl1\nl2\nnow l3 ')
 end
 
 T['normal buffer']['saving after deleting the anchored line outdates it'] = function()
@@ -725,7 +933,7 @@ T['normal buffer']['saving after deleting the anchored line outdates it'] = func
         'Line annotation 1-1 outdated',
         ANNOTATIONS[2].body .. ' 3-5',
     })
-    eq(buffer_marks()[2], '1 ▎ 󰆉 outdated · Line annotation')
+    eq(buffer_marks()[2], '1 ▍ 󰆉 outdated · Line annotation')
     eq(child.v.errmsg, '')
 end
 
@@ -749,7 +957,7 @@ T['normal buffer']['saving the last line away keeps the annotation on the buffer
     child.cmd('write')
 
     eq(stored(), { 'Last line 19-19 outdated' })
-    eq(buffer_marks(), { '9 sign', '9 ▎ 󰆉 outdated · Last line' })
+    eq(buffer_marks(), { '9 sign', '9 ▍ 󰆉 outdated · Last line' })
     eq(child.v.errmsg, '')
 end
 
@@ -801,13 +1009,14 @@ end
 T['normal buffer']['showing a repo buffer again spawns no git'] = function()
     seed({ ANNOTATIONS[1] })
     setup_iter()
+    child.o.signcolumn = 'yes'
     child.cmd('edit m.txt')
     count_git_runs()
     child.cmd('edit n.txt')
     child.cmd('buffer m.txt')
 
     eq(child.lua_get('_G.git_runs'), 0)
-    eq(buffer_marks(), { '1 sign', '1 ▎ 󰆉 Line annotation' })
+    eq(buffer_marks(), { '1 sign', '1 ▍ 󰆉 Line annotation' })
 end
 
 T['normal buffer']['an annotation written meanwhile shows on the next enter'] = function()
@@ -819,7 +1028,7 @@ T['normal buffer']['an annotation written meanwhile shows on the next enter'] = 
     child.cmd('edit n.txt')
     child.cmd('buffer m.txt')
 
-    eq(buffer_marks(), { '1 sign', '1 ▎ 󰆉 Line annotation' })
+    eq(buffer_marks(), { '1 sign', '1 ▍ 󰆉 Line annotation' })
 end
 
 T['normal buffer']['a branch switch shows the other branch annotations'] = function()
@@ -836,7 +1045,7 @@ T['normal buffer']['a branch switch shows the other branch annotations'] = funct
     child.cmd('edit n.txt')
     child.cmd('buffer m.txt')
 
-    eq(buffer_marks(), { '1 sign', '1 ▎ 󰆉 Line annotation' })
+    eq(buffer_marks(), { '1 sign', '1 ▍ 󰆉 Line annotation' })
 end
 
 T['normal buffer']['a linked worktree shows its branch annotations'] = function()
@@ -847,7 +1056,7 @@ T['normal buffer']['a linked worktree shows its branch annotations'] = function(
     setup_iter()
     child.cmd('edit m.txt')
 
-    eq(buffer_marks(), { '1 sign', '1 ▎ 󰆉 Line annotation' })
+    eq(buffer_marks(), { '1 sign', '1 ▍ 󰆉 Line annotation' })
 
     helpers.cleanup(linked)
 end
@@ -945,7 +1154,7 @@ T['normal buffer'][':file and :saveas re-render for the new name'] = function()
     eq(buffer_marks(), {})
 
     child.cmd('file m.txt')
-    eq(buffer_marks(), { '1 sign', '1 ▎ 󰆉 outdated · Line annotation' })
+    eq(buffer_marks(), { '1 sign', '1 ▍ 󰆉 outdated · Line annotation' })
 
     child.cmd('silent saveas copy.txt')
     eq(buffer_marks(), {})

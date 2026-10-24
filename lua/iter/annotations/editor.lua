@@ -604,18 +604,51 @@ function M.statusline()
 end
 
 --- The first and last line of the visual selection when in visual mode,
---- which then ends, else the cursor line twice.
+--- which then ends, else the cursor line twice. A charwise selection also
+--- returns the 0-based byte column it starts at on the first line and the
+--- exclusive column it ends at on the last: with 'selection' inclusive the
+--- last character whole, with exclusive up to the character under the end.
 ---@return integer first
 ---@return integer last
+---@return integer? start_col
+---@return integer? end_col
 function M.selection()
     local mode = vim.fn.mode()
     local cursor = vim.fn.line('.')
 
     if mode == 'v' or mode == 'V' or mode == '\22' then
-        local other = vim.fn.line('v')
+        local here = vim.fn.getpos('.')
+        local other = vim.fn.getpos('v')
+        local buf = vim.api.nvim_get_current_buf()
         vim.api.nvim_feedkeys(vim.keycode('<Esc>'), 'nx', false)
 
-        return math.min(cursor, other), math.max(cursor, other)
+        if mode ~= 'v' then
+            return math.min(cursor, other[2]), math.max(cursor, other[2])
+        end
+
+        local from, to = here, other
+
+        if
+            here[2] > other[2] or (here[2] == other[2] and here[3] > other[3])
+        then
+            from, to = other, here
+        end
+
+        local last = vim.api.nvim_buf_get_lines(buf, to[2] - 1, to[2], false)[1]
+            or ''
+        local stop
+
+        if vim.o.selection == 'exclusive' then
+            stop = math.min(to[3] - 1, #last)
+        else
+            stop = math.min(to[3], #last)
+
+            if stop > 0 then
+                stop = stop + vim.str_utf_end(last, stop)
+            end
+        end
+
+        return from[2], to[2], from[3] - 1, stop
     end
 
     return cursor, cursor

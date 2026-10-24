@@ -1621,13 +1621,17 @@ end
 --- goes through the unstaged diff; only deleted rows anchor on the old
 --- side, against the version they were deleted from. On the old side of
 --- the split layout (`side` 'old') rows with a deleted line anchor on the
---- old side over all of them, context included.
+--- old side over all of them, context included. `passage` (the rows the
+--- selection starts and ends on, and its columns there) makes a new-side
+--- anchor a passage when both rows are its first and last and show the
+--- worktree's text of their lines.
 ---@param file IterFileDiff
 ---@param rows integer[]
 ---@param side? 'old'|'new'
+---@param passage? { first: integer?, last: integer?, start_col: integer, end_col: integer }
 ---@return IterAnchor?
 ---@return string? error
-function Review:anchor_rows(file, rows, side)
+function Review:anchor_rows(file, rows, side, passage)
     local new_rows, old = {}, {}
     local old_side = false
 
@@ -1664,11 +1668,25 @@ function Review:anchor_rows(file, rows, side)
             return nil, file.path .. ' has no such line in the worktree'
         end
 
+        local start_col, end_col
+
+        if
+            passage ~= nil
+            and passage.first == new_rows[1]
+            and passage.last == new_rows[#new_rows]
+            and file.rows[passage.first].text == lines[start]
+            and file.rows[passage.last].text == lines[stop]
+        then
+            start_col, end_col = passage.start_col, passage.end_col
+        end
+
         return anchor.create({
             path = file.path,
             side = 'new',
             start_line = start,
             end_line = stop,
+            start_col = start_col,
+            end_col = end_col,
         }, lines)
     end
 
@@ -1708,7 +1726,7 @@ function Review:annotate()
     end
 
     local side = view:active_side()
-    local first, last = editor.selection()
+    local first, last, start_col, end_col = editor.selection()
     local section, rows = self:selected_section(first, last, side)
 
     if section == nil then
@@ -1722,7 +1740,20 @@ function Review:annotate()
         return
     end
 
-    local a, err = self:anchor_rows(file, rows, side)
+    local passage
+
+    if start_col ~= nil then
+        local _, first_row = view:at(first)
+        local _, last_row = view:at(last)
+        passage = {
+            first = first_row,
+            last = last_row,
+            start_col = start_col,
+            end_col = end_col,
+        }
+    end
+
+    local a, err = self:anchor_rows(file, rows, side, passage)
 
     if a == nil then
         util.warn(err or 'No line under the cursor')

@@ -11,6 +11,9 @@ local anchor = require('iter.annotations.anchor')
 ---@field index integer position in the store
 ---@field outdated boolean
 ---@field start? integer line the annotation starts on in the version it follows, when its text was found there
+---@field start_col? integer passage: the 0-based byte column it starts at there
+---@field end_col? integer passage: the exclusive byte column it ends at there
+---@field col? integer passage: the 1-based character column it starts at, for people
 
 ---@class IterAnnotationGroup
 ---@field path? string nil for the review group
@@ -104,22 +107,27 @@ end
 
 --- Where the text of `annotation` sits in `lines`, the content of the
 --- version it follows (`anchor.version`), and whether it is outdated: an
---- annotation with text is outdated when `lines` lacks it. Without `lines`
---- or without text the stored `outdated` flag answers, a cache that
---- `anchor.follow` updates when a written buffer moves the text.
+--- annotation with text is outdated when `lines` lacks it. A passage
+--- annotation also returns the columns of its start and end (0-based bytes,
+--- the end exclusive). Without `lines` or without text the stored `outdated`
+--- flag answers, a cache that `anchor.follow` updates when a written buffer
+--- moves the text.
 ---@param annotation IterAnnotation
 ---@param lines? string[]
 ---@return integer? start
 ---@return integer? stop
 ---@return boolean outdated
+---@return integer? start_col
+---@return integer? end_col
 function M.line_of(annotation, lines)
     if lines == nil or not M.has_text(annotation) then
         return nil, nil, annotation.outdated == true
     end
 
-    local start, stop = anchor.resolve(annotation.anchor, lines)
+    local start, stop, start_col, end_col =
+        anchor.resolve(annotation.anchor, lines)
 
-    return start, stop, start == nil
+    return start, stop, start == nil, start_col, end_col
 end
 
 --- `line_of` against the version the annotation follows, read through
@@ -129,6 +137,8 @@ end
 ---@return integer? start
 ---@return integer? stop
 ---@return boolean outdated
+---@return integer? start_col
+---@return integer? end_col
 function M.resolve(annotation, lines_of)
     local a = annotation.anchor
     local lines = M.has_text(annotation)
@@ -169,13 +179,33 @@ function M.groups(annotations, order, lines_of)
             table.insert(groups, group)
         end
 
-        local start, _, outdated = M.resolve(annotation, lines_of)
+        local start, _, outdated, start_col, end_col =
+            M.resolve(annotation, lines_of)
+
+        local a = annotation.anchor
+        local col
+
+        if a.quote ~= nil then
+            local lines = start ~= nil and lines_of(a.path, anchor.version(a))
+                or nil
+            local text = lines and lines[start] or a.lines and a.lines[1]
+            local at = start_col or a.start_col or 0
+
+            col = (
+                vim.fn.charidx(text or '', at) >= 0
+                    and vim.fn.charidx(text or '', at)
+                or at
+            ) + 1
+        end
 
         table.insert(group.items, {
             annotation = annotation,
             index = index,
             outdated = outdated,
             start = start,
+            start_col = start_col,
+            end_col = end_col,
+            col = col,
         })
     end
 

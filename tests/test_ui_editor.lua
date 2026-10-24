@@ -623,6 +623,59 @@ T['anchors']['a visual range anchors its lines'] = function()
     })
 end
 
+T['anchors']['v anchors the selected words of the new side'] = function()
+    open_review()
+    diff_cursor('l3 new')
+    child.type_keys('l', 'v', '2l', 'a')
+    wait_editor()
+    child.type_keys('passage', '<C-s>')
+
+    local annotation = stored()[1]
+    eq(annotation.scope, 'line')
+    local before, after = annotation.anchor.before, annotation.anchor.after
+    annotation.anchor.before, annotation.anchor.after = nil, nil
+    eq(annotation.anchor, {
+        path = 'm.txt',
+        side = 'new',
+        start_line = 3,
+        end_line = 3,
+        lines = { 'l3 new' },
+        start_col = 1,
+        end_col = 4,
+        quote = '3 n',
+    })
+    eq(before, 'l1\nl2\nl')
+    eq(vim.startswith(after, 'ew\nl4\nl5'), true)
+end
+
+T['anchors']['V in the diff pane still anchors whole lines'] = function()
+    open_review()
+    diff_cursor('l3 new')
+    child.type_keys('l', 'V', 'a')
+    wait_editor()
+    child.type_keys('line', '<C-s>')
+
+    eq(stored()[1].anchor, {
+        path = 'm.txt',
+        side = 'new',
+        start_line = 3,
+        end_line = 3,
+        lines = { 'l3 new' },
+    })
+end
+
+T['anchors']['v on a deleted line keeps a line note'] = function()
+    open_review()
+    diff_cursor('l8', 'del')
+    child.type_keys('v', 'a')
+    wait_editor()
+    child.type_keys('old', '<C-s>')
+
+    local anchor = stored()[1].anchor
+    eq(anchor.side, 'old')
+    eq(anchor.quote, nil)
+end
+
 T['anchors']['a deleted line anchors on the old side'] = function()
     open_review()
     diff_cursor('l8', 'del')
@@ -831,7 +884,7 @@ end
 T['edit and delete']['e in the review redraws the file buffer'] = function()
     seed_line_annotation()
     child.cmd('edit m.txt')
-    eq(buffer_mark_texts(), { '▎ 󰆉 old body' })
+    eq(buffer_mark_texts(), { '▍ 󰆉 old body' })
 
     open_review()
     diff_cursor('l4')
@@ -841,13 +894,13 @@ T['edit and delete']['e in the review redraws the file buffer'] = function()
     child.type_keys('<C-u>', 'new body', '<C-s>')
 
     eq(stored()[1].body, 'new body')
-    eq(buffer_mark_texts(), { '▎ 󰆉 new body' })
+    eq(buffer_mark_texts(), { '▍ 󰆉 new body' })
 end
 
 T['edit and delete']['d in the review clears the mark of the file buffer'] = function()
     seed_line_annotation()
     child.cmd('edit m.txt')
-    eq(buffer_mark_texts(), { '▎ 󰆉 old body' })
+    eq(buffer_mark_texts(), { '▍ 󰆉 old body' })
 
     open_review()
     diff_cursor('l4')
@@ -894,6 +947,150 @@ T['api']['annotate() takes a visual range'] = function()
     eq(stored()[1].scope, 'range')
     eq(stored()[1].anchor.start_line, 4)
     eq(stored()[1].anchor.end_line, 5)
+end
+
+T['api']['annotate() takes the words of a v selection'] = function()
+    child.cmd('edit m.txt')
+    child.lua(
+        [[vim.keymap.set('x', '<Space>c', function() require('iter').annotate() end)]]
+    )
+    child.api.nvim_win_set_cursor(0, { 3, 1 })
+    child.type_keys('v', '2l', '<Space>c')
+    wait_editor()
+    child.type_keys('passage', '<C-s>')
+
+    local annotation = stored()[1]
+    eq(annotation.scope, 'line')
+    eq(annotation.anchor.lines, { 'l3 new' })
+    eq({ annotation.anchor.start_col, annotation.anchor.end_col }, { 1, 4 })
+    eq(annotation.anchor.quote, '3 n')
+end
+
+T['api']['annotate() takes a backwards v selection across lines'] = function()
+    child.cmd('edit m.txt')
+    child.lua(
+        [[vim.keymap.set('x', '<Space>c', function() require('iter').annotate() end)]]
+    )
+    child.api.nvim_win_set_cursor(0, { 5, 1 })
+    child.type_keys('v', 'k', '<Space>c')
+    wait_editor()
+    child.type_keys('passage', '<C-s>')
+
+    local annotation = stored()[1]
+    eq(annotation.scope, 'range')
+    eq(annotation.anchor.lines, { 'l4', 'l5' })
+    eq({ annotation.anchor.start_col, annotation.anchor.end_col }, { 1, 2 })
+    eq(annotation.anchor.quote, '4\nl5')
+end
+
+T['api']['annotate() keeps V and blockwise selections as line notes'] = function()
+    child.cmd('edit m.txt')
+    child.lua(
+        [[vim.keymap.set('x', '<Space>c', function() require('iter').annotate() end)]]
+    )
+    child.api.nvim_win_set_cursor(0, { 3, 1 })
+    child.type_keys('V', '<Space>c')
+    wait_editor()
+    child.type_keys('one', '<C-s>')
+
+    child.api.nvim_win_set_cursor(0, { 5, 0 })
+    child.type_keys('<C-v>', 'jl', '<Space>c')
+    wait_editor()
+    child.type_keys('two', '<C-s>')
+
+    local saved = stored()
+    eq(#saved, 2)
+
+    for _, annotation in ipairs(saved) do
+        eq(annotation.anchor.quote, nil)
+        eq(annotation.anchor.start_col, nil)
+    end
+end
+
+T['api']['annotate() takes a whole multibyte character at the end of v'] = function()
+    child.cmd('edit m.txt')
+    child.api.nvim_buf_set_lines(0, 2, 3, false, { 'äöü xyz' })
+    child.lua(
+        [[vim.keymap.set('x', '<Space>c', function() require('iter').annotate() end)]]
+    )
+    child.api.nvim_win_set_cursor(0, { 3, 0 })
+    child.type_keys('v', 'l', '<Space>c')
+    wait_editor()
+    child.type_keys('mb', '<C-s>')
+
+    local anchor = stored()[1].anchor
+    eq(anchor.quote, 'äö')
+    eq({ anchor.start_col, anchor.end_col }, { 0, 4 })
+end
+
+T['api']['annotate() clamps v$ to the line without its newline'] = function()
+    child.cmd('edit m.txt')
+    child.lua(
+        [[vim.keymap.set('x', '<Space>c', function() require('iter').annotate() end)]]
+    )
+    child.api.nvim_win_set_cursor(0, { 3, 1 })
+    child.type_keys('v', '$', '<Space>c')
+    wait_editor()
+    child.type_keys('eol', '<C-s>')
+
+    local anchor = stored()[1].anchor
+    eq(anchor.quote, '3 new')
+    eq({ anchor.start_col, anchor.end_col }, { 1, 6 })
+end
+
+T['api']['annotate() orders a reversed v selection'] = function()
+    child.cmd('edit m.txt')
+    child.lua(
+        [[vim.keymap.set('x', '<Space>c', function() require('iter').annotate() end)]]
+    )
+    child.api.nvim_win_set_cursor(0, { 3, 4 })
+    child.type_keys('v', '2h', '<Space>c')
+    wait_editor()
+    child.type_keys('rev', '<C-s>')
+
+    local anchor = stored()[1].anchor
+    eq(anchor.quote, ' ne')
+    eq({ anchor.start_col, anchor.end_col }, { 2, 5 })
+end
+
+T['anchors']['v starting on a deleted row falls back to a line note'] = function()
+    open_review()
+    diff_cursor('l3 new')
+    child.type_keys('l', 'v', 'k', 'a')
+    wait_editor()
+    child.type_keys('fallback', '<C-s>')
+
+    local anchor = stored()[1].anchor
+    eq(anchor.quote, nil)
+    eq({ anchor.start_line, anchor.end_line }, { 3, 3 })
+end
+
+T['anchors']['v ending on a deleted row falls back to a line note'] = function()
+    open_review()
+    diff_cursor('l2')
+    child.type_keys('l', 'v', 'j', 'a')
+    wait_editor()
+    child.type_keys('fallback', '<C-s>')
+
+    local anchor = stored()[1].anchor
+    eq(anchor.quote, nil)
+    eq({ anchor.start_line, anchor.end_line }, { 2, 2 })
+end
+
+T['api']["annotate() ends an exclusive 'selection' before the last character"] = function()
+    child.cmd('edit m.txt')
+    child.o.selection = 'exclusive'
+    child.lua(
+        [[vim.keymap.set('x', '<Space>c', function() require('iter').annotate() end)]]
+    )
+    child.api.nvim_win_set_cursor(0, { 3, 1 })
+    child.type_keys('v', '2l', '<Space>c')
+    wait_editor()
+    child.type_keys('excl', '<C-s>')
+
+    local anchor = stored()[1].anchor
+    eq(anchor.quote, '3 ')
+    eq({ anchor.start_col, anchor.end_col }, { 1, 3 })
 end
 
 T['api']["annotate({ scope = 'file' }) annotates the buffer's file"] = function()

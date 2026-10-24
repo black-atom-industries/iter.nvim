@@ -163,7 +163,7 @@ function M.annotate(opts)
 
     local marks = require('iter.annotations.marks')
     local buf = vim.api.nvim_get_current_buf()
-    local first, last = editor.selection()
+    local first, last, start_col, end_col = editor.selection()
     local target = marks.target(buf)
 
     if target == nil then
@@ -195,6 +195,8 @@ function M.annotate(opts)
                 side = 'new',
                 start_line = first,
                 end_line = last,
+                start_col = start_col,
+                end_col = end_col,
             }, lines),
         },
         config = M.config,
@@ -253,6 +255,23 @@ function M.yank(opts)
         ids = opts ~= nil and opts.ids or nil,
         on_clear = refresh_annotations,
     })
+end
+
+--- Move the cursor to the next annotation of the current buffer, where its
+--- text starts; after the last one it wraps to the first.
+function M.next_annotation()
+    require('iter.annotations.navigate').jump(1)
+end
+
+--- Move the cursor to the previous annotation of the current buffer, where
+--- its text starts; before the first one it wraps to the last.
+function M.prev_annotation()
+    require('iter.annotations.navigate').jump(-1)
+end
+
+--- Toggle the annotation sidebar of the current tab.
+function M.sidebar()
+    require('iter.ui.sidebar').toggle(M.config, refresh_annotations)
 end
 
 --- Open the review tab, or switch to it, with the Annotations column of its
@@ -314,6 +333,13 @@ end
 ---@return string
 function M.tabline()
     return require('iter.tabline').render()
+end
+
+--- A 'statuscolumn' that shows what the default columns show, and draws an
+--- annotation's bar on every screen row of a wrapped line.
+---@return string
+function M.statuscolumn()
+    return require('iter.annotations.statuscolumn').get()
 end
 
 ---@param opts IterOptions?

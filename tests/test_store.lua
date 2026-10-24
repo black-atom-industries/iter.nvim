@@ -208,6 +208,20 @@ T['load()']['round-trips annotations and reviewed records'] = function()
     eq(saved.updated_at, saved.created_at)
 end
 
+T['load()']['round-trips the columns and quote of a passage'] = function()
+    local passage = annotation('passage')
+    passage.anchor.start_col = 4
+    passage.anchor.end_col = 9
+    passage.anchor.quote = 'gr\195\182\195\159e\nzwei'
+
+    local saved = assert(store.put_annotation(repo, passage))
+    local loaded = assert(store.load(repo)).annotations[1]
+
+    eq(loaded, saved)
+    eq(loaded.anchor.quote, 'gr\195\182\195\159e\nzwei')
+    eq({ loaded.anchor.start_col, loaded.anchor.end_col }, { 4, 9 })
+end
+
 T['load()']['round-trips anchored text that is not UTF-8'] = function()
     local latin1 = annotation('latin-1')
     latin1.anchor.lines = { 'caf\233' }
