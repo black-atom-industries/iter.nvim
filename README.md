@@ -222,6 +222,9 @@ vim.keymap.set('n', '<leader>as', iter.sidebar, { desc = 'Toggle the annotation 
 
 -- Copy the annotations as a prompt
 vim.keymap.set('n', '<leader>ay', iter.yank, { desc = 'Yank the annotations' })
+
+-- Remove every annotation of the repository, after a confirm
+vim.keymap.set('n', '<leader>ax', iter.clear, { desc = 'Clear the annotations' })
 ```
 
 - Line and range annotations show in the buffer: a sign on the line, the text

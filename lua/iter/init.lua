@@ -255,6 +255,44 @@ function M.yank(opts)
     })
 end
 
+--- Remove every annotation of the repository after a confirm.
+function M.clear()
+    local root = annotation_scope()
+
+    if root == '' then
+        util.warn('Not inside a git repository')
+        return
+    end
+
+    local store = require('iter.store')
+    local annotations = store.cached(root, true).annotations
+    local n = #annotations
+
+    if n == 0 then
+        util.warn('No annotations to clear')
+        return
+    end
+
+    local question = n == 1 and 'Clear 1 annotation?'
+        or string.format('Clear all %d annotations?', n)
+
+    if vim.fn.confirm(question, 'Clear &x\n&No', 2) ~= 1 then
+        return
+    end
+
+    local ids = vim.tbl_map(function(annotation)
+        return annotation.id
+    end, annotations)
+    local _, err = store.remove_annotations(root, ids)
+
+    if err ~= nil then
+        util.error('Cannot clear the annotations: ' .. err)
+        return
+    end
+
+    refresh_annotations()
+end
+
 --- Move the cursor to the next annotation of the current buffer, where its
 --- text starts; after the last one it wraps to the first.
 function M.next_annotation()
