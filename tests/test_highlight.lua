@@ -36,6 +36,20 @@ T['apply()']['derives groups nothing defined'] = function()
     eq(hl('IterSidebar').link, 'NormalFloat')
 end
 
+T['apply()']['the drawer takes NormalFloat when Normal has no background'] = function()
+    -- A fresh Neovim: `:hi clear` keeps the links earlier cases set.
+    local child = MiniTest.new_child_neovim()
+    child.start({ '-u', dofile('tests/helpers.lua').minimal_init })
+    child.api.nvim_set_hl(0, 'Normal', {})
+    child.lua([[require('iter.highlight').apply()]])
+
+    eq(
+        child.api.nvim_get_hl(0, { name = 'IterDrawer', link = true }).link,
+        'NormalFloat'
+    )
+    child.stop()
+end
+
 T['apply()']['keeps groups defined before iter'] = function()
     vim.api.nvim_set_hl(0, 'IterDiffAdd', { bg = 0x123456 })
     vim.api.nvim_set_hl(0, 'IterDrawer', { link = 'Pmenu' })

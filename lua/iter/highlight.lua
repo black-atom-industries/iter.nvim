@@ -170,7 +170,8 @@ function M.apply()
         IterAnnotationSign = { link = 'Special' },
         IterAnnotationText = { bg = text_bg },
         IterSidebar = { link = 'NormalFloat' },
-        IterDrawer = { link = 'Normal' },
+        -- A float without a background shows the windows beneath it.
+        IterDrawer = { link = base ~= nil and 'Normal' or 'NormalFloat' },
         IterDrawerTitle = { link = 'Title' },
         IterDrawerHeader = { bg = header_bg },
         IterDrawerSelected = { link = 'Visual' },

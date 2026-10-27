@@ -726,7 +726,7 @@ event, so no colorscheme needs to define them.
 | `IterReviewed`               | Reviewed marks and progress                             | fg of `Added`, `String`                                                     |
 | `IterReviewedChanged`        | Files changed since reviewed                            | fg of `DiagnosticWarn`, `WarningMsg`, `Constant`                            |
 | `IterSidebar`                | Annotation sidebar background                           | link to `NormalFloat`                                                       |
-| `IterDrawer`                 | Drawer text                                             | link to `Normal`                                                            |
+| `IterDrawer`                 | Drawer text                                             | link to `Normal`, `NormalFloat` when `Normal` has no bg                     |
 | `IterDrawerTitle`            | Drawer titles                                           | link to `Title`                                                             |
 | `IterDrawerHeader`           | Drawer header row, under its rule                       | bg of `Title` fg, blended with `Normal`                                     |
 | `IterDrawerSelected`         | Selected drawer row                                     | link to `Visual`                                                            |
