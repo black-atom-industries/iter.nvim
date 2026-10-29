@@ -102,6 +102,27 @@ T['open()']['enters the float only when asked'] = function()
     eq(child.lua_get('vim.api.nvim_get_current_win() == _G.float.win'), true)
 end
 
+T['open()']['hides the text beneath under a global winblend'] = function()
+    child.o.winblend = 10
+    child.api.nvim_buf_set_lines(
+        0,
+        0,
+        -1,
+        false,
+        vim.fn['repeat']({ string.rep('BEHIND', 10) }, 20)
+    )
+    open_float()
+
+    eq(child.lua_get('vim.wo[_G.float.win].winblend'), 0)
+
+    local row = child.lua_get('vim.api.nvim_win_get_position(_G.float.win)[1]')
+        + 1
+    local width = child.lua_get('vim.api.nvim_win_get_width(_G.float.win)')
+    local cells = child.get_screenshot().text[row]
+    local line = table.concat(vim.list_slice(cells, 1, width))
+    eq(line:find('BEHIND', 1, true), nil)
+end
+
 T['reposition()'] = new_set()
 
 T['reposition()']['follows pane resizes'] = function()

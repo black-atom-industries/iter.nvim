@@ -27,6 +27,8 @@ local function paint(win)
         WINHIGHLIGHT,
         { scope = 'local', win = win }
     )
+    -- With 'winblend' above 0 the float's blank cells show the text beneath.
+    vim.api.nvim_set_option_value('winblend', 0, { scope = 'local', win = win })
 end
 
 ---@class IterFloatOpts
