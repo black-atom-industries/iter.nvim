@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.6.0](https://github.com/black-atom-industries/iter.nvim/compare/v0.5.0...v0.6.0) (2026-10-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* **review:** `y` in the review drawer and the diff pane copies the annotation or file under the cursor; `Y` copies all. Deleting an annotation moves from `x` to `d`.
+* the default key of `mode` is `=`, it was `m`. Set `keys.drawer.mode`, `keys.review_drawer.mode` and `keys.diff.mode` to 'm' to keep it.
+
+### Features
+
+* = toggles one file or all files ([cecdcd6](https://github.com/black-atom-industries/iter.nvim/commit/cecdcd6c6b834dd43b2572a4b3d6627dc978cb3e))
+* **annotations:** annotate passages and tint annotated text ([dc23283](https://github.com/black-atom-industries/iter.nvim/commit/dc23283d40ccf04b1b902a41f946abdcdceda4d5)), closes [#35](https://github.com/black-atom-industries/iter.nvim/issues/35)
+* **annotations:** clear every annotation with iter.clear() ([f3ab205](https://github.com/black-atom-industries/iter.nvim/commit/f3ab205e9b7b0181fa389891ef71f67f039ac7f8))
+* **annotations:** list every annotation in a sidebar with :Iter annotate ([502e25c](https://github.com/black-atom-industries/iter.nvim/commit/502e25ce387492cdea05c50801d34828b5aba57c)), closes [#35](https://github.com/black-atom-industries/iter.nvim/issues/35)
+* **commits:** browse commits with :Iter commits ([5725be8](https://github.com/black-atom-industries/iter.nvim/commit/5725be88491800372b13ce4b86117c5d55233a68))
+* **diff:** gw wraps long lines in the unified layout ([2afa271](https://github.com/black-atom-industries/iter.nvim/commit/2afa271a159c46126368ec44c46111cd86b9117d))
+* **review:** colour the commit rows of the base picker ([a81bde4](https://github.com/black-atom-industries/iter.nvim/commit/a81bde4982b9bf3eacda9ac63f23c00ae537cfe3))
+* **review:** pick the base in a list over the drawer ([1b42f32](https://github.com/black-atom-industries/iter.nvim/commit/1b42f32e18a58cd7da0724ed35ccd0cfff2ba09b))
+* **review:** review committed work against a picked base ([8bd7aa8](https://github.com/black-atom-industries/iter.nvim/commit/8bd7aa8bbb76f27ed7dadb3b241daac2440c9cbf))
+* **review:** y copies one annotation or a file's, Y copies all ([85c5172](https://github.com/black-atom-industries/iter.nvim/commit/85c5172f2a7a2430f224c445f00c3ac339bcfa39)), closes [#35](https://github.com/black-atom-industries/iter.nvim/issues/35)
+
+
+### Bug Fixes
+
+* **diff:** leave whitespace at the edges out of word emphasis ([bc92256](https://github.com/black-atom-industries/iter.nvim/commit/bc922565a5d93fb973a0de9a919dc10715e94dae))
+* **diff:** side-by-side panes stay aligned under scrolloff ([7f4abe9](https://github.com/black-atom-industries/iter.nvim/commit/7f4abe902e56e3dee6b604d22999cac0e8dfe289))
+* **drawer:** keep the drawer opaque under a global winblend ([ebc8878](https://github.com/black-atom-industries/iter.nvim/commit/ebc88786ed7a25c90fe34a94e5d12a647df14473))
+* **highlight:** keep the drawer opaque under a transparent Normal ([bda719d](https://github.com/black-atom-industries/iter.nvim/commit/bda719d0a5a4b843b8b2ff9e3305f3a4a95698ee))
+
+
+### Documentation
+
+* give launching from the shell its own section ([01942df](https://github.com/black-atom-industries/iter.nvim/commit/01942df4b90fb556580b2380bc68c4fb9caf6f3c))
+* link mini.git in the README ([1c55c76](https://github.com/black-atom-industries/iter.nvim/commit/1c55c767e070d3adc2928eb3b87f72486e599246))
+* note that launching from the shell needs iter loaded at startup ([4cd64c0](https://github.com/black-atom-industries/iter.nvim/commit/4cd64c0d53badb2b779775d6c7906e0fbaa25abc))
+* open the review straight from the shell ([e6c669f](https://github.com/black-atom-industries/iter.nvim/commit/e6c669f4f3ab7b998406117249a469252c846107))
+
 ## [0.5.0](https://github.com/black-atom-industries/iter.nvim/compare/v0.4.0...v0.5.0) (2026-10-21)
 
 ### Highlights
