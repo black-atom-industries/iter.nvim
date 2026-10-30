@@ -386,7 +386,7 @@ end
 T['open'][':Iter completes review'] = function()
     eq(
         child.fn.getcompletion('Iter ', 'cmdline'),
-        { 'annotate', 'review', 'status' }
+        { 'annotate', 'commits', 'review', 'status' }
     )
     eq(child.fn.getcompletion('Iter re', 'cmdline'), { 'review' })
 end

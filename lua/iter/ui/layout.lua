@@ -108,7 +108,7 @@ local function code_group(item)
         return 'IterConflict'
     end
 
-    if item.side == 'base' then
+    if item.side == 'base' or item.side == 'commit' then
         return 'IterDiffHeaderRule'
     end
 
@@ -683,6 +683,148 @@ local function commit_line(commit, markers, age, width)
     render.add_highlight(line, 'IterDrawerHint', #prefix + #subject, #line.text)
 
     return line
+end
+
+--- The chunks of a commit row in the base picker and the commits drawer:
+--- the short sha, the committer date and time, the author cut or padded to
+--- `author_width` cells, the subject, then the body when there is one.
+---@param commit GitCommit
+---@param author_width integer
+---@return [string, string?][]
+function M.commit_chunks(commit, author_width)
+    local chunks = {
+        { commit.sha, 'IterCommitSha' },
+        { '  ' },
+        {
+            os.date('%Y-%m-%d %H:%M', commit.time) --[[@as string]],
+            'IterCommitDate',
+        },
+        { '  ' },
+        { fit(commit.author, author_width), 'IterCommitAuthor' },
+        { '  ' .. commit.subject },
+    }
+
+    if commit.body ~= '' then
+        table.insert(chunks, { '  ' .. commit.body, 'IterCommitBody' })
+    end
+
+    return chunks
+end
+
+-- Display cells the author column of commit rows keeps at most; longer
+-- names are cut.
+local AUTHOR_WIDTH = 20
+
+--- The author column's width for `commits`: the widest author, at most
+--- `AUTHOR_WIDTH` cells.
+---@param commits GitCommit[]
+---@return integer
+function M.author_width(commits)
+    local width = 0
+
+    for _, commit in ipairs(commits) do
+        width = math.max(width, vim.fn.strdisplaywidth(commit.author))
+    end
+
+    return math.min(width, AUTHOR_WIDTH)
+end
+
+--- The summary of commits the commits drawer shows above it: per commit,
+--- newest first, its short sha, date and time and author, then its whole
+--- message under it; after them a line with the number of files and the
+--- lines added and deleted, then a row per file with its counts.
+---@param messages GitMessage[]
+---@param stats GitStat[]
+---@return IterRenderLine[]
+function M.commit_summary(messages, stats)
+    local lines = {}
+
+    for _, message in ipairs(messages) do
+        table.insert(
+            lines,
+            render.chunks_line({
+                { ' ' },
+                { message.sha, 'IterCommitSha' },
+                { '  ' },
+                {
+                    os.date('%Y-%m-%d %H:%M', message.time) --[[@as string]],
+                    'IterCommitDate',
+                },
+                { '  ' },
+                { message.author, 'IterCommitAuthor' },
+            })
+        )
+        table.insert(lines, render.line(''))
+
+        for index, text in ipairs(message.message) do
+            local line = render.line(text == '' and '' or (' ' .. text))
+
+            if index == 1 then
+                render.add_highlight(line, 'IterDrawerTitle', 0, #line.text)
+            end
+
+            table.insert(lines, line)
+        end
+
+        table.insert(lines, render.line(''))
+    end
+
+    local added, deleted = 0, 0
+    local counts = {}
+    local count_width = 0
+
+    for index, stat in ipairs(stats) do
+        local count = stat.added == nil and { 'bin', '' }
+            or { '+' .. stat.added, '−' .. stat.deleted }
+
+        added = added + (stat.added or 0)
+        deleted = deleted + (stat.deleted or 0)
+        counts[index] = count
+        count_width = math.max(
+            count_width,
+            vim.fn.strdisplaywidth(count[1] .. ' ' .. count[2])
+        )
+    end
+
+    table.insert(
+        lines,
+        render.chunks_line({
+            {
+                string.format(
+                    ' %d %s',
+                    #stats,
+                    #stats == 1 and 'file' or 'files'
+                ),
+                'IterDrawerHint',
+            },
+            { '  ' },
+            { '+' .. added, 'IterStage' },
+            { ' ' },
+            { '−' .. deleted, 'IterUnstage' },
+        })
+    )
+
+    for index, stat in ipairs(stats) do
+        local count = counts[index]
+        local gap = count_width
+            - vim.fn.strdisplaywidth(count[1] .. ' ' .. count[2])
+        local path = stat.orig_path ~= nil
+                and (stat.orig_path .. ARROW .. stat.path)
+            or stat.path
+
+        table.insert(
+            lines,
+            render.chunks_line({
+                { ' ' .. string.rep(' ', gap) },
+                { count[1], stat.added and 'IterStage' or 'IterDrawerHint' },
+                { ' ' },
+                { count[2], 'IterUnstage' },
+                { '  ' .. path },
+            })
+        )
+    end
+
+    return lines
 end
 
 --- The Recent commits section, `width` cells wide: a title with

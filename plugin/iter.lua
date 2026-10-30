@@ -9,6 +9,9 @@ local subcommands = {
     annotate = function()
         require('iter').sidebar()
     end,
+    commits = function()
+        require('iter').commits()
+    end,
 }
 
 vim.api.nvim_create_user_command('Iter', function(args)

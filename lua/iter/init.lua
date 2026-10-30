@@ -1,6 +1,7 @@
 ---@class IterModule
 ---@field drawer IterDrawer? the open status drawer
 ---@field current_review IterReview? the open review tab
+---@field commits_drawer IterCommits? the open commits drawer
 ---@field did_setup boolean
 ---@field config IterConfig
 local M = {
@@ -76,6 +77,36 @@ function M.status()
     })
 end
 
+--- Open the commits drawer, or focus it when it is open. An open status
+--- drawer closes first.
+function M.commits()
+    log.info('commits command called')
+
+    if require('iter.git').root() == '' then
+        util.warn('Not inside a git repository')
+        return
+    end
+
+    if M.commits_drawer ~= nil and M.commits_drawer:is_open() then
+        M.commits_drawer:focus()
+        return
+    end
+
+    if M.drawer ~= nil and M.drawer:is_open() then
+        M.drawer:close()
+    end
+
+    M.commits_drawer = require('iter.ui.commits').open({
+        pane = target_pane(),
+        config = M.config,
+        on_close = function(commits)
+            if M.commits_drawer == commits then
+                M.commits_drawer = nil
+            end
+        end,
+    })
+end
+
 --- Refresh the open review's annotations after a write from outside it.
 local function refresh_review()
     if M.current_review ~= nil and M.current_review:is_open() then
@@ -98,9 +129,9 @@ end
 --- Open the review tab, or switch to it when it is open. An open status
 --- drawer closes first. `target.base`, a branch or another ref, sets what
 --- the review compares with and is remembered for the branch; a ref that
---- isn't a branch names the commit the review starts after. Without it the
---- remembered base applies.
----@param target? { path?: string, side?: IterSide, base?: string } file to select and base
+--- isn't a branch names the commit the review starts after. A base spec
+--- applies as it is. Without it the remembered base applies.
+---@param target? { path?: string, side?: IterSide, base?: string|IterBaseSpec } file to select and base
 function M.review(target)
     log.info('review command called')
 
@@ -115,7 +146,9 @@ function M.review(target)
     local base = target and target.base
     local spec
 
-    if base ~= nil then
+    if type(base) == 'table' then
+        spec = base
+    elseif type(base) == 'string' then
         local err
 
         spec, err = git.base_spec(root, base)

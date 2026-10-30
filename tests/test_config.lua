@@ -426,6 +426,7 @@ T['keymap']['actions() match the configurable keys of every view'] = function()
     eq(views, {
         'annotate',
         'annotation',
+        'commits',
         'diff',
         'drawer',
         'help',

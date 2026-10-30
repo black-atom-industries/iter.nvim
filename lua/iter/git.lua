@@ -623,7 +623,7 @@ end
 --- The diff text of one file, see `git.file_diff`. With `bytes` the lines
 --- keep their carriage returns.
 ---@param root string
----@param change { path: string, orig_path?: string, side: IterSide, base?: string, code: string }
+---@param change { path: string, orig_path?: string, side: IterSide, base?: string, head?: string, code: string }
 ---@param args string[] extra flags for `git diff`, the `diff.args` option
 ---@param bytes boolean
 ---@return string[]?
@@ -638,9 +638,16 @@ local function diff_text(root, change, args, bytes)
         return nil, 'No base for ' .. change.path
     end
 
+    if
+        change.side == 'commit'
+        and (type(change.base) ~= 'string' or type(change.head) ~= 'string')
+    then
+        return nil, 'No commits for ' .. change.path
+    end
+
     if untracked then
         cmd = { 'diff', '--no-index' }
-    elseif change.side == 'base' then
+    elseif change.side == 'base' or change.side == 'commit' then
         cmd = { 'diff', '-M' }
     elseif change.side == 'staged' then
         cmd = { 'diff', '--cached', '-M' }
@@ -653,6 +660,8 @@ local function diff_text(root, change, args, bytes)
 
     if change.side == 'base' and not untracked then
         table.insert(cmd, change.base)
+    elseif change.side == 'commit' then
+        vim.list_extend(cmd, { change.base, change.head })
     end
 
     table.insert(cmd, '--')
@@ -679,7 +688,7 @@ end
 --- The diff text of `git.file_diff` byte for byte: lines of a CRLF file
 --- keep their carriage returns, as a patch for `git apply` needs them.
 ---@param root string
----@param change { path: string, orig_path?: string, side: IterSide, base?: string, code: string }
+---@param change { path: string, orig_path?: string, side: IterSide, base?: string, head?: string, code: string }
 ---@param args string[] extra flags for `git diff`, the same as for `git.file_diff`
 ---@return string[]?
 ---@return string? error
@@ -689,8 +698,9 @@ end
 
 --- Diff text and both full versions of one file. Unstaged compares the index
 --- with the worktree, staged compares HEAD with the index, base compares
---- `change.base` with the worktree. Untracked and added files have an empty
---- old side, deleted files an empty new side.
+--- `change.base` with the worktree, commit compares `change.base` with
+--- `change.head`. Untracked and added files have an empty old side, deleted
+--- files an empty new side.
 ---@param root string
 ---@param change IterDiffChange
 ---@param args string[] extra flags for `git diff`, the `diff.args` option
@@ -718,7 +728,7 @@ function git.file_diff(root, change, args)
 
     if untracked or change.code == 'A' then
         old_lines = {}
-    elseif change.side == 'base' then
+    elseif change.side == 'base' or change.side == 'commit' then
         old_lines = git.blob_lines(root, change.base .. ':' .. old_path)
     elseif change.side == 'staged' then
         old_lines = git.blob_lines(root, 'HEAD:' .. old_path)
@@ -728,6 +738,8 @@ function git.file_diff(root, change, args)
 
     if change.code == 'D' then
         new_lines = {}
+    elseif change.side == 'commit' then
+        new_lines = git.blob_lines(root, change.head .. ':' .. change.path)
     elseif change.side == 'base' then
         new_lines = read_worktree_lines(change.path, root)
     elseif change.side == 'staged' then
@@ -801,6 +813,7 @@ end
 
 ---@class GitCommit
 ---@field sha string abbreviated
+---@field full_sha string
 ---@field subject string
 ---@field time integer committer date, seconds since the epoch
 ---@field author string the author's name
@@ -910,6 +923,7 @@ function git.recent(root, count, prev)
         if #fields >= 6 then
             table.insert(recent.commits, {
                 sha = fields[2],
+                full_sha = fields[1],
                 subject = fields[5],
                 body = vim.trim(
                     (table.concat(fields, ' ', 6):gsub('%s+', ' '))
@@ -951,6 +965,207 @@ function git.base_changes(root, base, entries)
     end
 
     return changes.since(diff.output, base, entries)
+end
+
+--- The files changed from `base` to `head`: changes of side `commit`,
+--- sorted by path.
+---@param root string
+---@param base string commit or tree
+---@param head string commit
+---@return IterChange[]?
+---@return string? error
+function git.commit_changes(root, base, head)
+    vim.validate('base', base, 'string')
+    vim.validate('head', head, 'string')
+
+    local diff = git.run({
+        'diff',
+        '-M',
+        '--name-status',
+        '-z',
+        '--no-color',
+        base,
+        head,
+        '--',
+    }, { cwd = root, ignore_error = true })
+
+    if diff.exit_code ~= 0 then
+        return nil, return_result(diff)
+    end
+
+    return changes.between(diff.output, base, head)
+end
+
+---@class GitMessage a commit and its whole message
+---@field sha string abbreviated
+---@field time integer committer date, seconds since the epoch
+---@field author string the author's name
+---@field message string[] the message's lines, the subject first, trailing blank lines dropped
+
+--- The commits from `oldest` to `newest`, newest first, with their whole
+--- messages: `newest` and its ancestors that `oldest`'s parents don't
+--- reach, so a root `oldest` takes every ancestor.
+---@param root string
+---@param oldest string commit
+---@param newest string commit
+---@return GitMessage[]?
+---@return string? error
+function git.messages(root, oldest, newest)
+    vim.validate('oldest', oldest, 'string')
+    vim.validate('newest', newest, 'string')
+
+    local out = git.run({
+        'log',
+        '--no-color',
+        '--no-show-signature',
+        '-z',
+        '--format=%h%x1f%ct%x1f%an%x1f%B',
+        newest,
+        '--not',
+        oldest .. '^@',
+        '--',
+    }, { cwd = root, ignore_error = true })
+
+    if out.exit_code ~= 0 then
+        return nil, return_result(out)
+    end
+
+    ---@type GitMessage[]
+    local messages = {}
+
+    for _, record in ipairs(vim.split(out.output, '\0', { plain = true })) do
+        local fields = vim.split(record, SEP, { plain = true })
+
+        if #fields >= 4 then
+            local lines =
+                vim.split(table.concat(fields, SEP, 4), '\n', { plain = true })
+
+            while #lines > 0 and vim.trim(lines[#lines]) == '' do
+                table.remove(lines)
+            end
+
+            table.insert(messages, {
+                sha = vim.trim(fields[1]),
+                time = tonumber(fields[2]) or 0,
+                author = fields[3],
+                message = lines,
+            })
+        end
+    end
+
+    return messages
+end
+
+---@class GitStat the lines a diff adds and deletes in one file
+---@field path string
+---@field orig_path? string the old path of a rename
+---@field added? integer nil for a binary file
+---@field deleted? integer nil for a binary file
+
+--- The lines added and deleted per file from `base` to `head`, in git's
+--- order.
+---@param root string
+---@param base string commit or tree
+---@param head string commit
+---@return GitStat[]?
+---@return string? error
+function git.stats(root, base, head)
+    vim.validate('base', base, 'string')
+    vim.validate('head', head, 'string')
+
+    local out = git.run({
+        'diff',
+        '-M',
+        '--numstat',
+        '-z',
+        '--no-color',
+        base,
+        head,
+        '--',
+    }, { cwd = root, ignore_error = true })
+
+    if out.exit_code ~= 0 then
+        return nil, return_result(out)
+    end
+
+    ---@type GitStat[]
+    local stats = {}
+    local tokens = vim.split(out.output, '\0', { plain = true })
+    local i = 1
+
+    -- A rename's entry has an empty path and its two paths as the next
+    -- tokens.
+    while i <= #tokens do
+        local added, deleted, path =
+            tokens[i]:match('^([%d-]+)\t([%d-]+)\t(.*)$')
+
+        if added ~= nil then
+            local stat = {
+                path = path,
+                added = tonumber(added),
+                deleted = tonumber(deleted),
+            }
+
+            if path == '' then
+                stat.orig_path, stat.path = tokens[i + 1], tokens[i + 2]
+                i = i + 2
+            end
+
+            table.insert(stats, stat)
+        end
+
+        i = i + 1
+    end
+
+    return stats
+end
+
+--- The empty tree's id in the repository's hash.
+---@param root string
+---@return string? sha
+---@return string? error
+local function empty_tree(root)
+    local empty = git.run(
+        { 'hash-object', '-t', 'tree', '--stdin' },
+        { cwd = root, ignore_error = true, stdin = '' }
+    )
+
+    if empty.exit_code ~= 0 then
+        return nil, return_result(empty)
+    end
+
+    return return_result(empty)
+end
+
+--- The full sha of `sha`'s first parent, or the empty tree for a root
+--- commit.
+---@param root string
+---@param sha string
+---@return string? sha
+---@return string? error
+function git.parent_of(root, sha)
+    vim.validate('sha', sha, 'string')
+
+    local out = git.run({
+        'rev-list',
+        '--parents',
+        '--max-count=1',
+        '--end-of-options',
+        sha .. '^{commit}',
+        '--',
+    }, { cwd = root, ignore_error = true })
+
+    if out.exit_code ~= 0 then
+        return nil, return_result(out)
+    end
+
+    local parent = vim.split(return_result(out), ' ', { plain = true })[2]
+
+    if parent ~= nil then
+        return parent
+    end
+
+    return empty_tree(root)
 end
 
 ---@class IterBaseSpec what a review compares the worktree with
@@ -1026,16 +1241,7 @@ function git.resolve_base(root, spec)
         return parent
     end
 
-    local empty = git.run(
-        { 'hash-object', '-t', 'tree', '--stdin' },
-        { cwd = root, ignore_error = true, stdin = '' }
-    )
-
-    if empty.exit_code ~= 0 then
-        return nil, return_result(empty)
-    end
-
-    return return_result(empty)
+    return empty_tree(root)
 end
 
 --- Each ref in `refs` with the count of commits on HEAD and not on it, the

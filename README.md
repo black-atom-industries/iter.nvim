@@ -183,6 +183,7 @@ plugin manager must not delay it until the first `:Iter`.
 :Iter status      " the same
 :Iter review      " open the review tab, or switch to it
 :Iter review main " open it against a branch or another ref
+:Iter commits     " browse the recent commits and their diffs
 :Iter annotate    " open or close the annotation sidebar
 ```
 
@@ -409,6 +410,30 @@ The status drawer's diff takes `=`, `|` and `-` too.
 - `<C-c>` drops the draft
 - `q` closes a saved annotation
 
+### Commits drawer
+
+`:Iter commits` opens a drawer with the last 100 commits of the branch, newest
+first: sha, date and time, author, subject and the body, dimmed. Above it, the
+summary of the commit under the cursor: its whole message, then the files it
+changed with the lines added and deleted.
+
+- `V` selects several commits; the summary then covers them all, each message
+  and the files changed from the parent of the oldest to the newest, and the
+  header names the range.
+- `<CR>` opens the commit's files, or the selection's, in the drawer, as the
+  status drawer lists them. The diff above shows the file under the cursor,
+  from the commit's parent to it; a merge commit shows its changes against its
+  first parent. `<CR>` moves into the diff, `<C-j>` back, `|` and `-` switch
+  side by side and unified, and `q` goes back to the commits.
+- `<C-d>` and `<C-u>` scroll the summary or the diff from the drawer.
+- `r` closes the drawer and opens the review from the commit, or from the oldest
+  selected or opened one. The review includes that commit and everything after
+  it, up to the files on disk, so you can annotate and mark files reviewed; for
+  the newest commits with nothing uncommitted that is exactly the selection.
+
+The diff in the drawer is for reading: it shows no annotations and stages
+nothing.
+
 ### Annotation sidebar
 
 `:Iter annotate` opens a vertical split at the right edge of the tab
@@ -555,6 +580,20 @@ The annotation float (`annotation`):
 
 The help float (`help`) closes on `q`, `?` and `<Esc>`.
 
+The commits drawer (`commits`):
+
+| Key     | Action        | Does                                                        |
+| ------- | ------------- | ----------------------------------------------------------- |
+| `<CR>`  | `open`        | Open the commit's files, the selection's, or go to the diff |
+| `r`     | `review`      | Review from the commit, or the oldest selected one          |
+| `\|`    | `split`       | Show the diff side by side                                  |
+| `-`     | `unified`     | Show the diff unified                                       |
+| `gw`    | `wrap`        | Toggle wrapping long lines                                  |
+| `q`     | `close`       | Back to the commits, or close                               |
+| `?`     | `help`        | Show the keys                                               |
+| `<C-d>` | `scroll_down` | Scroll the summary or the diff down                         |
+| `<C-u>` | `scroll_up`   | Scroll the summary or the diff up                           |
+
 The base picker (`picker`):
 
 | Key         | Action  | Does                  |
@@ -637,6 +676,7 @@ iter.setup(opts)                     -- see Configuration
 iter.status()                        -- same as :Iter status
 iter.review()                        -- same as :Iter review
 iter.review({ base = 'main' })       -- review against a branch or another ref
+iter.commits()                       -- same as :Iter commits
 iter.annotate()                      -- annotate the cursor line or the visual range
 iter.annotate({ scope = 'file' })    -- annotate the current buffer's file
 iter.annotate({ scope = 'review' })  -- annotate the whole review
@@ -723,6 +763,7 @@ what it names in the repository of the current directory:
 | `iter://review/<path>#L<n>` | The same, with the cursor on worktree line `n`, revealed if it is hidden |
 | `iter://review#all`         | The review tab in all-files mode                                         |
 | `iter://review#annotations` | The review tab on its Annotations column                                 |
+| `iter://commits`            | The commits drawer, or focuses it                                        |
 | `iter://annotate`           | Opens the annotation sidebar, or focuses it                              |
 | `iter://annotation`         | The hidden annotation draft                                              |
 

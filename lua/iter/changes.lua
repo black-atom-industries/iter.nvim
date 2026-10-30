@@ -134,15 +134,14 @@ function M.build(snapshot)
     }
 end
 
---- The changes since `base` from `git diff -M --name-status -z <base>`
---- and the untracked entries of `entries`, sorted by path. A path the diff
---- lists keeps its diff entry over an untracked one.
+--- The items of `git diff -M --name-status -z` output, of `side`, in the
+--- order git lists them, each recorded in `listed` by path.
 ---@param output string
----@param base string resolved base sha
----@param entries GitStatusEntry[]
+---@param side IterSide
+---@param listed table<string, boolean>
 ---@return IterChange[]
-function M.since(output, base, entries)
-    local items, listed = {}, {}
+local function name_status(output, side, listed)
+    local items = {}
     local fields = vim.split(output, '\0', { plain = true })
     local index = 1
 
@@ -160,26 +159,62 @@ function M.since(output, base, entries)
         index = index + 2
 
         if path ~= nil then
-            local item = change(path, 'base', code, orig_path)
-
-            item.base = base
             listed[path] = true
-            table.insert(items, item)
+            table.insert(items, change(path, side, code, orig_path))
         end
     end
+
+    return items
+end
+
+---@param a IterChange
+---@param b IterChange
+---@return boolean
+local function by_path(a, b)
+    return a.path < b.path
+end
+
+--- The changes since `base` from `git diff -M --name-status -z <base>`
+--- and the untracked entries of `entries`, sorted by path. A path the diff
+--- lists keeps its diff entry over an untracked one.
+---@param output string
+---@param base string resolved base sha
+---@param entries GitStatusEntry[]
+---@return IterChange[]
+function M.since(output, base, entries)
+    local listed = {}
+    local items = name_status(output, 'base', listed)
 
     for _, entry in ipairs(entries) do
         if entry.staged == '?' and not listed[entry.path] then
-            local item = change(entry.path, 'base', '?')
-
-            item.base = base
-            table.insert(items, item)
+            table.insert(items, change(entry.path, 'base', '?'))
         end
     end
 
-    table.sort(items, function(a, b)
-        return a.path < b.path
-    end)
+    for _, item in ipairs(items) do
+        item.base = base
+    end
+
+    table.sort(items, by_path)
+
+    return items
+end
+
+--- The changes from `base` to `head` from
+--- `git diff -M --name-status -z <base> <head>`, sorted by path.
+---@param output string
+---@param base string commit or tree
+---@param head string commit
+---@return IterChange[]
+function M.between(output, base, head)
+    local items = name_status(output, 'commit', {})
+
+    for _, item in ipairs(items) do
+        item.base = base
+        item.head = head
+    end
+
+    table.sort(items, by_path)
 
     return items
 end

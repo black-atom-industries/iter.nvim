@@ -1,12 +1,13 @@
 local parser = require('iter.diff.parser')
 
----@alias IterSide 'unstaged'|'staged'|'base'
+---@alias IterSide 'unstaged'|'staged'|'base'|'commit'
 
 ---@class IterDiffChange
 ---@field path string
 ---@field orig_path? string
 ---@field side IterSide
----@field base? string the base commit or tree a `base` change starts from
+---@field base? string the base commit or tree a `base` or `commit` change starts from
+---@field head? string the commit a `commit` change ends at
 ---@field code string porcelain letter for this side: M A D R C U ?
 
 ---@class IterDiffGap
@@ -29,12 +30,13 @@ local parser = require('iter.diff.parser')
 ---@field orig_path? string
 ---@field side IterSide
 ---@field base? string
+---@field head? string
 ---@field code string
 ---@field raw string[] git diff text, source for patches
 ---@field hunks IterDiffHunk[]
 ---@field rows IterDiffRow[]
----@field old_lines? string[] unstaged: index; staged: HEAD; base: the base
----@field new_lines? string[] unstaged and base: worktree; staged: index
+---@field old_lines? string[] unstaged: index; staged: HEAD; base and commit: the base
+---@field new_lines? string[] unstaged and base: worktree; staged: index; commit: the head
 ---@field binary boolean
 ---@field stat { add: integer, del: integer }
 ---@field mode? { old: string, new: string } file mode change
@@ -187,6 +189,7 @@ function M.build(change, source)
         orig_path = change.orig_path,
         side = change.side,
         base = change.base,
+        head = change.head,
         code = change.code,
         raw = source.raw,
         hunks = {},

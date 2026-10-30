@@ -10,7 +10,7 @@ one-scroll review with annotations, reviewed marks and an export for agents, and
 [annotator.nvim](https://github.com/chpeters/annotator.nvim)'s annotations in normal buffers.
 
 Out of scope: committing, pushing, pulling and hosted pull requests (iter reviews a checked-out branch against a base
-and never talks to a host; the Git actions stay with a Git plugin such as mini.git), Jujutsu and Mercurial, merge conflict resolution, branch management, stash, a log browser, annotation types, and sending
+and never talks to a host; the Git actions stay with a Git plugin such as mini.git), Jujutsu and Mercurial, merge conflict resolution, branch management, stash, annotation types, and sending
 the review straight to an agent pane.
 
 ## Architecture
@@ -42,6 +42,14 @@ the review straight to an agent pane.
   `git.base_changes` (`git diff -M --name-status` against the resolved sha plus the untracked files of the status read
   the poll already made). Stage, unstage,
   discard and ignore refuse there, in the drawer and in the diff pane. Working changes keeps Unstaged and Staged.
+- The commits drawer (`iter.ui.commits`) has two levels. The commits level lists the last 100 commits; the pane shows
+  a summary of the commit under the cursor or of a visual selection, read from two git calls (`git.messages`,
+  `git.stats`) and drawn by `layout.commit_summary` in a buffer of the drawer's, so moving through the list never reads
+  file contents. `<CR>` opens the files level: the files of the commit, or of the selection from the oldest's first
+  parent to the newest, as changes of side `commit` (`git.commit_changes`), the pane showing the selected file alone
+  with both versions from commits (`git.file_diff`). The diff loads no annotations or reviewed marks and has no
+  staging. `q` goes back a level. `r` opens the review with a `commit` base on the oldest selected or opened commit,
+  so the review's new side stays the worktree.
 - Diff flow: git's unified diff → `iter.diff.parser` (hunks) → `iter.diff.model` (rows: header, hunk, context, del,
   add, gap, each with old and new line numbers) → `iter.diff.view` (buffer lines and extmarks). Hunks always come from
   git's diff, so staging applies exactly what git produced. The full old and new file contents are fetched for syntax

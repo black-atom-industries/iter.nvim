@@ -596,13 +596,17 @@ local function number_width(rows)
     return math.max(3, #tostring(max))
 end
 
---- The version a side of `file` shows: `HEAD`, `index`, `base` or
---- `worktree`.
+--- The version a side of `file` shows: `HEAD`, `index`, `base`,
+--- `worktree`, or the short sha of a commit diff's side.
 ---@param file IterFileDiff
 ---@param side 'old'|'new'
 ---@return string
 local function version_label(file, side)
-    if file.side == 'base' then
+    if file.side == 'commit' then
+        local sha = side == 'old' and file.base or file.head
+
+        return (sha or ''):sub(1, 7)
+    elseif file.side == 'base' then
         return side == 'old' and 'base' or 'worktree'
     elseif side == 'old' then
         return anchor.OLD_BASE[file.side]

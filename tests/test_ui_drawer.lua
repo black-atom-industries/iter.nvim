@@ -356,7 +356,7 @@ end
 T['open'][':Iter completes the subcommands'] = function()
     eq(
         child.fn.getcompletion('Iter ', 'cmdline'),
-        { 'annotate', 'review', 'status' }
+        { 'annotate', 'commits', 'review', 'status' }
     )
     eq(child.fn.getcompletion('Iter st', 'cmdline'), { 'status' })
     eq(child.fn.getcompletion('Iter x', 'cmdline'), {})

@@ -1,4 +1,5 @@
 local layout = require('iter.ui.layout')
+local render = require('iter.ui.render')
 
 local new_set = MiniTest.new_set
 local eq = MiniTest.expect.equality
@@ -286,6 +287,93 @@ T['age()'] = function()
     eq(layout.age(5 * 7 * 86400 + 86400), '5w')
     eq(layout.age(364 * 86400), '52w')
     eq(layout.age(800 * 86400), '2y')
+end
+
+T['commit_chunks()'] = new_set()
+
+---@param author string
+---@param body string
+---@return GitCommit
+local function picker_commit(author, body)
+    return {
+        sha = 'a1b2c3d',
+        full_sha = string.rep('a', 40),
+        subject = 'fix the thing',
+        body = body,
+        author = author,
+        time = 1767225600,
+        unpushed = false,
+    }
+end
+
+T['commit_chunks()']['sha, date, padded author, subject, dimmed body'] = function()
+    local chunks = layout.commit_chunks(picker_commit('Nik', 'why it broke'), 5)
+
+    eq(chunks, {
+        { 'a1b2c3d', 'IterCommitSha' },
+        { '  ' },
+        { os.date('%Y-%m-%d %H:%M', 1767225600), 'IterCommitDate' },
+        { '  ' },
+        { 'Nik  ', 'IterCommitAuthor' },
+        { '  fix the thing' },
+        { '  why it broke', 'IterCommitBody' },
+    })
+end
+
+T['commit_chunks()']['no body chunk without a body'] = function()
+    local chunks = layout.commit_chunks(picker_commit('Nik', ''), 3)
+
+    eq(#chunks, 6)
+    eq(chunks[6], { '  fix the thing' })
+end
+
+T['commit_chunks()']['author_width() takes the widest author up to 20'] = function()
+    eq(
+        layout.author_width({
+            picker_commit('Nik', ''),
+            picker_commit('Someone Longer', ''),
+        }),
+        14
+    )
+    eq(layout.author_width({ picker_commit(string.rep('x', 30), '') }), 20)
+end
+
+T['commit_summary()'] = new_set()
+
+T['commit_summary()']['messages, then the files with their counts'] = function()
+    local lines = layout.commit_summary({
+        {
+            sha = 'a1b2c3d',
+            time = 1767225600,
+            author = 'Nik',
+            message = { 'fix the thing', '', 'why it broke' },
+        },
+    }, {
+        { path = 'a.lua', added = 12, deleted = 3 },
+        { path = 'new.lua', orig_path = 'old.lua', added = 0, deleted = 0 },
+        { path = 'logo.png' },
+    })
+    local date = os.date('%Y-%m-%d %H:%M', 1767225600)
+
+    eq(render.text_lines(lines), {
+        ' a1b2c3d  ' .. date .. '  Nik',
+        '',
+        ' fix the thing',
+        '',
+        ' why it broke',
+        '',
+        ' 3 files  +12 −3',
+        ' +12 −3  a.lua',
+        '  +0 −0  old.lua → new.lua',
+        '   bin   logo.png',
+    })
+
+    local groups = vim.tbl_map(function(h)
+        return h.group
+    end, lines[1].highlights)
+
+    eq(groups, { 'IterCommitSha', 'IterCommitDate', 'IterCommitAuthor' })
+    eq(lines[3].highlights[1].group, 'IterDrawerTitle')
 end
 
 T['commits()'] = new_set()

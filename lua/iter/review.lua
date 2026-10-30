@@ -70,9 +70,6 @@ local ANNOTATIONS = 'annotations'
 
 -- Recent commits the base picker offers.
 local PICKER_COMMITS = 20
--- Display cells of the author column in the base picker; longer names are
--- cut.
-local PICKER_AUTHOR_WIDTH = 20
 
 -- Actions the key hint line shows in the Annotations column.
 local ANNOTATION_HINTS = {
@@ -784,33 +781,13 @@ function Review:pick_base()
     local branches = #choices
 
     local commits = recent and recent.commits or {}
-    local author_width = 0
+    local author_width = layout.author_width(commits)
 
     for _, commit in ipairs(commits) do
-        author_width =
-            math.max(author_width, vim.fn.strdisplaywidth(commit.author))
-    end
-
-    author_width = math.min(author_width, PICKER_AUTHOR_WIDTH)
-
-    for _, commit in ipairs(commits) do
-        local chunks = {
-            { commit.sha, 'IterCommitSha' },
-            { '  ' },
-            {
-                os.date('%Y-%m-%d %H:%M', commit.time) --[[@as string]],
-                'IterCommitDate',
-            },
-            { '  ' },
-            { layout.fit(commit.author, author_width), 'IterCommitAuthor' },
-            { '  ' .. commit.subject },
-        }
-
-        if commit.body ~= '' then
-            table.insert(chunks, { '  ' .. commit.body, 'IterCommitBody' })
-        end
-
-        table.insert(choices, { label = chunks, commit = commit.sha })
+        table.insert(choices, {
+            label = layout.commit_chunks(commit, author_width),
+            commit = commit.sha,
+        })
     end
 
     ---@type table<integer, string>

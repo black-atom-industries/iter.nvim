@@ -9,7 +9,7 @@ local util = require('iter.util')
 local M = {}
 
 ---@class IterUriTarget
----@field kind 'status'|'review'|'annotation'|'annotate'
+---@field kind 'status'|'review'|'commits'|'annotation'|'annotate'
 ---@field path? string repository-relative path, for `status` too
 ---@field line? integer new-side line, from `#L<n>`
 ---@field view? 'all'|'annotations' the review's view, from `#all` or `#annotations`
@@ -90,6 +90,8 @@ function M.parse(name)
         return { kind = 'annotation' }
     elseif kind == 'annotate' then
         return { kind = 'annotate' }
+    elseif kind == 'commits' then
+        return { kind = 'commits' }
     elseif kind == 'review' then
         return {
             kind = 'review',
@@ -104,20 +106,22 @@ end
 
 --- True, with a warning, when the open drawer or review of `kind` belongs
 --- to another repository than the current directory's.
----@param kind 'status'|'review'
+---@param kind 'status'|'review'|'commits'
 ---@return boolean
 local function elsewhere(kind)
     local iter = require('iter')
     local review = iter.current_review
-    local open = kind == 'review'
+    local commits = iter.commits_drawer
+    local open_root = kind == 'review'
             and review ~= nil
             and review:is_open()
-            and review.drawer
-        or kind == 'status' and iter.drawer ~= nil and iter.drawer:is_open() and iter.drawer
+            and review.drawer.changes.root
+        or kind == 'status' and iter.drawer ~= nil and iter.drawer:is_open() and iter.drawer.changes.root
+        or kind == 'commits' and commits ~= nil and commits:is_open() and commits.root
         or nil
     local root = require('iter.git').root()
 
-    if open == nil or root == '' or open.changes.root == root then
+    if open_root == nil or root == '' or open_root == root then
         return false
     end
 
@@ -125,7 +129,7 @@ local function elsewhere(kind)
         string.format(
             'The open %s is of %s, not of %s',
             kind == 'review' and 'review' or 'drawer',
-            open.changes.root,
+            open_root,
             root
         )
     )
@@ -144,7 +148,7 @@ local function route(target, name)
     elseif
         target.kind ~= 'annotation'
         and target.kind ~= 'annotate'
-        and elsewhere(target.kind --[[@as 'status'|'review']])
+        and elsewhere(target.kind --[[@as 'status'|'review'|'commits']])
     then
         return
     elseif target.kind == 'status' then
@@ -155,6 +159,8 @@ local function route(target, name)
         if target.path ~= nil and drawer ~= nil and drawer:is_open() then
             drawer:reveal(target.path)
         end
+    elseif target.kind == 'commits' then
+        iter.commits()
     elseif target.kind == 'annotate' then
         iter.sidebar()
     elseif target.kind == 'annotation' then

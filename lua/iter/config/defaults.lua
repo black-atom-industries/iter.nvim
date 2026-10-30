@@ -137,6 +137,17 @@ M.keys = {
     help = {
         close = { 'q', '?', '<Esc>' },
     },
+    commits = {
+        open = '<CR>',
+        review = 'r',
+        split = '|',
+        unified = '-',
+        wrap = 'gw',
+        close = 'q',
+        help = '?',
+        scroll_down = '<C-d>',
+        scroll_up = '<C-u>',
+    },
     picker = {
         pick = '<CR>',
         close = { 'q', '<Esc>' },

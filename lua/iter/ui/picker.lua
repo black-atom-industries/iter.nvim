@@ -31,24 +31,11 @@ local HINTS = { { 'pick', 'pick' }, { 'close', 'back' } }
 ---@param item IterPickerItem
 ---@return IterRenderLine
 local function item_line(item)
-    ---@type [string, string?][]
-    local chunks
-
     if type(item) == 'string' then
-        chunks = { { item } }
-    else
-        chunks = item
-    end
-    local line = render.line(' ')
-
-    for _, chunk in ipairs(chunks) do
-        local start = #line.text
-
-        line.text = line.text .. chunk[1]
-        render.add_highlight(line, chunk[2], start, #line.text)
+        return render.chunks_line({ { ' ' }, { item } })
     end
 
-    return line
+    return render.chunks_line({ { ' ' }, unpack(item) })
 end
 
 --- Open a focused list over `opts.over`, with its chrome, its height and

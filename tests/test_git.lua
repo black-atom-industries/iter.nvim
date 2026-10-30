@@ -797,6 +797,122 @@ T['against a base']['resolve_base() is nil with the error on an unknown ref'] = 
     eq(type(err), 'string')
 end
 
+T['between commits'] = new_set()
+
+--- Two commits on the initial one: the first adds `old.txt` and `del.txt`,
+--- the second edits `tracked.txt`, adds `add.txt`, deletes `del.txt` and
+--- renames `old.txt` to `moved.txt`. `tracked.txt` is then edited again,
+--- uncommitted.
+---@return string first
+---@return string second
+local function create_commits()
+    write('old.txt', { 'rename me', 'line two', 'line three' })
+    write('del.txt', { 'bye' })
+    helpers.git(repo, { 'add', '--all' })
+    helpers.git(repo, { 'commit', '--quiet', '-m', 'first' })
+
+    local first = rev({ 'rev-parse', 'HEAD' })
+
+    write('tracked.txt', { 'one', 'two' })
+    write('add.txt', { 'added' })
+    helpers.git(repo, { 'rm', '--quiet', 'del.txt' })
+    helpers.git(repo, { 'mv', 'old.txt', 'moved.txt' })
+    helpers.git(repo, { 'add', '--all' })
+    helpers.git(repo, { 'commit', '--quiet', '-m', 'second' })
+
+    local second = rev({ 'rev-parse', 'HEAD' })
+
+    write('tracked.txt', { 'one', 'two', 'uncommitted' })
+
+    return first, second
+end
+
+T['between commits']['commit_changes() lists the files from base to head'] = function()
+    local first, second = create_commits()
+
+    eq(git.commit_changes(repo, first, second), {
+        {
+            path = 'add.txt',
+            side = 'commit',
+            code = 'A',
+            base = first,
+            head = second,
+        },
+        {
+            path = 'del.txt',
+            side = 'commit',
+            code = 'D',
+            base = first,
+            head = second,
+        },
+        {
+            path = 'moved.txt',
+            orig_path = 'old.txt',
+            side = 'commit',
+            code = 'R',
+            base = first,
+            head = second,
+        },
+        {
+            path = 'tracked.txt',
+            side = 'commit',
+            code = 'M',
+            base = first,
+            head = second,
+        },
+    })
+end
+
+T['between commits']['commit_changes() is nil with the error on a bad commit'] = function()
+    local items, err = git.commit_changes(repo, 'nope', 'HEAD')
+
+    eq(items, nil)
+    eq(type(err), 'string')
+end
+
+T['between commits']['file_diff() reads both sides from the commits'] = function()
+    local first, second = create_commits()
+    local by_path = {}
+
+    for _, item in ipairs(assert(git.commit_changes(repo, first, second))) do
+        by_path[item.path] = item
+    end
+
+    local tracked = assert(git.file_diff(repo, by_path['tracked.txt'], {}))
+
+    eq(tracked.old_lines, { 'one' })
+    eq(tracked.new_lines, { 'one', 'two' })
+    eq(vim.tbl_contains(tracked.raw, '+two'), true)
+    eq(vim.tbl_contains(tracked.raw, '+uncommitted'), false)
+
+    local added = assert(git.file_diff(repo, by_path['add.txt'], {}))
+
+    eq(added.old_lines, {})
+    eq(added.new_lines, { 'added' })
+
+    local deleted = assert(git.file_diff(repo, by_path['del.txt'], {}))
+
+    eq(deleted.old_lines, { 'bye' })
+    eq(deleted.new_lines, {})
+
+    local moved = assert(git.file_diff(repo, by_path['moved.txt'], {}))
+
+    eq(moved.old_lines, { 'rename me', 'line two', 'line three' })
+    eq(moved.new_lines, { 'rename me', 'line two', 'line three' })
+end
+
+T['between commits']['parent_of() takes the first parent, the empty tree for a root'] = function()
+    local first, second = create_commits()
+    local root = rev({ 'rev-list', '--max-parents=0', 'HEAD' })
+    local empty = vim.trim(
+        vim.fn.system({ 'git', 'hash-object', '-t', 'tree', '/dev/null' })
+    )
+
+    eq(git.parent_of(repo, second), first)
+    eq(git.parent_of(repo, root), empty)
+    eq(git.parent_of(repo, 'nope'), nil)
+end
+
 T['parent_branch()'] = new_set({
     hooks = {
         post_case = function()
@@ -907,6 +1023,76 @@ T['parent_branch()']['finds the parent of a detached HEAD ahead of it'] = functi
     commit('d1')
 
     eq(git.parent_branch(repo), 'main')
+end
+
+T['between commits']['messages() lists the range newest first with whole messages'] = function()
+    local first, second = create_commits()
+
+    helpers.git(repo, {
+        'commit',
+        '--quiet',
+        '--allow-empty',
+        '-m',
+        'third',
+        '-m',
+        'body line\nsecond body line',
+    })
+
+    local third = rev({ 'rev-parse', 'HEAD' })
+    local messages = assert(git.messages(repo, second, third))
+
+    eq(
+        vim.tbl_map(function(m)
+            return { m.sha, m.author, m.time, m.message }
+        end, messages),
+        {
+            {
+                third:sub(1, #messages[1].sha),
+                'Iter Test',
+                1767225600,
+                { 'third', '', 'body line', 'second body line' },
+            },
+            {
+                second:sub(1, #messages[2].sha),
+                'Iter Test',
+                1767225600,
+                { 'second' },
+            },
+        }
+    )
+    eq(#assert(git.messages(repo, first, first)), 1)
+end
+
+T['between commits']['messages() of a root commit takes it alone'] = function()
+    local root = rev({ 'rev-list', '--max-parents=0', 'HEAD' })
+
+    eq(
+        vim.tbl_map(function(m)
+            return m.message
+        end, assert(git.messages(repo, root, root))),
+        { { 'initial' } }
+    )
+end
+
+T['between commits']['stats() counts lines per file, a rename with both paths'] = function()
+    local first, second = create_commits()
+    local stats = assert(git.stats(repo, first, second))
+
+    table.sort(stats, function(a, b)
+        return a.path < b.path
+    end)
+    eq(stats, {
+        { path = 'add.txt', added = 1, deleted = 0 },
+        { path = 'del.txt', added = 0, deleted = 1 },
+        {
+            path = 'moved.txt',
+            orig_path = 'old.txt',
+            added = 0,
+            deleted = 0,
+        },
+        { path = 'tracked.txt', added = 1, deleted = 0 },
+    })
+    eq(git.stats(repo, 'nope', second), nil)
 end
 
 T['base refs'] = new_set()

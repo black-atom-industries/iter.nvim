@@ -97,6 +97,25 @@ local ACTIONS = {
     help = {
         { 'close', 'Close' },
     },
+    commits = {
+        {
+            'open',
+            "Open the commit's files, the selection's, or go to the diff",
+            { 'n', 'x' },
+        },
+        {
+            'review',
+            'Review from the commit, or the oldest selected one',
+            { 'n', 'x' },
+        },
+        { 'split', 'Show the diff side by side' },
+        { 'unified', 'Show the diff unified' },
+        { 'wrap', 'Toggle wrapping long lines' },
+        { 'close', 'Back to the commits, or close' },
+        { 'help', 'Show the keys' },
+        { 'scroll_down', 'Scroll the summary or the diff down' },
+        { 'scroll_up', 'Scroll the summary or the diff up' },
+    },
     picker = {
         { 'pick', 'Pick the item' },
         { 'close', 'Close without picking' },

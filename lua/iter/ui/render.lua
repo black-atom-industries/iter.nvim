@@ -24,6 +24,22 @@ function M.line(text, data)
     }
 end
 
+--- A line of `chunks`, each text with its highlight group.
+---@param chunks [string, string?][]
+---@return IterRenderLine
+function M.chunks_line(chunks)
+    local line = M.line('')
+
+    for _, chunk in ipairs(chunks) do
+        local start = #line.text
+
+        line.text = line.text .. chunk[1]
+        M.add_highlight(line, chunk[2], start, #line.text)
+    end
+
+    return line
+end
+
 ---@param line IterRenderLine
 ---@param group string?
 ---@param start_col integer
