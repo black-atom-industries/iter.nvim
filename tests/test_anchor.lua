@@ -65,6 +65,46 @@ T['create()']['keeps the base of an old-side anchor'] = function()
     eq(a.lines, { 'gone' })
 end
 
+T['create()']['keeps a commit sha as the base of an old-side anchor'] = function()
+    local sha = string.rep('a1', 20)
+    local a = anchor.create({
+        path = 'f.lua',
+        side = 'old',
+        base = sha,
+        start_line = 1,
+    }, { 'gone' })
+
+    eq(a.base, sha)
+    eq(anchor.version(a), sha)
+end
+
+T['create()']['refuses a base that is no version'] = function()
+    for _, base in ipairs({ 'main', 'a1b2c3d', string.rep('g', 40) }) do
+        MiniTest.expect.error(function()
+            anchor.create({ path = 'f.lua', side = 'old', base = base }, {})
+        end)
+    end
+end
+
+T['old_base()'] = new_set()
+
+T['old_base()']['names the version the deleted rows come from'] = function()
+    eq(anchor.old_base({ side = 'unstaged' }), 'index')
+    eq(anchor.old_base({ side = 'staged' }), 'HEAD')
+    eq(anchor.old_base({ side = 'base', base = 'abc' }), 'abc')
+end
+
+T['short_base()'] = new_set()
+
+T['short_base()']['gives the short sha of an old side on a commit only'] = function()
+    local sha = string.rep('ab', 20)
+
+    eq(anchor.short_base({ side = 'old', base = sha }), 'abababa')
+    eq(anchor.short_base({ side = 'old', base = 'HEAD' }), nil)
+    eq(anchor.short_base({ side = 'old', base = 'index' }), nil)
+    eq(anchor.short_base({ side = 'new' }), nil)
+end
+
 T['create()']['needs a base on the old side'] = function()
     MiniTest.expect.error(function()
         anchor.create({ path = 'f.lua', side = 'old', start_line = 1 }, {})

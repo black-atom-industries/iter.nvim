@@ -549,4 +549,376 @@ T['run()']['logs the command, not its output'] = function()
     eq(text:find('SECRET CONTENT', 1, true), nil)
 end
 
+T['against a base'] = new_set()
+
+---@param args string[]
+---@return string
+local function rev(args)
+    return vim.trim(helpers.git(repo, args))
+end
+
+--- On `feat`, created from `main`: a commit editing `edit.txt`, a commit
+--- renaming `old.txt` to `new.txt`; a commit on `main` after the fork; then
+--- uncommitted, `keep.txt` edited, `gone.txt` deleted and `untracked.txt`
+--- new.
+---@return string base merge-base of `feat` and `main`
+local function create_branch_repo()
+    write('keep.txt', { 'k1', 'k2' })
+    write('edit.txt', { 'e1', 'e2', 'e3' })
+    write('old.txt', { 'rename me', 'line two', 'line three' })
+    write('gone.txt', { 'bye' })
+    helpers.git(repo, { 'add', '--all' })
+    helpers.git(repo, { 'commit', '--quiet', '-m', 'files' })
+
+    local base = rev({ 'rev-parse', 'HEAD' })
+
+    helpers.git(repo, { 'switch', '--quiet', '-c', 'feat', 'main' })
+    write('edit.txt', { 'e1', 'e2 changed', 'e3' })
+    helpers.git(repo, { 'commit', '--quiet', '-am', 'edit' })
+    helpers.git(repo, { 'mv', 'old.txt', 'new.txt' })
+    helpers.git(repo, { 'commit', '--quiet', '-m', 'rename' })
+    helpers.git(repo, { 'switch', '--quiet', 'main' })
+    write('main.txt', { 'main only' })
+    helpers.git(repo, { 'add', 'main.txt' })
+    helpers.git(repo, { 'commit', '--quiet', '-m', 'main' })
+    helpers.git(repo, { 'switch', '--quiet', 'feat' })
+    write('keep.txt', { 'k1', 'k2 edited' })
+    vim.fn.delete(vim.fs.joinpath(repo, 'gone.txt'))
+    write('untracked.txt', { 'fresh' })
+
+    return base
+end
+
+---@return GitStatusEntry[]
+local function entries()
+    return git.status_snapshot(repo).entries
+end
+
+T['against a base']['base_changes() lists committed and uncommitted changes'] = function()
+    local base = create_branch_repo()
+
+    eq(git.base_changes(repo, base, entries()), {
+        { path = 'edit.txt', side = 'base', code = 'M', base = base },
+        { path = 'gone.txt', side = 'base', code = 'D', base = base },
+        { path = 'keep.txt', side = 'base', code = 'M', base = base },
+        {
+            path = 'new.txt',
+            orig_path = 'old.txt',
+            side = 'base',
+            code = 'R',
+            base = base,
+        },
+        { path = 'untracked.txt', side = 'base', code = '?', base = base },
+    })
+end
+
+T['against a base']['base_changes() takes untracked files from the given status'] = function()
+    local base = create_branch_repo()
+    local paths = vim.tbl_map(function(item)
+        return item.path
+    end, assert(git.base_changes(repo, base, {})))
+
+    eq(paths, { 'edit.txt', 'gone.txt', 'keep.txt', 'new.txt' })
+end
+
+T['against a base']['base_changes() is nil with the error on a bad base'] = function()
+    local items, err = git.base_changes(repo, 'nope', {})
+
+    eq(items, nil)
+    eq(type(err), 'string')
+end
+
+T['against a base']['file_diff() reads the base and the worktree'] = function()
+    local base = create_branch_repo()
+    local by_path = {}
+
+    for _, item in ipairs(assert(git.base_changes(repo, base, entries()))) do
+        by_path[item.path] = item
+    end
+
+    local edit = assert(git.file_diff(repo, by_path['edit.txt'], {}))
+
+    eq(edit.old_lines, { 'e1', 'e2', 'e3' })
+    eq(edit.new_lines, { 'e1', 'e2 changed', 'e3' })
+    eq(vim.tbl_contains(edit.raw, '-e2'), true)
+    eq(vim.tbl_contains(edit.raw, '+e2 changed'), true)
+
+    local renamed = assert(git.file_diff(repo, by_path['new.txt'], {}))
+
+    eq(renamed.old_lines, { 'rename me', 'line two', 'line three' })
+    eq(renamed.new_lines, { 'rename me', 'line two', 'line three' })
+    eq(vim.tbl_contains(renamed.raw, 'rename from old.txt'), true)
+
+    local gone = assert(git.file_diff(repo, by_path['gone.txt'], {}))
+
+    eq(gone.old_lines, { 'bye' })
+    eq(gone.new_lines, {})
+
+    local keep = assert(git.file_diff(repo, by_path['keep.txt'], {}))
+
+    eq(keep.old_lines, { 'k1', 'k2' })
+    eq(keep.new_lines, { 'k1', 'k2 edited' })
+
+    local fresh = assert(git.file_diff(repo, by_path['untracked.txt'], {}))
+
+    eq(fresh.old_lines, {})
+    eq(fresh.new_lines, { 'fresh' })
+end
+
+T['against a base']['file_diff() refuses a base change without its base'] = function()
+    write('tracked.txt', { 'one', 'two' })
+
+    local source, err = git.file_diff(
+        repo,
+        { path = 'tracked.txt', side = 'base', code = 'M' },
+        {}
+    )
+
+    eq(source, nil)
+    eq(err, 'No base for tracked.txt')
+end
+
+T['against a base']['diff_ids() keys the base read by base and path'] = function()
+    local base = create_branch_repo()
+    local ids = assert(git.diff_ids(repo, base))
+    local keys = vim.tbl_keys(ids)
+    table.sort(keys)
+
+    eq(keys, {
+        'base\0edit.txt',
+        'base\0gone.txt',
+        'base\0keep.txt',
+        'base\0new.txt',
+    })
+
+    local before = ids['base\0keep.txt']
+
+    write('keep.txt', { 'k1', 'k2 edited again' })
+    eq(assert(git.diff_ids(repo, base))['base\0keep.txt'], before)
+end
+
+T['against a base']['resolve_base() takes the merge-base of a branch'] = function()
+    local base = create_branch_repo()
+
+    eq(git.resolve_base(repo, { kind = 'branch', ref = 'main' }), base)
+end
+
+T['against a base']['resolve_base() takes the parent of a commit'] = function()
+    local base = create_branch_repo()
+    local first = rev({ 'rev-parse', 'feat~1' })
+
+    eq(git.resolve_base(repo, { kind = 'commit', sha = first }), base)
+end
+
+T['against a base']['resolve_base() takes the commit of a typed ref itself'] = function()
+    create_branch_repo()
+
+    local first = rev({ 'rev-parse', 'feat~1' })
+
+    eq(
+        git.resolve_base(repo, { kind = 'rev', ref = 'feat~1', sha = first }),
+        first
+    )
+end
+
+T['against a base']['resolve_base() refuses a commit no longer in the history of HEAD'] = function()
+    create_branch_repo()
+
+    local first = rev({ 'rev-parse', 'feat~1' })
+    local tip = rev({ 'rev-parse', 'feat' })
+
+    helpers.git(repo, { 'stash', '--quiet', '--include-untracked' })
+    helpers.git(repo, { 'rebase', '--quiet', 'main' })
+
+    for _, spec in ipairs({
+        { kind = 'commit', sha = first },
+        { kind = 'rev', ref = 'feat~1', sha = first },
+        { kind = 'commit', sha = tip },
+    }) do
+        local sha, err = git.resolve_base(repo, spec)
+
+        eq(sha, nil)
+        eq(err, 'Not in the history of HEAD')
+    end
+end
+
+T['against a base']['resolve_base() takes the empty tree for a root commit'] = function()
+    local root_commit = rev({ 'rev-list', '--max-parents=0', 'HEAD' })
+    local empty = rev({ 'hash-object', '-t', 'tree', '/dev/null' })
+
+    eq(git.resolve_base(repo, { kind = 'commit', sha = root_commit }), empty)
+
+    local items = assert(git.base_changes(repo, empty, entries()))
+
+    eq(items, {
+        { path = 'tracked.txt', side = 'base', code = 'A', base = empty },
+    })
+    eq(assert(git.file_diff(repo, items[1], {})).new_lines, { 'one' })
+end
+
+T['against a base']['resolve_base() is nil with the error on an unknown ref'] = function()
+    local sha, err = git.resolve_base(repo, { kind = 'branch', ref = 'nope' })
+
+    eq(sha, nil)
+    eq(type(err), 'string')
+
+    sha, err = git.resolve_base(repo, { kind = 'commit', sha = 'nope' })
+
+    eq(sha, nil)
+    eq(type(err), 'string')
+end
+
+T['parent_branch()'] = new_set({
+    hooks = {
+        post_case = function()
+            helpers.cleanup(remote)
+            remote = nil
+        end,
+    },
+})
+
+--- Create `branch` at the current commit the way `worktree add -b` does,
+--- so its reflog says `Created from HEAD`.
+---@param branch string
+local function branch_from_head(branch)
+    helpers.git(repo, { 'checkout', '--quiet', '--detach' })
+    helpers.git(repo, { 'checkout', '--quiet', '-b', branch })
+end
+
+T['parent_branch()']['takes the branch the reflog names'] = function()
+    commit('m1')
+    helpers.git(repo, { 'switch', '--quiet', '-c', 'feat', 'main' })
+    commit('f1')
+    helpers.git(repo, { 'branch', 'near' })
+    commit('f2')
+
+    eq(git.parent_branch(repo), 'main')
+end
+
+T['parent_branch()']['falls back when the reflog says HEAD'] = function()
+    commit('m1')
+    branch_from_head('feat')
+    commit('f1')
+    helpers.git(repo, { 'switch', '--quiet', 'main' })
+    commit('m2')
+    helpers.git(repo, { 'switch', '--quiet', 'feat' })
+
+    eq(git.parent_branch(repo), 'main')
+end
+
+T['parent_branch()']['falls back when the reflog names a deleted branch'] = function()
+    commit('m1')
+    helpers.git(repo, { 'branch', 'tmp' })
+    helpers.git(repo, { 'switch', '--quiet', '-c', 'feat', 'tmp' })
+    helpers.git(repo, { 'branch', '-D', 'tmp' })
+    commit('f1')
+
+    eq(git.parent_branch(repo), 'main')
+end
+
+T['parent_branch()']['finds the branch a stacked branch forked from'] = function()
+    branch_from_head('feat/a')
+    commit('a1')
+    commit('a2')
+    branch_from_head('feat/b')
+    commit('b1')
+
+    eq(git.parent_branch(repo), 'feat/a')
+end
+
+T['parent_branch()']['takes a closer child branch over the parent'] = function()
+    branch_from_head('feat/a')
+    commit('a1')
+    branch_from_head('feat/b')
+    commit('b1')
+    helpers.git(repo, { 'switch', '--quiet', 'feat/a' })
+    commit('a2')
+    commit('a3')
+
+    eq(git.parent_branch(repo), 'feat/b')
+end
+
+T['parent_branch()']['gives ties to the default branch'] = function()
+    commit('m1')
+    helpers.git(repo, { 'branch', 'aaa' })
+    branch_from_head('feat')
+    commit('f1')
+
+    eq(git.parent_branch(repo), 'main')
+end
+
+T['parent_branch()']['counts the remote default branch'] = function()
+    remote = helpers.create_remote(repo)
+    helpers.git(repo, { 'remote', 'set-head', 'origin', 'main' })
+    branch_from_head('feat')
+    commit('f1')
+    helpers.git(repo, { 'branch', '-D', 'main' })
+
+    eq(git.parent_branch(repo), 'origin/main')
+end
+
+T['parent_branch()']['is nil on the default branch'] = function()
+    branch_from_head('feat')
+    commit('f1')
+    helpers.git(repo, { 'switch', '--quiet', 'main' })
+    commit('m1')
+
+    eq(git.parent_branch(repo), nil)
+end
+
+T['parent_branch()']['is nil on a detached HEAD every branch contains'] = function()
+    commit('m1')
+    helpers.git(repo, { 'checkout', '--quiet', '--detach', 'HEAD~1' })
+
+    eq(git.parent_branch(repo), nil)
+end
+
+T['parent_branch()']['finds the parent of a detached HEAD ahead of it'] = function()
+    helpers.git(repo, { 'checkout', '--quiet', '--detach' })
+    commit('d1')
+
+    eq(git.parent_branch(repo), 'main')
+end
+
+T['base refs'] = new_set()
+
+T['base refs']['branches() lists local then remote branches, no symrefs'] = function()
+    helpers.git(repo, { 'branch', 'feat/a' })
+    helpers.create_remote(repo)
+    helpers.git(repo, { 'remote', 'set-head', 'origin', 'main' })
+
+    eq(git.branches(repo), { 'feat/a', 'main', 'origin/main' })
+end
+
+T['base refs']['base_spec() names a branch, a remote branch or a commit'] = function()
+    helpers.git(repo, { 'branch', 'feat' })
+    helpers.create_remote(repo)
+
+    local head = vim.trim(helpers.git(repo, { 'rev-parse', 'HEAD' }))
+
+    eq(git.base_spec(repo, 'feat'), { kind = 'branch', ref = 'feat' })
+    eq(
+        git.base_spec(repo, 'origin/main'),
+        { kind = 'branch', ref = 'origin/main' }
+    )
+    eq(
+        git.base_spec(repo, head:sub(1, 7)),
+        { kind = 'rev', ref = head:sub(1, 7), sha = head }
+    )
+    eq(git.base_spec(repo, 'HEAD'), { kind = 'rev', ref = 'HEAD', sha = head })
+end
+
+T['base refs']['commit_sha() gives the full sha of a ref'] = function()
+    local head = vim.trim(helpers.git(repo, { 'rev-parse', 'HEAD' }))
+
+    eq(git.commit_sha(repo, head:sub(1, 7)), head)
+    eq({ git.commit_sha(repo, 'nope') }, { nil, 'Unknown ref nope' })
+    eq({ git.commit_sha(repo, '--all') }, { nil, 'Unknown ref --all' })
+end
+
+T['base refs']['base_spec() refuses an unknown ref and an option'] = function()
+    eq({ git.base_spec(repo, 'nope') }, { nil, 'Unknown ref nope' })
+    eq({ git.base_spec(repo, '--all') }, { nil, 'Unknown ref --all' })
+end
+
 return T

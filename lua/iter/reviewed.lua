@@ -149,14 +149,47 @@ function M.states(root, paths, records)
     return states
 end
 
---- Mark `path` reviewed at its current content (`on`), or remove its mark.
---- A file reviewed at its current content keeps its record.
+--- The key reviewed marks against `spec` are stored under: `''` for
+--- working changes, `branch:<ref>`, `commit:<sha>` or `rev:<sha>`. A branch
+--- keeps its marks when it moves.
+---@param spec? IterBaseSpec
+---@return string
+function M.base_key(spec)
+    if spec == nil then
+        return ''
+    elseif spec.kind == 'branch' then
+        return 'branch:' .. spec.ref
+    end
+
+    return spec.kind .. ':' .. spec.sha
+end
+
+--- The reviewed records of `data` made against the base `key`.
+---@param data IterStoreFile
+---@param key string
+---@return table<string, IterReviewed>
+function M.records(data, key)
+    vim.validate('key', key, 'string')
+
+    if key == '' then
+        return data.reviewed
+    end
+
+    return data.reviewed_by_base and data.reviewed_by_base[key] or {}
+end
+
+--- Mark `path` reviewed against the base `key` at its current content
+--- (`on`), or remove its mark there. A file reviewed at its current content
+--- keeps its record.
 ---@param root string
 ---@param path string
 ---@param on boolean
+---@param key string base key, `''` for working changes
 ---@return boolean? ok
 ---@return string? error
-function M.set(root, path, on)
+function M.set(root, path, on, key)
+    vim.validate('key', key, 'string')
+
     local hash
 
     if on then
@@ -168,13 +201,22 @@ function M.set(root, path, on)
     end
 
     local _, err = store.update(root, function(data)
-        local record = data.reviewed[path]
+        local records = M.records(data, key)
+        local record = records[path]
 
         if not on then
-            data.reviewed[path] = nil
+            records[path] = nil
         elseif record == nil or record.hash ~= hash then
-            data.reviewed[path] = { hash = hash, at = os.time() }
+            records[path] = { hash = hash, at = os.time() }
         end
+
+        if key == '' then
+            return
+        end
+
+        local by_base = data.reviewed_by_base or {}
+        by_base[key] = next(records) ~= nil and records or nil
+        data.reviewed_by_base = next(by_base) ~= nil and by_base or nil
     end)
 
     if err ~= nil then

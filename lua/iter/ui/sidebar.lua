@@ -2,6 +2,7 @@
 --- lists every annotation of the repository, grouped by file. One per
 --- tabpage.
 
+local anchor = require('iter.annotations.anchor')
 local editor = require('iter.annotations.editor')
 local help = require('iter.ui.help')
 local keymap = require('iter.keymap')
@@ -77,7 +78,11 @@ local function location(item)
     local last = first + (a.end_line or a.start_line) - a.start_line
     local loc = first == last and tostring(first) or (first .. '–' .. last)
 
-    return loc .. (a.side == 'old' and ' old' or '')
+    local sha = anchor.short_base(a)
+
+    return loc
+        .. (a.side == 'old' and ' old' or '')
+        .. (sha ~= nil and ' ' .. sha or '')
 end
 
 ---@param groups IterAnnotationGroup[]
@@ -443,9 +448,11 @@ function Sidebar:jump()
 end
 
 --- Copy the annotations with `ids`, all when nil, in the sidebar's file
---- order.
+--- order, naming the base of an open review of the same repository.
 ---@param ids? string[]
 function Sidebar:yank(ids)
+    local review = require('iter').current_review
+
     require('iter.export').yank({
         root = self.root,
         config = self.config,
@@ -454,6 +461,7 @@ function Sidebar:yank(ids)
         on_clear = function()
             self.on_change()
         end,
+        since = review ~= nil and review:since(self.root) or nil,
     })
 end
 

@@ -9,12 +9,37 @@ iter is a Neovim-native staging and code review tool. It joins a minimal status 
 one-scroll review with annotations, reviewed marks and an export for agents, and
 [annotator.nvim](https://github.com/chpeters/annotator.nvim)'s annotations in normal buffers.
 
-Out of scope: pull requests, commits and remote sync (commit, push and pull stay with a Git plugin such as mini.git),
-Jujutsu and Mercurial, merge conflict resolution, branch management, stash, a log browser, annotation types, and sending
+Out of scope: committing, pushing, pulling and hosted pull requests (iter reviews a checked-out branch against a base
+and never talks to a host; the Git actions stay with a Git plugin such as mini.git), Jujutsu and Mercurial, merge conflict resolution, branch management, stash, a log browser, annotation types, and sending
 the review straight to an agent pane.
 
 ## Architecture
 
+- The review compares the worktree with a base. Without a base the old side is `HEAD` for a staged file and the index
+  for an unstaged one. With a base the old side is the base's tree and the new side is always the worktree, because
+  annotations, reviewed marks and the outdated rule anchor to the worktree. Ranges that end at another commit are out.
+- A base is a spec, resolved by `git.resolve_base` on every refresh: `{ kind = 'branch', ref }`,
+  `{ kind = 'commit', sha }` or `{ kind = 'rev', ref, sha }`. A branch resolves to its merge-base with HEAD, so it
+  follows the branch moving. A commit, picked from the `b` list, resolves to its parent, so the commit is part of the
+  review; a root commit resolves to the empty tree. A rev, a ref typed after `:Iter review` or passed as
+  `iter.review({ base })` that isn't a branch, keeps the ref as typed and the sha it named then, and resolves to that
+  commit itself, git's usual "since". `git.base_spec` turns a typed ref into a branch or a rev spec. A commit or rev that
+  is no longer an ancestor of HEAD, such as after a rebase, doesn't resolve. A base that no longer resolves warns, and
+  the review shows working changes; it is cleared from the store, except right after a checkout, where the new
+  branch's stored base stays. On a detached HEAD a picked base applies to the open review and is not stored, since every
+  detached checkout shares one store file.
+- The review names a base with `changes.base_text`, in the header and the export alike: `since main (a1b2c3d)` for a
+  branch with its merge-base, `since v1.0 (a1b2c3d)` for a rev with its commit, `from a1b2c3d` for a picked commit.
+  The column title (`changes.base_title`) drops the sha: `Since main`, `Since v1.0`, `From a1b2c3d`.
+- The parent branch (`git.parent_branch`) is the branch HEAD was created from: the reflog's `Created from` line when
+  that ref still exists, else the candidate (local branches and the remote default branch) whose merge-base with HEAD is
+  the fewest commits back. Branches that contain HEAD don't count, and ties go to the default branch, then to a local
+  branch over a remote one. The default branch is the target of `origin/HEAD`, else `main`, else `master`. On the default
+  branch there is no parent, and the picker presets working changes.
+- Against a base the drawer has one file column beside Annotations: one diff per file, the changes from
+  `git.base_changes` (`git diff -M --name-status` against the resolved sha plus the untracked files of the status read
+  the poll already made). Stage, unstage,
+  discard and ignore refuse there, in the drawer and in the diff pane. Working changes keeps Unstaged and Staged.
 - Diff flow: git's unified diff → `iter.diff.parser` (hunks) → `iter.diff.model` (rows: header, hunk, context, del,
   add, gap, each with old and new line numbers) → `iter.diff.view` (buffer lines and extmarks). Hunks always come from
   git's diff, so staging applies exactly what git produced. The full old and new file contents are fetched for syntax
@@ -58,7 +83,11 @@ the review straight to an agent pane.
   passage, every line of a line or range annotation whole to the window's edge (`line_hl_group`, empty lines and wrapped rows included), nothing for outdated, file and review annotations. The
   buffer marks and the diff view draw it at a priority under syntax and the visual selection. The colour is the
   `@function` foreground blended into `Normal`.
-  The new side follows the worktree file, the old side its `base` (`HEAD` or `index`).
+  The new side follows the worktree file, the old side its `base`: `HEAD`, `index`, or the full sha of the commit or
+  tree a base resolved to. A sha-based old-side annotation shows in a base diff view while the view's resolved base is
+  that sha, and stays in the Annotations column, the sidebar and the export, read from its own commit. Its labels
+  name that commit by its short sha (`anchor.short_base`): `old a1b2c3d` in the Annotations column and the sidebar,
+  `(old side, a1b2c3d)` in the export; an old side on `HEAD` or `index` reads `old` and `(old side)`.
 - Outdated has one rule, `iter.annotations.list.line_of`: an annotation with text is outdated when the content of the
   version it follows lacks that text; the worktree's content is the loaded buffer's, else the file's. The Annotations
   column, the export, the diff view marks and the buffer marks all decide through it. Only without that content (or
@@ -74,8 +103,13 @@ the review straight to an agent pane.
   warning says so, and the next write of that file saves it first. Leaving Neovim waits for the lock up to the stale
   timeout and takes it over then; a change it still can't save is reported as lost. The review drawer and the buffer
   marks read through one cache per root (`store.cached`), read again when the file's stat or HEAD changes.
+- The store file also holds the branch's `base` (a base spec), the base the review opens with. A `base` or
+  `reviewed_by_base` entry iter can't read is dropped on read without setting the file aside, so the annotations stay.
+  Switching branches switches to that branch's stored base. Annotations are shared across bases.
 - Reviewed: reviewed when the stored `git hash-object` of the worktree file equals the current one, changed when it
-  differs, unreviewed without a record. Staging doesn't change it.
+  differs, unreviewed without a record. Staging doesn't change it. A mark belongs to the base it was made against:
+  working changes use `reviewed`, a base uses `reviewed_by_base[key]` with the key `branch:<ref>`, `commit:<sha>` or `rev:<sha>`
+  (`reviewed.base_key`). Empty buckets are pruned.
 - Discard never touches the index or ignored files: an unstaged row restores from the index, an untracked row deletes
   only its untracked files, and the confirm names the paths. The Staged column has no discard.
 - The drawer float sits at the bottom of its pane (`relative = 'win'`, `anchor = 'SW'`) at `drawer.zindex`; the help
@@ -118,6 +152,10 @@ the review straight to an agent pane.
   the total, then goes, then the upstream, then the arrows.
 - The export, the Annotations column and the sidebar list annotations through `iter.annotations.list`: files in drawer order,
   then other files by name, the review last; by line within a file, each resolved with `line_of`.
+- Against a base the export names it in a paragraph after the intro, `Reviewed ` and the header's words:
+  `Reviewed since main (a1b2c3d)`, `Reviewed since v1.0 (a1b2c3d)` or `Reviewed from a1b2c3d`. The line comes from the
+  open review's base (`Review:since`), never
+  from the stored one, and is the same for the drawer and the sidebar. Without a base the text has no such line.
 - The annotation sidebar (`iter.ui.sidebar`) is a vertical split at the tab's edge, one per tabpage. Every sidebar
   redraws through `refresh_annotations` and the store watcher.
 - `iter.annotations.statuscolumn` backs `require('iter').statuscolumn()`: a wrapped row of an annotated line draws the

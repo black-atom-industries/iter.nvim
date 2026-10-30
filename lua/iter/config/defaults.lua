@@ -76,6 +76,7 @@ M.keys = {
         ignore = 'I',
         reviewed = 'r',
         unreviewed = 'R',
+        base = 'b',
         mode = '=',
         split = '|',
         unified = '-',

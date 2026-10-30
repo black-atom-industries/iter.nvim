@@ -17,6 +17,7 @@ local reviewed = require('iter.reviewed')
 ---@field config IterConfig
 ---@field path? string absolute path of a file to select when it changed
 ---@field side? IterSide side to look for `path` on first
+---@field base? IterBaseSpec what to compare with, remembered for the branch; the remembered one by default
 ---@field on_annotations? fun() after an annotation of the review is saved or deleted
 ---@field on_close? fun(review: IterReview)
 
@@ -29,12 +30,14 @@ local reviewed = require('iter.reviewed')
 ---@field buf integer empty buffer of the split and of the diff window without a diff
 ---@field drawer IterDrawer
 ---@field annotations IterAnnotation[] stored annotations
----@field records table<string, IterReviewed> stored reviewed records
+---@field records table<string, IterReviewed> stored reviewed records against the current base
 ---@field reviewed table<string, IterReviewedState> state per file path in the drawer
 ---@field expanded table<string, true> per path, reviewed files shown whole in all-files mode
 ---@field fresh? boolean read the store on the next load whatever its stat says
 ---@field help? IterHelp help float of the diff pane
 ---@field preview_target? { id: string, file: IterChange } the annotation the Annotations column showed last and the file it showed it in
+---@field base_spec? IterBaseSpec what the review compares with, nil for working changes; resolved on every status read
+---@field base_branch? string the branch `base_spec` belongs to, nil on a detached HEAD
 ---@field group integer
 ---@field closed boolean
 ---@field on_annotations? fun()
@@ -62,6 +65,9 @@ local SPACER_WINOPTS = {
 
 -- Id of the drawer column that lists the annotations.
 local ANNOTATIONS = 'annotations'
+
+-- Recent commits the base picker offers.
+local PICKER_COMMITS = 20
 
 -- Actions the key hint line shows in the Annotations column.
 local ANNOTATION_HINTS = {
@@ -116,6 +122,23 @@ local function normal_win(tab, preferred)
     return nil
 end
 
+--- Remember `spec` as the base of the checked-out branch, nil for working
+--- changes. A detached HEAD remembers nothing: every detached checkout
+--- shares one store file.
+---@param root string
+---@param spec? IterBaseSpec
+local function remember_base(root, spec)
+    if git.head_branch(root) == nil then
+        return
+    end
+
+    local _, err = store.set_base(root, spec)
+
+    if err ~= nil then
+        util.error('Cannot remember the base: ' .. err)
+    end
+end
+
 --- Open the review tab after the current one, with the diff window above
 --- and the drawer over a split at the bottom. The drawer gets the focus.
 ---@param opts IterReviewOpenOptions
@@ -125,8 +148,18 @@ function Review.open(opts)
     vim.validate('opts.config', opts.config, 'table')
     vim.validate('opts.path', opts.path, 'string', true)
     vim.validate('opts.side', opts.side, 'string', true)
+    vim.validate('opts.base', opts.base, 'table', true)
     vim.validate('opts.on_annotations', opts.on_annotations, 'function', true)
     vim.validate('opts.on_close', opts.on_close, 'function', true)
+
+    local root = git.root()
+    local base_spec = opts.base
+
+    if base_spec ~= nil then
+        remember_base(root, base_spec)
+    else
+        base_spec = store.cached(root).base
+    end
 
     local origin_tab = vim.api.nvim_get_current_tabpage()
     local origin_win = vim.api.nvim_get_current_win()
@@ -163,6 +196,8 @@ function Review.open(opts)
         records = {},
         reviewed = {},
         expanded = {},
+        base_spec = base_spec,
+        base_branch = git.head_branch(root),
         closed = false,
         on_annotations = opts.on_annotations,
         on_close = opts.on_close,
@@ -443,7 +478,13 @@ function Review:apply_change(kind)
 
     local what = visual and 'selected lines' or 'hunk'
 
-    if kind == 'stage' and file.side ~= 'unstaged' then
+    if file.side == 'base' then
+        util.warn(
+            (kind == 'stage' and 'Staging' or 'Unstaging')
+                .. ' does not apply against a base'
+        )
+        return
+    elseif kind == 'stage' and file.side ~= 'unstaged' then
         util.warn(
             visual and 'The lines are staged already'
                 or 'The hunk is staged already'
@@ -562,7 +603,8 @@ function Review:drawer_load(drawer)
     local paths, seen = {}, {}
 
     self.fresh = nil
-    self.annotations, self.records = data.annotations, data.reviewed
+    self.annotations = data.annotations
+    self.records = reviewed.records(data, reviewed.base_key(self.base_spec))
 
     for _, item in ipairs(drawer:files()) do
         if not seen[item.path] then
@@ -600,23 +642,163 @@ function Review:drawer_decorator(_)
     end
 end
 
+--- Against a base `· ` and the base's name, when it fits, then
 --- `<n> files` at the right edge, in place of the change summary.
----@param _ IterDrawer
+---@param drawer IterDrawer
 ---@param _summary [string, string]
 ---@param room integer
 ---@return [string, string][]
-function Review:drawer_header(_, _summary, room)
+function Review:drawer_header(drawer, _summary, room)
     local total = reviewed.summary(self.reviewed).total
     local files =
         string.format('%d %s ', total, total == 1 and 'file' or 'files')
+    local since = drawer.changes.since
+    local chunks = {}
 
-    return {
+    if since ~= nil then
+        local text = ' · ' .. require('iter.changes').base_text(since)
+        local width = vim.fn.strdisplaywidth(text)
+
+        if width + 1 + vim.fn.strdisplaywidth(files) <= room then
+            table.insert(chunks, { text, 'IterDrawerHint' })
+            room = room - width
+        end
+    end
+
+    vim.list_extend(chunks, {
         {
             string.rep(' ', math.max(1, room - vim.fn.strdisplaywidth(files))),
             'IterDrawerHint',
         },
         { files, 'IterDrawerHint' },
-    }
+    })
+
+    return chunks
+end
+
+--- The base the review compares with, resolved again; after a checkout the
+--- one remembered for the new branch. A base that no longer resolves falls
+--- back to working changes, with a warning, and is forgotten for the
+--- branch, unless it was just read for a branch checked out since.
+---@param _ IterDrawer
+---@param root string
+---@return IterChangesBase?
+function Review:drawer_base(_, root)
+    local branch = git.head_branch(root)
+    local switched = branch ~= self.base_branch
+
+    if switched then
+        self.base_branch = branch
+        self.base_spec = store.cached(root).base
+        self.expanded = {}
+    end
+
+    local spec = self.base_spec
+
+    if spec == nil then
+        return nil
+    end
+
+    local label = require('iter.changes').base_label(spec)
+    local sha, err = git.resolve_base(root, spec)
+
+    if sha == nil then
+        self.base_spec = nil
+
+        if not switched and branch ~= nil then
+            store.set_base(root, nil)
+        end
+
+        util.warn(
+            string.format(
+                'Cannot compare with %s (%s); showing working changes',
+                label,
+                err or 'unknown'
+            )
+        )
+        return nil
+    end
+
+    return { kind = spec.kind, sha = sha, label = label }
+end
+
+--- Compare the review with `spec`, nil for working changes, and remember
+--- it for the branch, unless HEAD is detached.
+---@param spec? IterBaseSpec
+function Review:set_base(spec)
+    remember_base(self.drawer.changes.root, spec)
+
+    self.base_spec = spec
+    self.expanded = {}
+    self.drawer:relist()
+end
+
+---@class IterBaseChoice an item of the base picker
+---@field label string
+---@field spec? IterBaseSpec nil for working changes
+---@field commit? string abbreviated sha of a commit, resolved when picked
+
+--- Pick what the review compares with through `vim.ui.select`: the parent
+--- branch when there is one, working changes, the other branches, then the
+--- recent commits. A picked commit is part of the review.
+function Review:pick_base()
+    local root = self.drawer.changes.root
+    local head = git.head_branch(root)
+    local parent = git.parent_branch(root)
+    ---@type IterBaseChoice[]
+    local choices = { { label = 'Working changes' } }
+
+    -- `vim.ui.select` presets its first item.
+    if parent ~= nil then
+        table.insert(choices, 1, {
+            label = parent .. ' (parent)',
+            spec = { kind = 'branch', ref = parent },
+        })
+    end
+
+    for _, branch in ipairs(git.branches(root) or {}) do
+        if branch ~= parent and branch ~= head then
+            table.insert(choices, {
+                label = branch,
+                spec = { kind = 'branch', ref = branch },
+            })
+        end
+    end
+
+    local recent = git.recent(root, PICKER_COMMITS)
+
+    for _, commit in ipairs(recent and recent.commits or {}) do
+        table.insert(choices, {
+            label = commit.sha .. ' ' .. commit.subject,
+            commit = commit.sha,
+        })
+    end
+
+    vim.ui.select(choices, {
+        prompt = 'Review since',
+        format_item = function(choice)
+            return choice.label
+        end,
+    }, function(choice)
+        if choice == nil or self.closed then
+            return
+        end
+
+        local spec = choice.spec
+
+        if choice.commit ~= nil then
+            local sha, err = git.commit_sha(root, choice.commit)
+
+            if sha == nil then
+                util.error(err, 'Unknown commit ' .. choice.commit)
+                return
+            end
+
+            spec = { kind = 'commit', sha = sha }
+        end
+
+        self:set_base(spec)
+    end)
 end
 
 --- The Annotations column: the reviewed progress, then every annotation in
@@ -716,6 +898,10 @@ local function annotation_files(drawer, annotation)
             and a.base == 'HEAD'
             and { 'staged', 'unstaged' }
         or { 'unstaged', 'staged' }
+
+    if changes.base ~= nil then
+        sides = { 'base' }
+    end
 
     for _, side in ipairs(sides) do
         for _, item in ipairs(changes[side]) do
@@ -1168,6 +1354,9 @@ function Review:drawer_handlers(drawer, handlers)
     handlers.mode = function()
         self:toggle_mode()
     end
+    handlers.base = function()
+        self:pick_base()
+    end
 end
 
 --- Read the stored annotations again whatever the store file's stat says,
@@ -1184,7 +1373,12 @@ end
 ---@param path string
 ---@param from? IterChange|IterFileDiff
 function Review:mark_reviewed(path, from)
-    local _, err = reviewed.set(self.drawer.changes.root, path, true)
+    local _, err = reviewed.set(
+        self.drawer.changes.root,
+        path,
+        true,
+        reviewed.base_key(self.base_spec)
+    )
 
     if err ~= nil then
         util.error('Cannot mark reviewed: ' .. err)
@@ -1220,7 +1414,12 @@ end
 --- Remove the reviewed mark of `path` and refresh. The selection stays.
 ---@param path string
 function Review:unmark_reviewed(path)
-    local _, err = reviewed.set(self.drawer.changes.root, path, false)
+    local _, err = reviewed.set(
+        self.drawer.changes.root,
+        path,
+        false,
+        reviewed.base_key(self.base_spec)
+    )
 
     if err ~= nil then
         util.error('Cannot unmark reviewed: ' .. err)
@@ -1441,6 +1640,16 @@ end
 ---@return boolean
 function Review:is_open()
     return not self.closed and vim.api.nvim_tabpage_is_valid(self.tab)
+end
+
+--- What the review compares with while it is open on `root` against a
+--- base, else nil.
+---@param root string
+---@return IterChangesBase?
+function Review:since(root)
+    local result = self:is_open() and self.drawer.changes or nil
+
+    return result ~= nil and result.root == root and result.since or nil
 end
 
 --- Switch to the tab and focus the drawer.
@@ -1706,7 +1915,7 @@ function Review:anchor_rows(file, rows, side, passage)
         return anchor.create({
             path = file.orig_path or file.path,
             side = 'old',
-            base = anchor.OLD_BASE[file.side],
+            base = anchor.old_base(file),
             start_line = old[1],
             end_line = old[#old],
         }, lines)

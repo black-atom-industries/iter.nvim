@@ -8,6 +8,48 @@ local M = {}
 ---@field branch string 'HEAD' when detached
 ---@field unstaged IterChange[] sorted by path, untracked included
 ---@field staged IterChange[]
+---@field base? IterChange[] the changes since `since`, sorted by path, in a review against a base
+---@field since? IterChangesBase
+
+---@class IterChangesBase what a review against a base compares with
+---@field kind 'branch'|'commit'|'rev' a branch's merge-base, a picked commit's parent, or a typed ref's commit
+---@field sha string the resolved base commit or tree
+---@field label string the branch, the ref as typed, or the short sha of a picked commit or a typed sha
+
+--- The name of the base `spec`: the branch, the ref as typed, or the short
+--- sha of a picked commit or of a typed sha.
+---@param spec IterBaseSpec
+---@return string
+function M.base_label(spec)
+    if spec.kind ~= 'branch' and vim.startswith(spec.sha, spec.ref or '') then
+        return spec.sha:sub(1, 7)
+    end
+
+    return spec.ref
+end
+
+--- How the review names `since`: `since main (a1b2c3d)` for a branch with
+--- its merge-base, `since v1.0 (a1b2c3d)` for a typed ref with its commit,
+--- and `from a1b2c3d` for a picked commit, which the review includes.
+---@param since IterChangesBase
+---@return string
+function M.base_text(since)
+    if since.kind == 'commit' then
+        return 'from ' .. since.label
+    elseif since.kind == 'rev' and vim.startswith(since.sha, since.label) then
+        return 'since ' .. since.label
+    end
+
+    return string.format('since %s (%s)', since.label, since.sha:sub(1, 7))
+end
+
+--- The title of the column of the changes since `since`: `Since main`,
+--- `Since v1.0` or `From a1b2c3d`.
+---@param since IterChangesBase
+---@return string
+function M.base_title(since)
+    return (since.kind == 'commit' and 'From ' or 'Since ') .. since.label
+end
 
 local conflicts = {
     AA = true,
@@ -92,13 +134,64 @@ function M.build(snapshot)
     }
 end
 
---- The changed paths, Unstaged then Staged, a path on both sides once.
+--- The changes since `base` from `git diff -M --name-status -z <base>`
+--- and the untracked entries of `entries`, sorted by path. A path the diff
+--- lists keeps its diff entry over an untracked one.
+---@param output string
+---@param base string resolved base sha
+---@param entries GitStatusEntry[]
+---@return IterChange[]
+function M.since(output, base, entries)
+    local items, listed = {}, {}
+    local fields = vim.split(output, '\0', { plain = true })
+    local index = 1
+
+    while fields[index] ~= nil and fields[index] ~= '' do
+        local code = fields[index]:sub(1, 1)
+        local orig_path
+
+        if is_rename_or_copy(code) then
+            orig_path = fields[index + 1]
+            index = index + 1
+        end
+
+        local path = fields[index + 1]
+
+        index = index + 2
+
+        if path ~= nil then
+            local item = change(path, 'base', code, orig_path)
+
+            item.base = base
+            listed[path] = true
+            table.insert(items, item)
+        end
+    end
+
+    for _, entry in ipairs(entries) do
+        if entry.staged == '?' and not listed[entry.path] then
+            local item = change(entry.path, 'base', '?')
+
+            item.base = base
+            table.insert(items, item)
+        end
+    end
+
+    table.sort(items, function(a, b)
+        return a.path < b.path
+    end)
+
+    return items
+end
+
+--- The changed paths, Unstaged then Staged, then those since the base, a
+--- path on several sides once.
 ---@param result IterChanges
 ---@return string[]
 function M.paths(result)
     local paths, seen = {}, {}
 
-    for _, list in ipairs({ result.unstaged, result.staged }) do
+    for _, list in ipairs({ result.unstaged, result.staged, result.base or {} }) do
         for _, item in ipairs(list) do
             if not seen[item.path] then
                 seen[item.path] = true

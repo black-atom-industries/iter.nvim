@@ -36,6 +36,7 @@ local ACTIONS = {
         { 'ignore', 'Add the untracked file to .gitignore' },
         { 'reviewed', 'Mark reviewed and go to the next file' },
         { 'unreviewed', 'Remove the reviewed mark' },
+        { 'base', 'Pick what the review compares with' },
         { 'mode', 'Toggle one file or all files' },
         { 'split', 'Show the diff side by side' },
         { 'unified', 'Show the diff unified' },

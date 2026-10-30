@@ -222,6 +222,17 @@ T['load()']['round-trips the columns and quote of a passage'] = function()
     eq({ loaded.anchor.start_col, loaded.anchor.end_col }, { 4, 9 })
 end
 
+T['load()']['round-trips the commit an old-side anchor follows'] = function()
+    local deleted = annotation('deleted')
+    deleted.anchor.side = 'old'
+    deleted.anchor.base = string.rep('a1', 20)
+
+    local saved = assert(store.put_annotation(repo, deleted))
+
+    eq(assert(store.load(repo)).annotations[1].anchor.base, saved.anchor.base)
+    eq(saved.anchor.base, string.rep('a1', 20))
+end
+
 T['load()']['round-trips anchored text that is not UTF-8'] = function()
     local latin1 = annotation('latin-1')
     latin1.anchor.lines = { 'caf\233' }
@@ -467,6 +478,37 @@ T['two instances']['do not undo each other on delete'] = function()
     child_put('later')
 
     eq(bodies(assert(store.load(repo))), { 'later', 'theirs' })
+end
+
+T['two instances']['a write keeps the base the other stored'] = function()
+    local stale = assert(store.load(repo))
+
+    child.lua(
+        'require("iter.store").set_base(...)',
+        { repo, { kind = 'branch', ref = 'main' } }
+    )
+    assert(store.put_annotation(repo, annotation('later')))
+
+    eq(stale.base, nil)
+    eq(store.load(repo).base, { kind = 'branch', ref = 'main' })
+end
+
+T['two instances']['a write keeps the reviewed marks the other made against a base'] = function()
+    local stale = store.cached(repo)
+
+    child.lua(
+        'return require("iter.reviewed").set(...)',
+        { repo, 'a.txt', true, 'commit:abc123' }
+    )
+    eq(require('iter.reviewed').set(repo, 'a.txt', true, 'branch:main'), true)
+
+    local by_base = assert(store.load(repo).reviewed_by_base)
+
+    eq(stale.reviewed_by_base, nil)
+    eq(
+        by_base['commit:abc123']['a.txt'].hash,
+        by_base['branch:main']['a.txt'].hash
+    )
 end
 
 T['branches'] = new_set()
@@ -749,6 +791,89 @@ T['lock']['three instances writing at once lose no change'] = function()
 
     eq(#on_disk(), 3 * count)
     eq(vim.uv.fs_stat(lock_path()), nil)
+end
+
+T['base'] = new_set()
+
+T['base']['round-trips a branch, a commit and a ref, nil for working changes'] = function()
+    eq(store.load(repo).base, nil)
+
+    assert(store.set_base(repo, { kind = 'branch', ref = 'main' }))
+    eq(store.load(repo).base, { kind = 'branch', ref = 'main' })
+
+    assert(store.set_base(repo, { kind = 'commit', sha = 'abc123' }))
+    eq(store.load(repo).base, { kind = 'commit', sha = 'abc123' })
+
+    local rev = { kind = 'rev', ref = 'v1.0', sha = 'abc123' }
+
+    assert(store.set_base(repo, rev))
+    eq(store.load(repo).base, rev)
+
+    assert(store.set_base(repo, nil))
+    eq(store.load(repo).base, nil)
+end
+
+T['base']['reads a base it does not know as working changes'] = function()
+    local saved = assert(store.put_annotation(repo, annotation('kept')))
+    local path = assert(store.path(repo))
+    local data = vim.json.decode(assert(read(path)))
+
+    data.base = { kind = 'range', from = 'a', to = 'b' }
+    write(path, vim.json.encode(data))
+
+    local loaded = assert(store.load(repo))
+
+    eq(loaded.base, nil)
+
+    data.base = { kind = 'rev', sha = 'abc123' }
+    write(path, vim.json.encode(data))
+    loaded = assert(store.load(repo))
+
+    eq(loaded.base, nil)
+    eq(loaded.annotations, { saved })
+    eq(warnings, {})
+end
+
+T['reviewed_by_base'] = new_set()
+
+T['reviewed_by_base']['round-trips and stays out of a file without it'] = function()
+    assert(store.put_annotation(repo, annotation('kept')))
+    eq(
+        vim.json.decode(assert(read(assert(store.path(repo))))).reviewed_by_base,
+        nil
+    )
+
+    local records = { ['branch:main'] = { ['a.txt'] = { hash = 'h', at = 1 } } }
+
+    assert(store.update(repo, function(data)
+        data.reviewed_by_base = records
+    end))
+    eq(store.load(repo).reviewed_by_base, records)
+end
+
+T['reviewed_by_base']['drops entries it cannot read and keeps the rest'] = function()
+    local saved = assert(store.put_annotation(repo, annotation('kept')))
+    local path = assert(store.path(repo))
+    local data = vim.json.decode(assert(read(path)))
+
+    data.reviewed_by_base = {
+        ['branch:main'] = { ['a.txt'] = { hash = 'h', at = 1 }, ['b.txt'] = 1 },
+        ['commit:abc'] = 'odd',
+    }
+    write(path, vim.json.encode(data))
+
+    local loaded = assert(store.load(repo))
+
+    eq(loaded.reviewed_by_base, {
+        ['branch:main'] = { ['a.txt'] = { hash = 'h', at = 1 } },
+    })
+    eq(loaded.annotations, { saved })
+    eq(warnings, {})
+
+    data.reviewed_by_base = 'odd'
+    write(path, vim.json.encode(data))
+    eq(store.load(repo).reviewed_by_base, nil)
+    eq(store.load(repo).annotations, { saved })
 end
 
 return T

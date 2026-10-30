@@ -2,6 +2,7 @@
 --- side above the breakpoint, stacked sections below it, cells cut to fit.
 --- Pure: it builds render lines and touches no window or buffer.
 
+local anchor = require('iter.annotations.anchor')
 local changes = require('iter.changes')
 local render = require('iter.ui.render')
 
@@ -105,6 +106,10 @@ local function code_group(item)
         return 'IterUntracked'
     elseif item.code == 'U' then
         return 'IterConflict'
+    end
+
+    if item.side == 'base' then
+        return 'IterDiffHeaderRule'
     end
 
     return item.side == 'staged' and 'IterStage' or 'IterUnstage'
@@ -513,7 +518,13 @@ function M.annotation_label(annotation, start)
     local last = first + (a.end_line or a.start_line) - a.start_line
     local loc = first == last and tostring(first) or (first .. '–' .. last)
 
-    return name .. ':' .. loc .. (a.side == 'old' and ' old' or '')
+    local sha = anchor.short_base(a)
+
+    return name
+        .. ':'
+        .. loc
+        .. (a.side == 'old' and ' old' or '')
+        .. (sha ~= nil and ' ' .. sha or '')
 end
 
 --- The cell of an annotation row: the label padded to `label_width`, then

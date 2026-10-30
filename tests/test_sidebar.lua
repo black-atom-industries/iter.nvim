@@ -85,6 +85,14 @@ T['lines()']['gives the title, one header per group and one line per note'] = fu
     })
 end
 
+T['lines()']['names the commit an old-side note against a base follows'] = function()
+    local given = groups()
+
+    given[1].items[4].annotation.anchor.base = string.rep('ab', 20)
+
+    eq(texts(sidebar.lines(given, { width = 40 }))[7], '  12 old abababa Gone')
+end
+
 T['lines()']['maps note and header lines to their rows'] = function()
     local given = groups()
     local _, rows = sidebar.lines(given, { width = 30 })

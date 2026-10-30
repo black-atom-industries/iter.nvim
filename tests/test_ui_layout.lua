@@ -467,6 +467,21 @@ T['annotation_label()'] = function()
     eq(layout.annotation_label(annotation('range', range), 7), 'a.lua:7–9')
     eq(layout.annotation_label(annotation('line', old)), 'a.lua:8 old')
     eq(
+        layout.annotation_label(
+            annotation('line', vim.tbl_extend('force', old, { base = 'HEAD' }))
+        ),
+        'a.lua:8 old'
+    )
+    eq(
+        layout.annotation_label(
+            annotation(
+                'line',
+                vim.tbl_extend('force', old, { base = string.rep('ab', 20) })
+            )
+        ),
+        'a.lua:8 old abababa'
+    )
+    eq(
         layout.annotation_label(annotation('file', { path = 'd/README.md' })),
         'README.md'
     )

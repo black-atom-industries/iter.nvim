@@ -15,7 +15,7 @@ loop:
 3. Copy the annotations out as a prompt.
 4. When the code changes again, see what is new since your last pass.
 
-iter does not commit, push or pull. Keep a Git plugin such as [mini.git](https://github.com/nvim-mini/mini-git) for that.
+iter does not commit, push or pull, and it does not talk to a host. Keep a Git plugin such as [mini.git](https://github.com/nvim-mini/mini-git) for that.
 
 ![The review tab: moving through the files, a annotates a line, r marks the file reviewed and moves on, the Annotations column lists the annotation](docs/assets/review.webp)
 
@@ -24,6 +24,7 @@ iter does not commit, push or pull. Keep a Git plugin such as [mini.git](https:/
 - [The loop](#the-loop)
   - [See what changed](#see-what-changed)
   - [Review](#review)
+    - [Review a branch or a pull request](#review-a-branch-or-a-pull-request)
   - [Annotate](#annotate)
   - [Hand back](#hand-back)
 - [Install](#install)
@@ -83,6 +84,25 @@ line numbers, and hidden context that `<CR>` expands.
 A reviewed file that changes again turns `↻`, so the next pass shows what
 moved. In all-files mode a reviewed file collapses to its header.
 
+#### Review a branch or a pull request
+
+The review can compare the files on disk with a base instead of the index, so
+work that is already committed shows up too. To review a pull request, check
+out its branch (a worktree per pull request works well), then:
+
+- `b` in the review drawer picks the base: working changes, the parent branch,
+  another branch, or a recent commit.
+- `:Iter review main` opens the review against `main` directly.
+
+A branch base means its merge-base with `HEAD`, read again on every refresh. A
+commit picked with `b` is part of the review. A ref typed after `:Iter review`,
+or passed as `iter.review({ base })`, that isn't a branch, such as `HEAD~3` or
+`v1.0`, is where the review starts: that commit itself is not part of it. The
+drawer shows one column, `Since main`, beside Annotations. Staging does not
+apply there. Reviewed marks belong to the base they were made against,
+annotations are shared, and the copied prompt names the base. iter remembers the
+base per branch.
+
 ![All files: m shows every file, r collapses each reviewed file and moves to the next, | shows the diff side by side, - and m switch back](docs/assets/layouts.webp)
 
 ### Annotate
@@ -119,8 +139,8 @@ the text you are reading (see [Annotation sidebar](#annotation-sidebar)).
 2. iter asks whether to clear what was copied.
 3. The agent works, the files change, and the next round starts.
 
-- Annotations and reviewed marks are saved per repository and branch. Linked
-  worktrees share them.
+- Annotations and reviewed marks are saved per repository and branch, reviewed
+  marks per base. Linked worktrees share them.
 - Drawers and the review refresh on their own when the index, HEAD or the
   files change.
 
@@ -159,10 +179,11 @@ plugin manager must not delay it until the first `:Iter`.
 ## Quick start
 
 ```vim
-:Iter          " open the status drawer
-:Iter status   " the same
-:Iter review   " open the review tab, or switch to it
-:Iter annotate " open or close the annotation sidebar
+:Iter             " open the status drawer
+:Iter status      " the same
+:Iter review      " open the review tab, or switch to it
+:Iter review main " open it against a branch or another ref
+:Iter annotate    " open or close the annotation sidebar
 ```
 
 `?` lists the keys of the view you are in.
@@ -300,11 +321,30 @@ iter warns and opens nothing.
 **Drawer.** `h` and `l` move between the columns:
 
 - the files on the left, Unstaged above Staged; in wide windows the two sit
-  side by side
+  side by side. Against a base there is one column, `Since <base>`.
 - the Annotations column on the right, in a window of its own that stays put
   while the files scroll
 
 In narrow windows all three stack, and `h` and `l` still step through them.
+
+**Base.** `b` picks what the review compares with, through `vim.ui.select`:
+
+1. The parent branch, the branch this one was created from, when it can be
+   told. On the default branch the list starts with Working changes.
+2. Working changes, the index and worktree as in the status drawer.
+3. Local, then remote branches. A branch means its merge-base with `HEAD`.
+4. The last 20 commits. A commit means its parent, so the commit is included.
+
+The header names the base when it fits: `· since main (a1b2c3d)` for a branch
+and its merge-base, `· since v1.0 (a1b2c3d)` for a typed ref and its commit,
+`· from a1b2c3d` for a picked commit. The copied prompt uses the same words after
+`Reviewed`, as in `Reviewed since main (a1b2c3d)`. The column title drops the
+sha: `Since main` or `From a1b2c3d`. Against a base the drawer lists the files
+that differ from it, committed and uncommitted together, and `s`, `u`, `d` and
+`I` warn instead of acting. The new side of every diff is the file on disk. If
+the base's branch is gone, or a remembered commit is no longer in the history of
+`HEAD` after a rebase, iter warns and shows working changes. On a detached
+`HEAD` a picked base applies to the open review only.
 
 **Annotations column.**
 
@@ -344,13 +384,16 @@ its header, until the review tab closes.
   `r` or `=` closes it again.
 
 **Side by side.** `|` shows the old version on the left and the new version on
-the right, scrolling together. The old version is `HEAD` for a staged file and
-`index` for an unstaged one.
+the right, scrolling together. The old version is `HEAD` for a staged file,
+`index` for an unstaged one, and the base for a file under `Since <base>`.
 
 - A deleted line and the added line it pairs with share a row. A line without
   a partner faces a row of `╱`.
-- `a` in the left window annotates the old version.
-- `s` and `u` work from either window.
+- `a` in the left window annotates the old version. Against a base it stores
+  the base's commit, and the annotation shows while the review compares with
+  that commit. Its label and the copied prompt name that commit, as
+  `old a1b2c3d` and `(old side, a1b2c3d)`.
+- `s` and `u` work from either window. Against a base they warn instead.
 - `-`, or closing the left window, goes back to one pane.
 
 The status drawer's diff takes `=`, `|` and `-` too.
@@ -437,6 +480,7 @@ The review drawer (`review_drawer`):
 | `u`     | `unstage`       | Unstage the file                                                                |
 | `d`     | `discard`       | Discard changes in the file, or delete the annotation in the Annotations column |
 | `I`     | `ignore`        | Add the untracked file to .gitignore                                            |
+| `b`     | `base`          | Pick what the review compares with                                              |
 | `r`     | `reviewed`      | Mark reviewed and go to the next file                                           |
 | `R`     | `unreviewed`    | Remove the reviewed mark                                                        |
 | `=`     | `mode`          | Toggle one file or all files                                                    |
@@ -581,6 +625,7 @@ local iter = require('iter')
 iter.setup(opts)                     -- see Configuration
 iter.status()                        -- same as :Iter status
 iter.review()                        -- same as :Iter review
+iter.review({ base = 'main' })       -- review against a branch or another ref
 iter.annotate()                      -- annotate the cursor line or the visual range
 iter.annotate({ scope = 'file' })    -- annotate the current buffer's file
 iter.annotate({ scope = 'review' })  -- annotate the whole review
@@ -753,7 +798,7 @@ event, so no colorscheme needs to define them.
 
 ### Files
 
-Annotations and reviewed marks live in
+Annotations, reviewed marks and the branch's base live in
 `stdpath('data')/iter/<repo>/<branch>.json`, the log in
 `stdpath('state')/iter/iter.log`.
 

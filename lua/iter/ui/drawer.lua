@@ -28,6 +28,7 @@ local watch = require('iter.watch')
 ---@field drawer_shown fun(self, drawer: IterDrawer) after the view showed the selection or the drawer rendered
 ---@field drawer_handlers fun(self, drawer: IterDrawer, handlers: table<string, fun()>) changes the drawer actions in place
 ---@field drawer_collapsed fun(self, drawer: IterDrawer, item: IterChange): boolean in all-files mode, whether the file shows its header row alone
+---@field drawer_base fun(self, drawer: IterDrawer, root: string): IterChangesBase? on every status read, what the files compare with; nil for working changes
 
 ---@class IterDrawerOpenOptions
 ---@field pane integer window the float is anchored to
@@ -128,8 +129,14 @@ local HINTS = {
     { 'reviewed', 'reviewed' },
     { 'mode', 'all files' },
     { 'split', 'split' },
+    { 'base', 'base' },
     { 'help', 'help' },
 }
+-- The staging hints, left out against a base, where the files can't be
+-- staged, and the base hint, left out without one.
+local STAGING_HINTS =
+    { stage = true, unstage = true, discard = true, ignore = true }
+local BASE_HINTS = { base = true }
 
 ---@param item IterChange|IterFileDiff
 ---@return string
@@ -149,10 +156,22 @@ end
 ---@field title string
 ---@field items IterChange[]
 
---- The columns left to right, each listing the changes of its side.
+--- The columns left to right, each listing the changes of its side:
+--- Unstaged and Staged, or against a base the one column of the changes
+--- since it.
 ---@return IterDrawerColumn[]
 function Drawer:columns()
     local result = self.changes
+
+    if result.base ~= nil and result.since ~= nil then
+        return {
+            {
+                id = 'base',
+                title = changes.base_title(result.since),
+                items = result.base,
+            },
+        }
+    end
 
     return {
         { id = 'unstaged', title = 'Unstaged', items = result.unstaged },
@@ -538,6 +557,7 @@ function Drawer.open(opts)
         return nil
     end
 
+    self.column = self:columns()[1].id
     self.handlers = self:make_handlers()
     self.float = float.open({
         pane = opts.pane,
@@ -755,6 +775,22 @@ function Drawer:load()
     self.changes = changes.build(snapshot)
     require('iter.statusline').update(self.changes)
 
+    local base = self.extras ~= nil
+            and self.extras:drawer_base(self, snapshot.root)
+        or nil
+
+    if base ~= nil then
+        local items, err =
+            git.base_changes(snapshot.root, base.sha, snapshot.entries)
+
+        if items == nil then
+            util.error(err, 'Cannot read the changes since ' .. base.label)
+            return false, false
+        end
+
+        self.changes.base, self.changes.since = items, base
+    end
+
     if status then
         self.recent = git.recent(
             snapshot.root,
@@ -934,16 +970,22 @@ end
 ---@return [string, string][]
 function Drawer:footer()
     local column = self:extra_column(self.column)
+    local hidden = self.changes.base ~= nil and STAGING_HINTS or BASE_HINTS
     local hints = column and column.hints
-        or vim.tbl_map(function(hint)
-            if hint[1] == 'mode' and self.all_files then
-                return { 'mode', 'one file' }
-            elseif hint[1] == 'split' and self.view.layout == 'split' then
-                return { 'unified', 'unified' }
-            end
+        or vim.tbl_map(
+            function(hint)
+                if hint[1] == 'mode' and self.all_files then
+                    return { 'mode', 'one file' }
+                elseif hint[1] == 'split' and self.view.layout == 'split' then
+                    return { 'unified', 'unified' }
+                end
 
-            return hint
-        end, HINTS)
+                return hint
+            end,
+            vim.tbl_filter(function(hint)
+                return not hidden[hint[1]]
+            end, HINTS)
+        )
 
     -- The footer starts one cell in from the float's left edge.
     return layout.hints(
@@ -1447,6 +1489,25 @@ function Drawer:refresh(reason, target)
     end
 end
 
+--- Read the changes afresh after what they compare with changed, such as
+--- the review's base, and select the first file.
+function Drawer:relist()
+    if not self:is_open() or not self:load() then
+        return
+    end
+
+    self.recall, self.diff_ids = {}, nil
+    self.previewed, self.all_shown = nil, false
+    self.column, self.lnum = self:columns()[1].id, 1
+    self:render()
+    self:restore_selection({ column = self.column, index = 1 })
+    self:preview(true)
+    util.emit('IterRefresh', {
+        root = self.changes.root,
+        paths = changes.paths(self.changes),
+    })
+end
+
 --- Reload after a git action and show the selection's new diff.
 ---@param ok boolean
 ---@param err? string
@@ -1538,9 +1599,7 @@ function Drawer:show(item, force)
 
     self.previewed_stat = stat
     self.all_shown = false
-    self.view:set_new_follows(
-        item.side == 'staged' and not self:has_unstaged(item.path)
-    )
+    self.view:set_new_follows(self:new_follows(item))
 
     -- The same diff again keeps the view as it is, expanded gaps included.
     local shown = #self.view.files == 1 and self.view.files[1] or nil
@@ -1551,6 +1610,7 @@ function Drawer:show(item, force)
         and shown.side == item.side
         and shown.path == item.path
         and shown.code == item.code
+        and shown.base == item.base
         and vim.deep_equal(shown.raw, source.raw)
     then
         self.previewed = key(item)
@@ -1598,7 +1658,8 @@ function Drawer:load_all()
 
     self.previewed_stat = self:stat(files[1])
 
-    local ids = git.diff_ids(root) or {}
+    local since = self.changes.since
+    local ids = git.diff_ids(root, since and since.sha) or {}
     local known = self.diff_ids or {}
 
     self.diff_ids = {}
@@ -1615,13 +1676,14 @@ function Drawer:load_all()
         local id = (ids[k] or '')
             .. '\0'
             .. (
-                item.side == 'unstaged'
+                item.side ~= 'staged'
                     and util.stat_key(vim.fs.joinpath(root, item.path))
                 or ''
             )
         ---@type IterFileDiff?
         local file = shown ~= nil
                 and shown.file.code == item.code
+                and shown.file.base == item.base
                 and known[k] == id
                 and shown.file
             or nil
@@ -1635,6 +1697,7 @@ function Drawer:load_all()
             else
                 file = shown ~= nil
                         and shown.file.code == item.code
+                        and shown.file.base == item.base
                         and vim.deep_equal(shown.file.raw, source.raw)
                         and shown.file
                     or model.build(item, source)
@@ -1642,8 +1705,7 @@ function Drawer:load_all()
         end
 
         if file then
-            local new_follows = item.side == 'staged'
-                and not self:has_unstaged(item.path)
+            local new_follows = self:new_follows(item)
             local collapsed = self.extras ~= nil
                     and self.extras:drawer_collapsed(self, item)
                 or nil
@@ -1807,6 +1869,15 @@ function Drawer:follow_view()
     end
 end
 
+--- Whether the new side of `item`'s diff shows the worktree's content: a
+--- change against a base, else a staged file without unstaged changes.
+---@param item IterChange
+---@return boolean
+function Drawer:new_follows(item)
+    return item.side == 'base'
+        or item.side == 'staged' and not self:has_unstaged(item.path)
+end
+
 ---@param path string
 ---@return boolean
 function Drawer:has_unstaged(path)
@@ -1831,10 +1902,24 @@ function Drawer:paths(item)
     return { item.path }
 end
 
+--- Whether `item` is a change against a base, where `action` doesn't
+--- apply; says so when it is.
+---@param item IterChange
+---@param action string
+---@return boolean
+local function against_base(item, action)
+    if item.side ~= 'base' then
+        return false
+    end
+
+    util.warn(action .. ' does not apply against a base')
+    return true
+end
+
 function Drawer:stage()
     local item = self:selected()
 
-    if item == nil then
+    if item == nil or against_base(item, 'Staging') then
         return
     end
 
@@ -1856,7 +1941,7 @@ end
 function Drawer:unstage()
     local item = self:selected()
 
-    if item == nil then
+    if item == nil or against_base(item, 'Unstaging') then
         return
     end
 
@@ -1892,7 +1977,7 @@ end
 function Drawer:discard()
     local item = self:selected()
 
-    if item == nil then
+    if item == nil or against_base(item, 'Discard') then
         return
     end
 
@@ -1952,7 +2037,7 @@ end
 function Drawer:ignore()
     local item = self:selected()
 
-    if item == nil then
+    if item == nil or against_base(item, 'Ignoring') then
         return
     end
 

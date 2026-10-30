@@ -47,6 +47,70 @@ T['file_lines()']['a version that cannot be read gives nil'] = function()
     helpers.cleanup(unborn)
 end
 
+T['file_lines()']['reads the version of a commit'] = function()
+    local first = vim.trim(helpers.git(repo, { 'rev-parse', 'HEAD' }))
+
+    helpers.write_file(vim.fs.joinpath(repo, 'a.txt'), { 'one', 'three' })
+    helpers.git(repo, { 'commit', '--quiet', '-am', 'edit' })
+
+    eq(list.file_lines(repo, 'a.txt', first), { 'one', 'two' })
+    eq(list.file_lines(repo, 'gone.txt', first), {})
+    eq(list.file_lines(repo, 'a.txt', string.rep('0', 40)), nil)
+end
+
+T['resolve()'] = new_set()
+
+T['resolve()']['an old-side annotation on a base follows the commit it stores'] = function()
+    helpers.git(repo, { 'switch', '--quiet', '-c', 'feat' })
+    helpers.write_file(vim.fs.joinpath(repo, 'a.txt'), { 'one' })
+    helpers.git(repo, { 'commit', '--quiet', '-am', 'drop two' })
+
+    local base = vim.trim(helpers.git(repo, { 'merge-base', 'HEAD', 'main' }))
+    ---@param lines string[]
+    ---@return IterAnnotation
+    local function deleted(lines)
+        return {
+            id = 'x',
+            scope = 'line',
+            body = 'Why?',
+            anchor = {
+                path = 'a.txt',
+                side = 'old',
+                base = base,
+                start_line = 2,
+                end_line = 2,
+                lines = lines,
+            },
+            outdated = false,
+            created_at = 0,
+            updated_at = 0,
+        }
+    end
+
+    eq({ list.resolve(deleted({ 'two' }), list.reader(repo)) }, {
+        2,
+        2,
+        false,
+    })
+
+    -- `main` moving on leaves the stored version as it was.
+    helpers.git(repo, { 'switch', '--quiet', 'main' })
+    helpers.write_file(vim.fs.joinpath(repo, 'a.txt'), { 'one', 'zwei' })
+    helpers.git(repo, { 'commit', '--quiet', '-am', 'on main' })
+    helpers.git(repo, { 'switch', '--quiet', 'feat' })
+
+    eq({ list.resolve(deleted({ 'two' }), list.reader(repo)) }, {
+        2,
+        2,
+        false,
+    })
+    eq({ list.resolve(deleted({ 'gone' }), list.reader(repo)) }, {
+        nil,
+        nil,
+        true,
+    })
+end
+
 T['line_of()'] = new_set()
 
 T['line_of()']['falls back to the stored flag only without content'] = function()

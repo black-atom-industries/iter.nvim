@@ -179,4 +179,126 @@ T['truncate()']['handles tiny widths and wide characters'] = function()
     eq(vim.fn.strdisplaywidth(wide) <= 10, true)
 end
 
+T['since()'] = new_set()
+
+T['since()']['parses name-status, untracked paths sorted among them'] = function()
+    local output = table.concat({
+        'M',
+        'b.txt',
+        'R087',
+        'old.txt',
+        'new.txt',
+        'D',
+        'gone.txt',
+        '',
+    }, '\0')
+    local entries = {
+        { staged = '?', unstaged = '?', path = 'a.txt' },
+        { staged = '?', unstaged = '?', path = 'nested/' },
+        { staged = ' ', unstaged = 'M', path = 'b.txt' },
+    }
+
+    eq(changes.since(output, 'abc', entries), {
+        { path = 'a.txt', side = 'base', code = '?', base = 'abc' },
+        { path = 'b.txt', side = 'base', code = 'M', base = 'abc' },
+        { path = 'gone.txt', side = 'base', code = 'D', base = 'abc' },
+        {
+            path = 'nested/',
+            side = 'base',
+            code = '?',
+            base = 'abc',
+            dir = true,
+        },
+        {
+            path = 'new.txt',
+            orig_path = 'old.txt',
+            side = 'base',
+            code = 'R',
+            base = 'abc',
+        },
+    })
+end
+
+T['since()']['keeps the diff entry of a path also untracked'] = function()
+    local output = table.concat({ 'D', 'f.txt', '' }, '\0')
+    local entries = { { staged = '?', unstaged = '?', path = 'f.txt' } }
+
+    eq(changes.since(output, 'abc', entries), {
+        { path = 'f.txt', side = 'base', code = 'D', base = 'abc' },
+    })
+end
+
+T['paths()'] = new_set()
+
+T['paths()']['lists Unstaged, Staged, then the changes since a base, once'] = function()
+    local function item(path, side)
+        return { path = path, side = side, code = 'M' }
+    end
+
+    eq(
+        changes.paths({
+            root = '/r',
+            branch = 'feat',
+            unstaged = { item('a.txt', 'unstaged') },
+            staged = { item('b.txt', 'staged') },
+            base = { item('a.txt', 'base'), item('c.txt', 'base') },
+            since = { kind = 'branch', sha = 'abc', label = 'main' },
+        }),
+        { 'a.txt', 'b.txt', 'c.txt' }
+    )
+end
+
+T['base_label()'] = new_set()
+
+T['base_label()']['names a branch, a typed ref, a typed sha and a commit'] = function()
+    local sha = string.rep('a1', 20)
+
+    eq(changes.base_label({ kind = 'branch', ref = 'main' }), 'main')
+    eq(changes.base_label({ kind = 'rev', ref = 'v1.0', sha = sha }), 'v1.0')
+    eq(changes.base_label({ kind = 'rev', ref = sha, sha = sha }), 'a1a1a1a')
+    eq(changes.base_label({ kind = 'commit', sha = sha }), 'a1a1a1a')
+end
+
+T['base_text()'] = new_set()
+
+T['base_text()']['names a branch, a typed ref and a picked commit'] = function()
+    local sha = string.rep('a1', 20)
+
+    eq(
+        changes.base_text({ kind = 'branch', sha = sha, label = 'main' }),
+        'since main (a1a1a1a)'
+    )
+    eq(
+        changes.base_text({ kind = 'rev', sha = sha, label = 'v1.0' }),
+        'since v1.0 (a1a1a1a)'
+    )
+    eq(
+        changes.base_text({ kind = 'rev', sha = sha, label = 'a1a1a1a1' }),
+        'since a1a1a1a1'
+    )
+    eq(
+        changes.base_text({ kind = 'commit', sha = sha, label = 'c3c3c3c' }),
+        'from c3c3c3c'
+    )
+end
+
+T['base_title()'] = new_set()
+
+T['base_title()']['titles the column by the base'] = function()
+    local sha = string.rep('a1', 20)
+
+    eq(
+        changes.base_title({ kind = 'branch', sha = sha, label = 'main' }),
+        'Since main'
+    )
+    eq(
+        changes.base_title({ kind = 'rev', sha = sha, label = 'v1.0' }),
+        'Since v1.0'
+    )
+    eq(
+        changes.base_title({ kind = 'commit', sha = sha, label = 'c3c3c3c' }),
+        'From c3c3c3c'
+    )
+end
+
 return T

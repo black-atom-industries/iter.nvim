@@ -91,8 +91,9 @@ local FIXTURE = {
 ---@param annotations table[]
 ---@param order? string[]
 ---@param versions? table<string, table<string, string[]>> lines by version, then path; `FILES` as the worktree by default
+---@param since? IterChangesBase
 ---@return string
-local function text(annotations, order, versions)
+local function text(annotations, order, versions, since)
     versions = versions or { worktree = FILES }
 
     return export.text(annotations, {
@@ -101,6 +102,7 @@ local function text(annotations, order, versions)
         lines_of = function(path, version)
             return (versions[version] or {})[path]
         end,
+        since = since,
     })
 end
 
@@ -247,6 +249,21 @@ T['text']['resolves an old-side annotation against its base'] = function()
     eq(out:find('\n2. b.lua:3 (old side, outdated)\n', 1, true) ~= nil, true)
 end
 
+T['text']['names the commit an old-side annotation against a base follows'] = function()
+    local sha = string.rep('e5', 20)
+    local a = anchor('a.lua', 2, 2, { 'old line' }, 'old')
+
+    a.base = sha
+
+    local out = text(
+        { { id = 'x', scope = 'line', body = 'Why?', anchor = a } },
+        nil,
+        { worktree = FILES, [sha] = { ['a.lua'] = { 'one', 'old line' } } }
+    )
+
+    eq(out:find('\n1. a.lua:2 (old side, e5e5e5e)\n', 1, true) ~= nil, true)
+end
+
 T['text']['has no carriage returns'] = function()
     eq(text(FIXTURE):find('\r', 1, true), nil)
 end
@@ -319,6 +336,40 @@ end
 
 T['text']['an empty store is only the intro'] = function()
     eq(text({}), INTRO .. '\n')
+end
+
+T['text']['names a branch base by its merge-base'] = function()
+    local since =
+        { kind = 'branch', sha = string.rep('a1', 20), label = 'main' }
+
+    eq(text(FIXTURE, nil, nil, since), table.concat({
+        INTRO,
+        '',
+        'Reviewed since main (a1a1a1a)',
+        '',
+        '',
+    }, '\n') .. text(FIXTURE):sub(#INTRO + 3))
+end
+
+T['text']['names a picked commit base by the commit, which it includes'] = function()
+    local since =
+        { kind = 'commit', sha = string.rep('b2', 20), label = 'c3c3c3c' }
+
+    eq(text({}, nil, nil, since), INTRO .. '\n\nReviewed from c3c3c3c\n')
+end
+
+T['text']['names a typed ref base as typed, with its commit'] = function()
+    local since = { kind = 'rev', sha = string.rep('d4', 20), label = 'v1.0' }
+
+    eq(
+        text({}, nil, nil, since),
+        INTRO .. '\n\nReviewed since v1.0 (d4d4d4d)\n'
+    )
+end
+
+T['text']['without a base the text has no base line'] = function()
+    eq(text(FIXTURE):find('Reviewed since', 1, true), nil)
+    eq(text({}, nil, nil, nil), INTRO .. '\n')
 end
 
 T['yank'] = new_set({

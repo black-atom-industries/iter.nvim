@@ -20,19 +20,54 @@
 ---@field created_at integer
 ---@field updated_at integer
 
----@alias IterAnchorBase 'HEAD'|'index'
+--- `HEAD`, `index`, or the full sha of the commit or tree a review against
+--- a base compared with.
+---@alias IterAnchorBase 'HEAD'|'index'|string
 
 ---@alias IterAnchorVersion 'worktree'|IterAnchorBase
 
--- Valid values of an old-side anchor's `base`.
-local BASES = { HEAD = true, index = true }
+---@param base any
+---@return boolean
+local function is_base(base)
+    return base == 'HEAD'
+        or base == 'index'
+        or type(base) == 'string'
+            and (#base == 40 or #base == 64)
+            and base:match('^%x+$') ~= nil
+end
 
 local M = {}
 
---- The version the deleted rows of each diff side come from, as an
---- old-side anchor's `base`.
+--- The version the deleted rows of each working-changes side come from, as
+--- an old-side anchor's `base`.
 ---@type table<IterSide, IterAnchorBase>
 M.OLD_BASE = { unstaged = 'index', staged = 'HEAD' }
+
+--- The version the deleted rows of `file` come from, as an old-side
+--- anchor's `base`: the base sha against a base, else `OLD_BASE`.
+---@param file { side: IterSide, base?: string }
+---@return IterAnchorBase?
+function M.old_base(file)
+    if file.side == 'base' then
+        return file.base
+    end
+
+    return M.OLD_BASE[file.side]
+end
+
+--- The short sha an old-side anchor `a` follows, when its base is a commit
+--- or tree, nil for `HEAD`, `index` and the new side.
+---@param a IterAnchor
+---@return string?
+function M.short_base(a)
+    local base = a.side == 'old' and a.base or nil
+
+    if base == nil or base == 'HEAD' or base == 'index' then
+        return nil
+    end
+
+    return base:sub(1, 7)
+end
 
 ---@param line string
 ---@return string
@@ -169,9 +204,12 @@ function M.create(opts, lines)
     end, "'old' or 'new'")
 
     if opts.side == 'old' then
-        vim.validate('opts.base', opts.base, function(base)
-            return BASES[base] == true
-        end, "'HEAD' or 'index'")
+        vim.validate(
+            'opts.base',
+            opts.base,
+            is_base,
+            "'HEAD', 'index' or a sha"
+        )
     end
 
     ---@type IterAnchor

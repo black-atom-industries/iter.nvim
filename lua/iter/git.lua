@@ -13,6 +13,7 @@
 
 local git = {}
 
+local changes = require('iter.changes')
 local log = require('iter.log')
 local patch = require('iter.diff.patch')
 local util = require('iter.util')
@@ -622,7 +623,7 @@ end
 --- The diff text of one file, see `git.file_diff`. With `bytes` the lines
 --- keep their carriage returns.
 ---@param root string
----@param change { path: string, orig_path?: string, side: IterSide, code: string }
+---@param change { path: string, orig_path?: string, side: IterSide, base?: string, code: string }
 ---@param args string[] extra flags for `git diff`, the `diff.args` option
 ---@param bytes boolean
 ---@return string[]?
@@ -633,8 +634,14 @@ local function diff_text(root, change, args, bytes)
     local untracked = change.code == '?'
     local cmd
 
+    if change.side == 'base' and type(change.base) ~= 'string' then
+        return nil, 'No base for ' .. change.path
+    end
+
     if untracked then
         cmd = { 'diff', '--no-index' }
+    elseif change.side == 'base' then
+        cmd = { 'diff', '-M' }
     elseif change.side == 'staged' then
         cmd = { 'diff', '--cached', '-M' }
     else
@@ -643,6 +650,11 @@ local function diff_text(root, change, args, bytes)
 
     vim.list_extend(cmd, args)
     vim.list_extend(cmd, DIFF_FLAGS)
+
+    if change.side == 'base' and not untracked then
+        table.insert(cmd, change.base)
+    end
+
     table.insert(cmd, '--')
 
     if untracked then
@@ -667,7 +679,7 @@ end
 --- The diff text of `git.file_diff` byte for byte: lines of a CRLF file
 --- keep their carriage returns, as a patch for `git apply` needs them.
 ---@param root string
----@param change { path: string, orig_path?: string, side: IterSide, code: string }
+---@param change { path: string, orig_path?: string, side: IterSide, base?: string, code: string }
 ---@param args string[] extra flags for `git diff`, the same as for `git.file_diff`
 ---@return string[]?
 ---@return string? error
@@ -676,8 +688,9 @@ function git.file_diff_bytes(root, change, args)
 end
 
 --- Diff text and both full versions of one file. Unstaged compares the index
---- with the worktree, staged compares HEAD with the index. Untracked and
---- added files have an empty old side, deleted files an empty new side.
+--- with the worktree, staged compares HEAD with the index, base compares
+--- `change.base` with the worktree. Untracked and added files have an empty
+--- old side, deleted files an empty new side.
 ---@param root string
 ---@param change IterDiffChange
 ---@param args string[] extra flags for `git diff`, the `diff.args` option
@@ -705,6 +718,8 @@ function git.file_diff(root, change, args)
 
     if untracked or change.code == 'A' then
         old_lines = {}
+    elseif change.side == 'base' then
+        old_lines = git.blob_lines(root, change.base .. ':' .. old_path)
     elseif change.side == 'staged' then
         old_lines = git.blob_lines(root, 'HEAD:' .. old_path)
     else
@@ -713,6 +728,8 @@ function git.file_diff(root, change, args)
 
     if change.code == 'D' then
         new_lines = {}
+    elseif change.side == 'base' then
+        new_lines = read_worktree_lines(change.path, root)
     elseif change.side == 'staged' then
         new_lines = git.blob_lines(root, ':' .. change.path)
     else
@@ -729,20 +746,28 @@ end
 
 --- The modes and blob ids each changed file's diff compares, by
 --- `side \0 path`: the index against the worktree for unstaged files (the
---- worktree's id stays zero), HEAD against the index for staged ones. Two
---- reads with the same entry, and for an unstaged file the same worktree
---- stat, give the same diff text. Untracked files are left out.
+--- worktree's id stays zero), HEAD against the index for staged ones. With
+--- `base` only the base side is read: the base against the worktree, whose
+--- id stays zero too. Two reads with the same entry, and for a file whose
+--- new side is the worktree the same worktree stat, give the same diff text.
+--- Untracked files are left out.
 ---@param root string
+---@param base? string resolved base sha
 ---@return table<string, string>?
-function git.diff_ids(root)
+function git.diff_ids(root, base)
     local ids = {}
-    local reads = {
-        unstaged = { 'diff', '--no-renames' },
-        staged = { 'diff', '--cached', '-M' },
-    }
+    local reads = base ~= nil and { base = { 'diff', '-M' } }
+        or {
+            unstaged = { 'diff', '--no-renames' },
+            staged = { 'diff', '--cached', '-M' },
+        }
 
     for side, args in pairs(reads) do
         vim.list_extend(args, { '--raw', '-z', '--no-abbrev', '--no-color' })
+
+        if side == 'base' then
+            table.insert(args, base)
+        end
 
         local out = git.run(args, { cwd = root, ignore_error = true })
 
@@ -889,6 +914,349 @@ function git.recent(root, count, prev)
     end
 
     return recent
+end
+
+--- The files changed since `base`, committed or not, untracked ones
+--- included from the status `entries`: changes of side `base`, sorted by
+--- path.
+---@param root string
+---@param base string resolved base sha
+---@param entries GitStatusEntry[] the status the untracked files come from
+---@return IterChange[]?
+---@return string? error
+function git.base_changes(root, base, entries)
+    vim.validate('base', base, 'string')
+    vim.validate('entries', entries, 'table')
+
+    local diff = git.run({
+        'diff',
+        '-M',
+        '--name-status',
+        '-z',
+        '--no-color',
+        base,
+        '--',
+    }, { cwd = root, ignore_error = true })
+
+    if diff.exit_code ~= 0 then
+        return nil, return_result(diff)
+    end
+
+    return changes.since(diff.output, base, entries)
+end
+
+---@class IterBaseSpec what a review compares the worktree with
+---@field kind 'branch'|'commit'|'rev'
+---@field ref? string the branch, for `branch`; the ref as typed, for `rev`
+---@field sha? string the commit, for `commit` and `rev`
+
+--- The commit or tree a review against `spec` starts from: a branch's
+--- merge-base with HEAD; a picked commit's first parent, so the commit is
+--- part of the review, and the empty tree for a root commit; a typed ref's
+--- commit itself. A commit or ref that is no longer an ancestor of HEAD,
+--- such as after a rebase, doesn't resolve.
+---@param root string
+---@param spec IterBaseSpec
+---@return string? sha
+---@return string? error
+function git.resolve_base(root, spec)
+    vim.validate('spec', spec, 'table')
+
+    if spec.kind == 'branch' then
+        vim.validate('spec.ref', spec.ref, 'string')
+
+        local out = git.run(
+            { 'merge-base', '--end-of-options', 'HEAD', spec.ref },
+            { cwd = root, ignore_error = true }
+        )
+
+        if out.exit_code ~= 0 then
+            return nil,
+                out.stderr ~= '' and return_result(out)
+                    or 'No common commit with ' .. spec.ref
+        end
+
+        return return_result(out)
+    end
+
+    if spec.kind ~= 'commit' and spec.kind ~= 'rev' then
+        return nil, 'Unknown base kind: ' .. tostring(spec.kind)
+    end
+
+    vim.validate('spec.sha', spec.sha, 'string')
+
+    local out = git.run({
+        'rev-list',
+        '--parents',
+        '--max-count=1',
+        '--end-of-options',
+        spec.sha .. '^{commit}',
+        '--',
+    }, { cwd = root, ignore_error = true })
+
+    if out.exit_code ~= 0 then
+        return nil, return_result(out)
+    end
+
+    local ancestor = git.run(
+        { 'merge-base', '--is-ancestor', '--end-of-options', spec.sha, 'HEAD' },
+        { cwd = root, ignore_error = true }
+    )
+
+    if ancestor.exit_code ~= 0 then
+        return nil,
+            ancestor.stderr ~= '' and return_result(ancestor)
+                or 'Not in the history of HEAD'
+    end
+
+    local commit, parent =
+        unpack(vim.split(return_result(out), ' ', { plain = true }))
+
+    if spec.kind == 'rev' then
+        return commit
+    elseif parent ~= nil then
+        return parent
+    end
+
+    local empty = git.run(
+        { 'hash-object', '-t', 'tree', '--stdin' },
+        { cwd = root, ignore_error = true, stdin = '' }
+    )
+
+    if empty.exit_code ~= 0 then
+        return nil, return_result(empty)
+    end
+
+    return return_result(empty)
+end
+
+--- Each ref in `refs` with the count of commits on HEAD and not on it, the
+--- distance from their merge-base to HEAD; 0 when it contains HEAD.
+---@param root string
+---@param patterns string[] `for-each-ref` patterns
+---@return { ref: string, behind: integer }[]?
+local function behind_head(root, patterns)
+    local out = git.run(
+        vim.list_extend(
+            { 'for-each-ref', '--format=%(refname)%00%(ahead-behind:HEAD)' },
+            patterns
+        ),
+        { cwd = root, ignore_error = true }
+    )
+    local refs = {}
+
+    if out.exit_code == 0 then
+        for _, line in ipairs(split_output(out.output)) do
+            local ref, counts = unpack(vim.split(line, '\0', { plain = true }))
+            local behind = tonumber((counts or ''):match('^%d+ (%d+)$'))
+
+            if behind ~= nil then
+                table.insert(refs, { ref = ref, behind = behind })
+            end
+        end
+
+        return refs
+    end
+
+    -- `%(ahead-behind)` needs git 2.41; older ones count each ref alone.
+    out = git.run(
+        vim.list_extend({ 'for-each-ref', '--format=%(refname)' }, patterns),
+        { cwd = root, ignore_error = true }
+    )
+
+    if out.exit_code ~= 0 then
+        return nil
+    end
+
+    for _, ref in ipairs(split_output(out.output)) do
+        local count = git.run(
+            { 'rev-list', '--count', ref .. '..HEAD', '--' },
+            { cwd = root, ignore_error = true }
+        )
+        local behind = tonumber(return_result(count))
+
+        if count.exit_code == 0 and behind ~= nil then
+            table.insert(refs, { ref = ref, behind = behind })
+        end
+    end
+
+    return refs
+end
+
+---@param ref string full ref name
+---@return string
+local function short_ref(ref)
+    if vim.startswith(ref, 'refs/heads/') then
+        return ref:sub(#'refs/heads/' + 1)
+    end
+
+    return (ref:gsub('^refs/remotes/', ''))
+end
+
+--- The branch HEAD was created from. First the creation line of the
+--- branch's reflog, when it names a branch that still exists; otherwise
+--- the local branch or remote default branch whose merge-base with HEAD is
+--- the fewest commits back, branches that contain HEAD left out and ties
+--- going to the default branch. The default branch is `origin/HEAD`'s
+--- target, else a local `main`, else a local `master`.
+---@param root string
+---@return string? branch short name such as `main` or `origin/main`; nil on the default branch and when nothing qualifies
+function git.parent_branch(root)
+    local branch = git.head_branch(root)
+    local origin = git.run(
+        { 'symbolic-ref', '--quiet', 'refs/remotes/origin/HEAD' },
+        { cwd = root, ignore_error = true }
+    )
+    local remote = origin.exit_code == 0 and return_result(origin) or nil
+    local patterns = { 'refs/heads' }
+
+    if remote ~= nil then
+        table.insert(patterns, remote)
+    end
+
+    local refs = behind_head(root, patterns) or {}
+    local default = 'refs/heads/master'
+
+    if remote ~= nil then
+        default = 'refs/heads/' .. remote:gsub('^refs/remotes/[^/]+/', '')
+    else
+        for _, entry in ipairs(refs) do
+            if entry.ref == 'refs/heads/main' then
+                default = entry.ref
+            end
+        end
+    end
+
+    if branch ~= nil and 'refs/heads/' .. branch == default then
+        return nil
+    end
+
+    if branch ~= nil then
+        local reflog = git.run(
+            { 'reflog', 'show', '--format=%gs', 'refs/heads/' .. branch, '--' },
+            { cwd = root, ignore_error = true }
+        )
+        local lines = split_output(reflog.output)
+        local from = (lines[#lines] or ''):match('^branch: Created from (.+)$')
+
+        if from ~= nil and from ~= 'HEAD' then
+            local exists = git.run({
+                'for-each-ref',
+                '--format=%(refname)',
+                'refs/heads/' .. from,
+                'refs/remotes/' .. from,
+            }, { cwd = root, ignore_error = true })
+
+            for _, ref in ipairs(split_output(exists.output)) do
+                if short_ref(ref) == from then
+                    return from
+                end
+            end
+        end
+    end
+
+    local function rank(entry)
+        return entry.ref == default or entry.ref == remote
+    end
+
+    local best
+
+    for _, entry in ipairs(refs) do
+        if
+            entry.behind > 0
+            and (branch == nil or entry.ref ~= 'refs/heads/' .. branch)
+            and (
+                best == nil
+                or entry.behind < best.behind
+                or entry.behind == best.behind
+                    and rank(entry)
+                    and not rank(best)
+            )
+        then
+            best = entry
+        end
+    end
+
+    return best ~= nil and short_ref(best.ref) or nil
+end
+
+--- The local branches, then the remote-tracking ones, by short name such
+--- as `main` or `origin/main`; symbolic refs such as `origin/HEAD` left out.
+---@param root string
+---@return string[]? branches
+---@return string? error
+function git.branches(root)
+    local out = git.run({
+        'for-each-ref',
+        '--format=%(refname)%00%(symref)',
+        'refs/heads',
+        'refs/remotes',
+    }, { cwd = root, ignore_error = true })
+
+    if out.exit_code ~= 0 then
+        return nil, return_result(out)
+    end
+
+    local branches = {}
+
+    for _, line in ipairs(split_output(out.output)) do
+        local ref, symref = unpack(vim.split(line, '\0', { plain = true }))
+
+        if symref == nil or symref == '' then
+            table.insert(branches, short_ref(ref))
+        end
+    end
+
+    return branches
+end
+
+--- The full sha of the commit `ref` names.
+---@param root string
+---@param ref string
+---@return string? sha
+---@return string? error
+function git.commit_sha(root, ref)
+    vim.validate('ref', ref, 'string')
+
+    if ref == '' or vim.startswith(ref, '-') then
+        return nil, 'Unknown ref ' .. ref
+    end
+
+    local out = git.run(
+        { 'rev-parse', '--verify', '--quiet', ref .. '^{commit}' },
+        { cwd = root, ignore_error = true }
+    )
+
+    if out.exit_code ~= 0 or not is_sha(return_result(out)) then
+        return nil, 'Unknown ref ' .. ref
+    end
+
+    return return_result(out)
+end
+
+--- The base a typed `ref` names: a branch spec when it is a local or
+--- remote-tracking branch, else a rev spec with the full sha it resolves
+--- to, which the review starts after.
+---@param root string
+---@param ref string
+---@return IterBaseSpec?
+---@return string? error
+function git.base_spec(root, ref)
+    vim.validate('ref', ref, 'string')
+
+    for _, branch in ipairs(git.branches(root) or {}) do
+        if branch == ref then
+            return { kind = 'branch', ref = ref }
+        end
+    end
+
+    local sha, err = git.commit_sha(root, ref)
+
+    if sha == nil then
+        return nil, err
+    end
+
+    return { kind = 'rev', ref = ref, sha = sha }
 end
 
 return git

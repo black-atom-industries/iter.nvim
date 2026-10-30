@@ -1,10 +1,10 @@
----@type table<string, fun()>
+---@type table<string, fun(ref?: string)>
 local subcommands = {
     status = function()
         require('iter').status()
     end,
-    review = function()
-        require('iter').review()
+    review = function(ref)
+        require('iter').review(ref ~= nil and { base = ref } or nil)
     end,
     annotate = function()
         require('iter').sidebar()
@@ -19,17 +19,31 @@ vim.api.nvim_create_user_command('Iter', function(args)
         error('[iter] Unknown subcommand: ' .. name, 0)
     end
 
-    run()
+    if #args.fargs > (name == 'review' and 2 or 1) then
+        error('[iter] Too many arguments for ' .. name, 0)
+    end
+
+    run(args.fargs[2])
 end, {
     desc = 'Open Iter',
-    nargs = '?',
-    complete = function(arg_lead)
-        local names = vim.tbl_filter(function(name)
-            return vim.startswith(name, arg_lead)
-        end, vim.tbl_keys(subcommands))
-        table.sort(names)
+    nargs = '*',
+    complete = function(arg_lead, cmdline, cursor)
+        local args = vim.split(cmdline:sub(1, cursor), '%s+')
+        local names = {}
 
-        return names
+        if #args == 2 then
+            names = vim.tbl_keys(subcommands)
+            table.sort(names)
+        elseif #args == 3 and args[2] == 'review' then
+            local git = require('iter.git')
+            local root = git.root()
+
+            names = root ~= '' and git.branches(root) or {}
+        end
+
+        return vim.tbl_filter(function(name)
+            return vim.startswith(name, arg_lead)
+        end, names)
     end,
     force = true,
 })

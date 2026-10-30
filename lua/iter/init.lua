@@ -96,18 +96,43 @@ local function refresh_annotations()
 end
 
 --- Open the review tab, or switch to it when it is open. An open status
---- drawer closes first.
----@param target? { path: string, side?: IterSide } file to select
+--- drawer closes first. `target.base`, a branch or another ref, sets what
+--- the review compares with and is remembered for the branch; a ref that
+--- isn't a branch names the commit the review starts after. Without it the
+--- remembered base applies.
+---@param target? { path?: string, side?: IterSide, base?: string } file to select and base
 function M.review(target)
     log.info('review command called')
 
-    if require('iter.git').root() == '' then
+    local git = require('iter.git')
+    local root = git.root()
+
+    if root == '' then
         util.warn('Not inside a git repository')
         return
     end
 
+    local base = target and target.base
+    local spec
+
+    if base ~= nil then
+        local err
+
+        spec, err = git.base_spec(root, base)
+
+        if spec == nil then
+            util.error(err, 'Unknown ref ' .. base)
+            return
+        end
+    end
+
     if M.current_review ~= nil and M.current_review:is_open() then
         M.current_review:focus()
+
+        if spec ~= nil then
+            M.current_review:set_base(spec)
+        end
+
         return
     end
 
@@ -126,6 +151,7 @@ function M.review(target)
         config = M.config,
         path = path,
         side = target and target.side,
+        base = spec,
         on_annotations = refresh_annotations,
         on_close = function(review)
             if M.current_review == review then
@@ -213,9 +239,11 @@ local function open_review()
 end
 
 --- The repository the annotation commands work on, with the files of the open
---- review in drawer order: the review's, else the current directory's.
+--- review in drawer order: the review's, else the current directory's. Also
+--- what that review compares with, against a base.
 ---@return string root
 ---@return string[] order
+---@return IterChangesBase? since
 local function annotation_scope()
     local review = open_review()
     local root = review and review.drawer.changes.root
@@ -232,14 +260,14 @@ local function annotation_scope()
         end
     end
 
-    return root, order
+    return root, order, review and review:since(root)
 end
 
 --- Copy the annotations of the repository as text for an agent, then ask once
 --- whether to clear them. With `opts.ids`, copy only those annotations.
 ---@param opts? { ids?: string[] }
 function M.yank(opts)
-    local root, order = annotation_scope()
+    local root, order, since = annotation_scope()
 
     if root == '' then
         util.warn('Not inside a git repository')
@@ -252,6 +280,7 @@ function M.yank(opts)
         order = order,
         ids = opts ~= nil and opts.ids or nil,
         on_clear = refresh_annotations,
+        since = since,
     })
 end
 

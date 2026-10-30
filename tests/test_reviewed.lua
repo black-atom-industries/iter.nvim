@@ -68,29 +68,29 @@ T['states()']['a file without a record is unreviewed'] = function()
 end
 
 T['states()']['set marks reviewed and set off removes the mark'] = function()
-    eq(reviewed.set(repo, 'a.txt', true), true)
+    eq(reviewed.set(repo, 'a.txt', true, ''), true)
     eq(states({ 'a.txt', 'b.txt' }), {
         ['a.txt'] = 'reviewed',
         ['b.txt'] = 'unreviewed',
     })
 
-    eq(reviewed.set(repo, 'a.txt', false), true)
+    eq(reviewed.set(repo, 'a.txt', false, ''), true)
     eq(states({ 'a.txt' }), { ['a.txt'] = 'unreviewed' })
     eq(assert(store.load(repo)).reviewed, {})
 end
 
 T['states()']['setting a reviewed file again keeps its record'] = function()
-    reviewed.set(repo, 'a.txt', true)
+    reviewed.set(repo, 'a.txt', true, '')
     store.update(repo, function(data)
         data.reviewed['a.txt'].at = 1
     end)
 
-    eq(reviewed.set(repo, 'a.txt', true), true)
+    eq(reviewed.set(repo, 'a.txt', true, ''), true)
     eq(assert(store.load(repo)).reviewed['a.txt'].at, 1)
 end
 
 T['states()']['the record holds git hash-object of the worktree file'] = function()
-    reviewed.set(repo, 'a.txt', true)
+    reviewed.set(repo, 'a.txt', true, '')
 
     local expected = vim.trim(helpers.git(repo, { 'hash-object', 'a.txt' }))
     local record = assert(store.load(repo)).reviewed['a.txt']
@@ -100,22 +100,22 @@ T['states()']['the record holds git hash-object of the worktree file'] = functio
 end
 
 T['states()']['an edit turns reviewed into changed'] = function()
-    reviewed.set(repo, 'a.txt', true)
+    reviewed.set(repo, 'a.txt', true, '')
     write('a.txt', { 'one', 'two', 'three' })
 
     eq(states({ 'a.txt' }), { ['a.txt'] = 'changed' })
 end
 
 T['states()']['setting a changed file marks the new content'] = function()
-    reviewed.set(repo, 'a.txt', true)
+    reviewed.set(repo, 'a.txt', true, '')
     write('a.txt', { 'one', 'two', 'three' })
 
-    eq(reviewed.set(repo, 'a.txt', true), true)
+    eq(reviewed.set(repo, 'a.txt', true, ''), true)
     eq(states({ 'a.txt' }), { ['a.txt'] = 'reviewed' })
 end
 
 T['states()']['an edit back to the reviewed content is reviewed again'] = function()
-    reviewed.set(repo, 'a.txt', true)
+    reviewed.set(repo, 'a.txt', true, '')
     write('a.txt', { 'other' })
     eq(states({ 'a.txt' }), { ['a.txt'] = 'changed' })
 
@@ -125,7 +125,7 @@ end
 
 T['states()']['staging keeps a file reviewed'] = function()
     write('a.txt', { 'one', 'two', 'three' })
-    reviewed.set(repo, 'a.txt', true)
+    reviewed.set(repo, 'a.txt', true, '')
 
     helpers.git(repo, { 'add', 'a.txt' })
     eq(states({ 'a.txt' }), { ['a.txt'] = 'reviewed' })
@@ -138,7 +138,7 @@ T['states()']['a deleted file is reviewed with the hash deleted'] = function()
     vim.fn.delete(vim.fs.joinpath(repo, 'b.txt'))
 
     eq(states({ 'b.txt' }), { ['b.txt'] = 'unreviewed' })
-    eq(reviewed.set(repo, 'b.txt', true), true)
+    eq(reviewed.set(repo, 'b.txt', true, ''), true)
     eq(assert(store.load(repo)).reviewed['b.txt'].hash, 'deleted')
     eq(states({ 'b.txt' }), { ['b.txt'] = 'reviewed' })
 
@@ -147,14 +147,14 @@ T['states()']['a deleted file is reviewed with the hash deleted'] = function()
 end
 
 T['states()']['a file deleted after it was reviewed is changed'] = function()
-    reviewed.set(repo, 'b.txt', true)
+    reviewed.set(repo, 'b.txt', true, '')
     vim.fn.delete(vim.fs.joinpath(repo, 'b.txt'))
 
     eq(states({ 'b.txt' }), { ['b.txt'] = 'changed' })
 end
 
 T['states()']['paths with spaces and non-ASCII characters hash'] = function()
-    eq(reviewed.set(repo, 'sp ace/ü.txt', true), true)
+    eq(reviewed.set(repo, 'sp ace/ü.txt', true, ''), true)
     write('sp ace/ü.txt', { 'odd', 'more' })
 
     eq(states({ 'sp ace/ü.txt', 'a.txt' }), {
@@ -164,7 +164,7 @@ T['states()']['paths with spaces and non-ASCII characters hash'] = function()
 end
 
 T['states()']['records survive a new module instance'] = function()
-    reviewed.set(repo, 'a.txt', true)
+    reviewed.set(repo, 'a.txt', true, '')
 
     package.loaded['iter.reviewed'] = nil
     reviewed = require('iter.reviewed')
@@ -175,7 +175,7 @@ end
 T['hashing'] = new_set()
 
 T['hashing']['one batch for all files, none while stat is unchanged'] = function()
-    reviewed.set(repo, 'a.txt', true)
+    reviewed.set(repo, 'a.txt', true, '')
     spawns = 0
 
     states({ 'a.txt', 'b.txt', 'sp ace/ü.txt' })
@@ -255,6 +255,68 @@ T['hashing']['equal mtime and size but another ctime or inode hash again'] = fun
 
     vim.uv.fs_stat = real
     assert(ok, err)
+end
+
+T['bases'] = new_set()
+
+---@param paths string[]
+---@param key string
+---@return table<string, IterReviewedState>
+local function states_in(paths, key)
+    local data = assert(store.load(repo))
+
+    return reviewed.states(repo, paths, reviewed.records(data, key))
+end
+
+T['bases']['base_key names working changes, a branch, a commit and a ref'] = function()
+    eq(reviewed.base_key(nil), '')
+    eq(reviewed.base_key({ kind = 'branch', ref = 'main' }), 'branch:main')
+    eq(reviewed.base_key({ kind = 'commit', sha = 'abc123' }), 'commit:abc123')
+    eq(
+        reviewed.base_key({ kind = 'rev', ref = 'v1.0', sha = 'abc123' }),
+        'rev:abc123'
+    )
+end
+
+T['bases']['marks in two bases on one file are apart'] = function()
+    eq(reviewed.set(repo, 'a.txt', true, 'branch:main'), true)
+    eq(states_in({ 'a.txt' }, 'branch:main'), { ['a.txt'] = 'reviewed' })
+    eq(states_in({ 'a.txt' }, ''), { ['a.txt'] = 'unreviewed' })
+    eq(states_in({ 'a.txt' }, 'commit:abc123'), { ['a.txt'] = 'unreviewed' })
+    eq(assert(store.load(repo)).reviewed, {})
+
+    eq(reviewed.set(repo, 'a.txt', true, ''), true)
+    write('a.txt', { 'one', 'two', 'three' })
+    eq(states_in({ 'a.txt' }, ''), { ['a.txt'] = 'changed' })
+    eq(states_in({ 'a.txt' }, 'branch:main'), { ['a.txt'] = 'changed' })
+
+    eq(reviewed.set(repo, 'a.txt', false, 'branch:main'), true)
+    eq(states_in({ 'a.txt' }, ''), { ['a.txt'] = 'changed' })
+    eq(states_in({ 'a.txt' }, 'branch:main'), { ['a.txt'] = 'unreviewed' })
+    eq(assert(store.load(repo)).reviewed_by_base, nil)
+end
+
+T['bases']['an old store file reads as working changes'] = function()
+    local path = assert(store.path(repo))
+    local hash = reviewed.hashes(repo, { 'a.txt' })['a.txt']
+
+    vim.fn.mkdir(vim.fs.dirname(path), 'p')
+    vim.fn.writefile({
+        vim.json.encode({
+            version = 2,
+            annotations = {},
+            reviewed = { ['a.txt'] = { hash = hash, at = 1 } },
+        }),
+    }, path)
+
+    eq(states_in({ 'a.txt' }, ''), { ['a.txt'] = 'reviewed' })
+    eq(states_in({ 'a.txt' }, 'branch:main'), { ['a.txt'] = 'unreviewed' })
+
+    eq(reviewed.set(repo, 'b.txt', true, 'branch:main'), true)
+    eq(assert(store.load(repo)).reviewed, {
+        ['a.txt'] = { hash = hash, at = 1 },
+    })
+    eq(states_in({ 'b.txt' }, 'branch:main'), { ['b.txt'] = 'reviewed' })
 end
 
 T['summary()'] = new_set()

@@ -24,18 +24,19 @@ local M = {}
 ---@alias IterLinesOf fun(path: string, version: IterAnchorVersion): string[]?
 
 --- Lines of `path` at `version`: for the worktree the loaded buffer's when
---- there is one, else the file's; for `HEAD` and `index` the blob's. A path
---- missing from the version reads as no lines; nil means the version can't
---- be read (an unreadable file, an unborn HEAD, git failing).
+--- there is one, else the file's; for `HEAD`, `index` or a sha the blob's. A
+--- path missing from the version reads as no lines; nil means the version
+--- can't be read (an unreadable file, an unborn HEAD, a missing commit, git
+--- failing).
 ---@param root string
 ---@param path string
 ---@param version? IterAnchorVersion `worktree` by default
 ---@return string[]?
 function M.file_lines(root, path, version)
-    if version == 'HEAD' or version == 'index' then
+    if version ~= nil and version ~= 'worktree' then
         local git = require('iter.git')
-        local lines =
-            git.blob_lines(root, (version == 'HEAD' and 'HEAD:' or ':') .. path)
+        local rev = version == 'index' and '' or version
+        local lines = git.blob_lines(root, rev .. ':' .. path)
 
         if lines ~= nil then
             return lines
@@ -43,9 +44,8 @@ function M.file_lines(root, path, version)
 
         -- With git working and the version there, the path isn't in it.
         local there = git.run(
-            version == 'HEAD'
-                    and { 'rev-parse', '--verify', '--quiet', 'HEAD^{tree}' }
-                or { 'rev-parse', '--git-dir' },
+            version == 'index' and { 'rev-parse', '--git-dir' }
+                or { 'rev-parse', '--verify', '--quiet', version .. '^{tree}' },
             { cwd = root, ignore_error = true }
         )
 

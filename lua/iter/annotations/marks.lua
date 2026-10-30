@@ -153,7 +153,7 @@ local function locate(file, annotation, new_follows, lines_of)
         return header_of(file.rows), false
     end
 
-    if old and (a.base or 'HEAD') ~= anchor.OLD_BASE[file.side] then
+    if old and (a.base or 'HEAD') ~= anchor.old_base(file) then
         return nil, false
     end
 
@@ -215,7 +215,7 @@ end
 function M.place(file, annotations, opts)
     opts = opts or {}
 
-    local new_follows = file.side == 'unstaged' or opts.new_follows == true
+    local new_follows = file.side ~= 'staged' or opts.new_follows == true
     local result = {}
     ---@type table<IterAnnotationMark, integer>
     local order = {}

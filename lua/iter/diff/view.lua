@@ -596,12 +596,15 @@ local function number_width(rows)
     return math.max(3, #tostring(max))
 end
 
---- The version a side of `file` shows: `HEAD`, `index` or `worktree`.
+--- The version a side of `file` shows: `HEAD`, `index`, `base` or
+--- `worktree`.
 ---@param file IterFileDiff
 ---@param side 'old'|'new'
 ---@return string
 local function version_label(file, side)
-    if side == 'old' then
+    if file.side == 'base' then
+        return side == 'old' and 'base' or 'worktree'
+    elseif side == 'old' then
         return anchor.OLD_BASE[file.side]
     end
 

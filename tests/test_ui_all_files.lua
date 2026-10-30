@@ -737,7 +737,7 @@ T['collapse'] = new_set()
 ---@param path string
 local function mark_reviewed(path)
     child.lua(
-        [[require('iter.reviewed').set(vim.fn.getcwd(), ..., true)]],
+        [[require('iter.reviewed').set(vim.fn.getcwd(), ..., true, '')]],
         { path }
     )
 end

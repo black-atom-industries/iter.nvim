@@ -1,6 +1,7 @@
 --- The review as text for an agent: an intro, then a numbered list of the
 --- annotations with the code they sit on. `yank` copies it and offers to clear.
 
+local changes = require('iter.changes')
 local list = require('iter.annotations.list')
 local store = require('iter.store')
 local util = require('iter.util')
@@ -64,7 +65,9 @@ local function heading(item)
     end
 
     if a.side == 'old' then
-        table.insert(marks, 'old side')
+        local sha = require('iter.annotations.anchor').short_base(a)
+
+        table.insert(marks, sha ~= nil and 'old side, ' .. sha or 'old side')
     end
 
     if item.outdated then
@@ -77,16 +80,24 @@ local function heading(item)
         .. (#marks > 0 and ' (' .. table.concat(marks, ', ') .. ')' or '')
 end
 
---- The export text: `intro`, a blank line, then one numbered item per
---- annotation. Files follow `order`, then name, with the review annotations last.
+--- The export text: `intro`, a blank line, against a base a line naming it
+--- and a blank line, then one numbered item per annotation. Files follow
+--- `order`, then name, with the review annotations last.
 ---@param annotations IterAnnotation[]
----@param opts { intro: string, order?: string[], lines_of: IterLinesOf }
+---@param opts { intro: string, order?: string[], lines_of: IterLinesOf, since?: IterChangesBase }
 ---@return string
 function M.text(annotations, opts)
     vim.validate('annotations', annotations, 'table')
     vim.validate('opts', opts, 'table')
 
     local out = { opts.intro, '' }
+
+    if opts.since ~= nil then
+        vim.list_extend(
+            out,
+            { 'Reviewed ' .. changes.base_text(opts.since), '' }
+        )
+    end
     local n = 0
 
     for _, group in ipairs(list.groups(annotations, opts.order, opts.lines_of)) do
@@ -159,6 +170,7 @@ end
 ---@field order? string[] file paths in drawer order
 ---@field ids? string[] copy only these annotations; all when omitted
 ---@field on_clear? fun() after the exported annotations are removed
+---@field since? IterChangesBase what the review compared with, against a base
 
 --- Copy the stored annotations of `opts.root`, or those of `opts.ids`, and ask
 --- once whether to remove them. Only the annotations that were copied are
@@ -190,6 +202,7 @@ function M.yank(opts)
         intro = opts.config.options.export.intro,
         order = opts.order,
         lines_of = list.reader(opts.root),
+        since = opts.since,
     }))
 
     if not ask_clear(#annotations) then

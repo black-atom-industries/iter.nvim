@@ -1,4 +1,4 @@
----@class IterReviewed store.reviewed[path]
+---@class IterReviewed store.reviewed[path], store.reviewed_by_base[key][path]
 ---@field hash string git hash-object of the worktree file, 'deleted' when missing
 ---@field at integer
 
@@ -6,6 +6,8 @@
 ---@field version 2
 ---@field annotations IterAnnotation[]
 ---@field reviewed table<string, IterReviewed>
+---@field base? IterBaseSpec what the review compares with; absent for working changes
+---@field reviewed_by_base? table<string, table<string, IterReviewed>> reviewed records by base key (`branch:<ref>`, `commit:<sha>`); working changes keep theirs in `reviewed`
 
 local git = require('iter.git')
 local util = require('iter.util')
@@ -89,6 +91,67 @@ local function is_valid(data)
     return true
 end
 
+--- `base` when it is a base spec this iter reads, else nil.
+---@param base any
+---@return IterBaseSpec?
+local function valid_base(base)
+    if type(base) ~= 'table' then
+        return nil
+    elseif
+        base.kind == 'branch'
+        and type(base.ref) == 'string'
+        and base.ref ~= ''
+    then
+        return { kind = 'branch', ref = base.ref }
+    elseif
+        base.kind == 'commit'
+        and type(base.sha) == 'string'
+        and base.sha:match('^%x+$') ~= nil
+    then
+        return { kind = 'commit', sha = base.sha }
+    elseif
+        base.kind == 'rev'
+        and type(base.ref) == 'string'
+        and base.ref ~= ''
+        and type(base.sha) == 'string'
+        and base.sha:match('^%x+$') ~= nil
+    then
+        return { kind = 'rev', ref = base.ref, sha = base.sha }
+    end
+
+    return nil
+end
+
+--- The reviewed records by base key in `by_base` this iter reads, nil
+--- when none are left.
+---@param by_base any
+---@return table<string, table<string, IterReviewed>>?
+local function valid_by_base(by_base)
+    if type(by_base) ~= 'table' then
+        return nil
+    end
+
+    local kept = {}
+
+    for key, records in pairs(by_base) do
+        if type(key) == 'string' and type(records) == 'table' then
+            local valid = {}
+
+            for path, record in pairs(records) do
+                if type(path) == 'string' and type(record) == 'table' then
+                    valid[path] = record
+                end
+            end
+
+            if next(valid) ~= nil then
+                kept[key] = valid
+            end
+        end
+    end
+
+    return next(kept) ~= nil and kept or nil
+end
+
 --- Rename a corrupt store file to `<name>.corrupt-<timestamp>`, with a
 --- counter when that name is taken, so no earlier copy is overwritten.
 ---@param path string
@@ -149,6 +212,10 @@ local function read(path)
     )
 
     if ok and is_valid(data) then
+        -- A base this iter can't read means working changes; the
+        -- annotations stay.
+        data.base = valid_base(data.base)
+        data.reviewed_by_base = valid_by_base(data.reviewed_by_base)
         return data
     end
 
@@ -217,6 +284,8 @@ local function write(path, data)
         annotations = data.annotations,
         reviewed = next(data.reviewed) == nil and vim.empty_dict()
             or data.reviewed,
+        base = data.base,
+        reviewed_by_base = data.reviewed_by_base,
     })
 
     local tmp =
@@ -762,6 +831,24 @@ end
 function M.set_reviewed(root, path, reviewed)
     return M.update(root, function(data)
         data.reviewed[path] = reviewed
+    end)
+end
+
+--- Remember `base` as what the review compares with, nil for working
+--- changes.
+---@param root string
+---@param base? IterBaseSpec
+---@return IterStoreFile?
+---@return string? error
+function M.set_base(root, base)
+    vim.validate('base', base, 'table', true)
+
+    return M.update(root, function(data)
+        if vim.deep_equal(data.base, base) then
+            return false
+        end
+
+        data.base = base
     end)
 end
 
