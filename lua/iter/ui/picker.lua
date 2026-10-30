@@ -1,13 +1,16 @@
 local float = require('iter.ui.float')
 local keymap = require('iter.keymap')
 local layout = require('iter.ui.layout')
+local render = require('iter.ui.render')
 
 local M = {}
+
+---@alias IterPickerItem string|[string, string?][] a label, or its chunks of text and highlight group
 
 ---@class IterPickerOpts
 ---@field over IterFloat the float whose footprint the picker covers
 ---@field title string
----@field items string[] the labels, in order; the first is selected
+---@field items IterPickerItem[] in order; the first is selected
 ---@field sections? table<integer, string> a title shown above the item at that index, never selected
 ---@field keys table<string, string[]> resolved keys of the picker view
 ---@field on_pick fun(index: integer) after the picker closed
@@ -24,6 +27,30 @@ local SECTIONS_NS = vim.api.nvim_create_namespace('iter.picker.sections')
 
 local HINTS = { { 'pick', 'pick' }, { 'close', 'back' } }
 
+--- The line of `item`, one column in as the drawer's rows start.
+---@param item IterPickerItem
+---@return IterRenderLine
+local function item_line(item)
+    ---@type [string, string?][]
+    local chunks
+
+    if type(item) == 'string' then
+        chunks = { { item } }
+    else
+        chunks = item
+    end
+    local line = render.line(' ')
+
+    for _, chunk in ipairs(chunks) do
+        local start = #line.text
+
+        line.text = line.text .. chunk[1]
+        render.add_highlight(line, chunk[2], start, #line.text)
+    end
+
+    return line
+end
+
 --- Open a focused list over `opts.over`, with its chrome, its height and
 --- above its side window.
 ---@param opts IterPickerOpts
@@ -39,16 +66,10 @@ function M.open(opts)
     vim.validate('opts.on_close', opts.on_close, 'function', true)
 
     local buf = vim.api.nvim_create_buf(false, true)
-    -- One column in, as the drawer's rows start.
-    vim.api.nvim_buf_set_lines(
-        buf,
-        0,
-        -1,
-        false,
-        vim.tbl_map(function(label)
-            return ' ' .. label
-        end, opts.items)
-    )
+    local lines = vim.tbl_map(item_line, opts.items)
+
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, render.text_lines(lines))
+    render.apply(buf, lines)
     vim.bo[buf].bufhidden = 'wipe'
     vim.bo[buf].modifiable = false
     vim.bo[buf].filetype = 'iterpicker'

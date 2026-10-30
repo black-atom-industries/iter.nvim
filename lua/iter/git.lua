@@ -804,6 +804,7 @@ end
 ---@field subject string
 ---@field time integer committer date, seconds since the epoch
 ---@field author string the author's name
+---@field body string the message after the subject, its whitespace runs joined by one space
 ---@field unpushed boolean not on the upstream
 
 ---@class GitRecent where HEAD stands against its upstream
@@ -896,18 +897,23 @@ function git.recent(root, count, prev)
         '--no-color',
         '--no-show-signature',
         '--max-count=' .. count,
-        '--format=%H%x1f%h%x1f%ct%x1f%an%x1f%s',
+        '-z',
+        '--format=%H%x1f%h%x1f%ct%x1f%an%x1f%s%x1f%b',
         head,
         '--',
     }, { cwd = root, ignore_error = true })
 
-    for _, line in ipairs(split_output(commits.output)) do
-        local fields = vim.split(line, SEP, { plain = true })
+    -- With `-z` a NUL ends each commit, so a body may span lines.
+    for _, record in ipairs(vim.split(commits.output, '\0', { plain = true })) do
+        local fields = vim.split(record, SEP, { plain = true })
 
-        if #fields >= 5 then
+        if #fields >= 6 then
             table.insert(recent.commits, {
                 sha = fields[2],
-                subject = table.concat(fields, SEP, 5),
+                subject = fields[5],
+                body = vim.trim(
+                    (table.concat(fields, ' ', 6):gsub('%s+', ' '))
+                ),
                 time = tonumber(fields[3]) or 0,
                 author = fields[4],
                 unpushed = unpushed[fields[1]] == true,

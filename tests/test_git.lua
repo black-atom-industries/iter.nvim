@@ -237,6 +237,34 @@ T['recent()']['without an upstream: commits, no markers, no counts'] = function(
     eq(#recent.commits[1].sha >= 7, true)
 end
 
+T['recent()']['reads the body after the subject on one line'] = function()
+    helpers.git(repo, {
+        'commit',
+        '--quiet',
+        '--allow-empty',
+        '-m',
+        'subject',
+        '-m',
+        'first line\nsecond  line',
+        '-m',
+        'last',
+    })
+    commit('no body')
+
+    local recent = assert(git.recent(repo, 3))
+
+    eq(
+        vim.tbl_map(function(c)
+            return { c.subject, c.body }
+        end, recent.commits),
+        {
+            { 'no body', '' },
+            { 'subject', 'first line second line last' },
+            { 'initial', '' },
+        }
+    )
+end
+
 T['recent()']['ahead only marks the unpushed commits'] = function()
     with_remote()
     commit('second')

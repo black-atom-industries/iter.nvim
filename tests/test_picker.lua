@@ -73,6 +73,36 @@ T['open()']['covers the float it opens over and takes the focus'] = function()
     )
 end
 
+T['open()']['an item of chunks shows their text and highlights'] = function()
+    child.lua([[
+        local float = require('iter.ui.float')
+        _G.over = float.open({
+            pane = vim.api.nvim_get_current_win(),
+            buf = vim.api.nvim_create_buf(false, true),
+            zindex = 40,
+            height = 0.3,
+            chrome = true,
+        })
+        _G.picker = require('iter.ui.picker').open({
+            over = _G.over,
+            title = 'Pick',
+            items = { { { 'abc', 'IterCommitSha' }, { ' plain' } } },
+            keys = require('iter.config').resolve({}).keys.picker,
+            on_pick = function() end,
+        })
+    ]])
+
+    eq(child.api.nvim_buf_get_lines(0, 0, -1, false), { ' abc plain' })
+    eq(
+        child.lua_get(
+            [[vim.tbl_map(function(m)
+            return { m[3], m[4].end_col, m[4].hl_group }
+        end, vim.api.nvim_buf_get_extmarks(0, -1, 0, -1, { details = true, type = 'highlight' }))]]
+        ),
+        { { 1, 4, 'IterCommitSha' } }
+    )
+end
+
 T['open()']['<CR> passes the index under the cursor'] = function()
     open_picker()
     child.type_keys('j', '<CR>')

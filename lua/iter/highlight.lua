@@ -178,6 +178,10 @@ function M.apply()
         IterDrawerKey = { link = 'Special' },
         IterDrawerHint = { link = 'Comment' },
         IterDrawerCount = { link = 'Special' },
+        IterCommitSha = { link = 'Constant' },
+        IterCommitDate = { link = 'Special' },
+        IterCommitAuthor = { link = 'Identifier' },
+        IterCommitBody = { link = 'Comment' },
     }
 
     for name, spec in pairs(FOREGROUNDS) do

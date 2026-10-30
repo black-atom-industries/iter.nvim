@@ -789,6 +789,10 @@ event, so no colorscheme needs to define them.
 | `IterDrawerKey`              | Key hints                                               | link to `Special`                                                           |
 | `IterDrawerHint`             | Dimmed drawer text                                      | link to `Comment`                                                           |
 | `IterDrawerCount`            | Counts in section titles                                | link to `Special`                                                           |
+| `IterCommitSha`              | Commit sha in the base picker                           | link to `Constant`                                                          |
+| `IterCommitDate`             | Commit date and time in the base picker                 | link to `Special`                                                           |
+| `IterCommitAuthor`           | Commit author in the base picker                        | link to `Identifier`                                                        |
+| `IterCommitBody`             | Commit body after the subject in the base picker        | link to `Comment`                                                           |
 | `IterDiffAdd`                | Added line rows                                         | bg of `DiffAdd`, blended with `Normal`                                      |
 | `IterDiffDelete`             | Deleted line rows                                       | bg of `DiffDelete`, blended with `Normal`                                   |
 | `IterDiffAddText`            | Changed words in added lines                            | bg of `DiffAdd`                                                             |

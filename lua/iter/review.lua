@@ -739,7 +739,7 @@ function Review:set_base(spec)
 end
 
 ---@class IterBaseChoice an item of the base picker
----@field label string
+---@field label IterPickerItem
 ---@field spec? IterBaseSpec nil for working changes
 ---@field commit? string abbreviated sha of a commit, resolved when picked
 
@@ -794,15 +794,23 @@ function Review:pick_base()
     author_width = math.min(author_width, PICKER_AUTHOR_WIDTH)
 
     for _, commit in ipairs(commits) do
-        table.insert(choices, {
-            label = table.concat({
-                commit.sha,
+        local chunks = {
+            { commit.sha, 'IterCommitSha' },
+            { '  ' },
+            {
                 os.date('%Y-%m-%d %H:%M', commit.time) --[[@as string]],
-                layout.fit(commit.author, author_width),
-                commit.subject,
-            }, '  '),
-            commit = commit.sha,
-        })
+                'IterCommitDate',
+            },
+            { '  ' },
+            { layout.fit(commit.author, author_width), 'IterCommitAuthor' },
+            { '  ' .. commit.subject },
+        }
+
+        if commit.body ~= '' then
+            table.insert(chunks, { '  ' .. commit.body, 'IterCommitBody' })
+        end
+
+        table.insert(choices, { label = chunks, commit = commit.sha })
     end
 
     ---@type table<integer, string>
