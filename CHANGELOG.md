@@ -2,6 +2,82 @@
 
 ## [0.6.0](https://github.com/black-atom-industries/iter.nvim/compare/v0.5.0...v0.6.0) (2026-10-30)
 
+### Highlights
+
+#### Review a branch or a pull request
+
+The review can now compare the files on disk with a base instead of the index, so work that is already committed shows up
+too. Check out the branch of a pull request and press `b` in the review drawer: the first row is the merge base with the
+branch it was created from, which is what the pull request shows. Working changes, the other branches and the last 20
+commits follow, each commit with its date, author and message. `:Iter review main` opens against a ref directly.
+
+Against a base the drawer has one column, `Since main`, and staging doesn't apply. Reviewed marks belong to the base they
+were made against, annotations are shared, the copied prompt names the base, and iter remembers the base per branch. The
+picker opens over the drawer whichever picker plugin you use.
+
+![b in the review drawer opens the base picker with the merge base with main first, then branches and commits; picking the merge base switches the drawer to Since main](https://raw.githubusercontent.com/black-atom-industries/iter.nvim/v0.6.0/docs/assets/changelog/0.6.0-base-picker.webp)
+
+#### Browse commits with `:Iter commits`
+
+`:Iter commits` lists the branch's last 100 commits. Moving through them shows a summary above: the message, author, date
+and the changed files with their counts. `<CR>` opens the files of a commit, or of a range selected with `V`, one diff at
+a time. `q` goes back to the list, and `r` starts a review from the oldest selected commit.
+
+![:Iter commits shows a summary of each commit above the list; V selects two commits, Enter lists their files one diff at a time, q goes back and r opens the review](https://raw.githubusercontent.com/black-atom-industries/iter.nvim/v0.6.0/docs/assets/changelog/0.6.0-commits.webp)
+
+#### Annotate the exact words
+
+A charwise `v` selection annotates just the selected words. The annotation follows them when the text around them changes
+and turns outdated when they are gone. Annotated text is tinted in buffers and in the diff (`IterAnnotationText`), and the
+export names a passage as `file:line:col` with only its words quoted.
+
+![In the review diff, v selects hear when it is ready, a annotates it, and the words stay tinted in the diff and in the README buffer](https://raw.githubusercontent.com/black-atom-industries/iter.nvim/v0.6.0/docs/assets/changelog/0.6.0-passages.webp)
+
+#### Every annotation in a sidebar
+
+`:Iter annotate` toggles a sidebar at the edge of the tab with every annotation of the repository, grouped by file, whether
+the file has changes or not. `<CR>` jumps to the annotation, and `y`, `Y`, `d` and `e` work as in the review.
+`require('iter').clear()` drops every annotation at once.
+
+![:Iter annotate opens the sidebar with three annotations in two files; Enter on the teas.lua annotation jumps to its line](https://raw.githubusercontent.com/black-atom-industries/iter.nvim/v0.6.0/docs/assets/changelog/0.6.0-sidebar.webp)
+
+#### Copy one annotation or all of them
+
+`y` in the review drawer and the diff pane copies the annotation under the cursor, or a file's annotations on a file row.
+`Y` copies all of them. iter then asks about clearing only what was copied.
+
+#### Wrap long lines
+
+`gw` toggles wrapping in the unified diff, and `diff.wrap` sets how a session starts.
+
+#### Important fixes
+
+- The drawer stays opaque under a global `winblend` and under a colorscheme with a transparent `Normal`.
+- Side-by-side panes stay aligned under `scrolloff`.
+- Word emphasis leaves the whitespace at the edges of a change unmarked, so a changed indent alone marks nothing.
+
+#### Upgrading from 0.5
+
+`mode` moves to `=`, so `m` is free again:
+
+```diff
+- m   toggle one file or all files
++ =   toggle one file or all files
+```
+
+Deleting an annotation moves from `x` to `d`, and `y` copies the annotation under the cursor instead of all of them:
+
+```diff
+- x   delete the annotation
++ d   delete the annotation
+- y   copy all annotations
++ y   copy the annotation or file under the cursor
++ Y   copy all annotations
+```
+
+To keep the old keys, set them in `keys`, as in `keys.drawer.mode = 'm'`.
+
+
 
 ### ⚠ BREAKING CHANGES
 
