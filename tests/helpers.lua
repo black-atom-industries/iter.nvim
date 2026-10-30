@@ -147,6 +147,21 @@ end
 function M.start_child(child, repo, opts)
     opts = opts or {}
     child.start({ '-u', M.minimal_init })
+    -- Copies stay in the child instead of reaching the system clipboard.
+    child.lua([[
+        local clip = { {}, 'v' }
+        local function copy(lines, regtype)
+            clip = { lines, regtype }
+        end
+        local function paste()
+            return clip
+        end
+        vim.g.clipboard = {
+            name = 'iter-test',
+            copy = { ['+'] = copy, ['*'] = copy },
+            paste = { ['+'] = paste, ['*'] = paste },
+        }
+    ]])
     child.o.lines = opts.lines or 24
     child.o.columns = opts.columns or 80
     child.o.laststatus = 0
