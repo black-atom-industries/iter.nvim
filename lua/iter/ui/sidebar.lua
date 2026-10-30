@@ -25,6 +25,17 @@ local M = {}
 ---@field width integer
 ---@field height? integer window rows; the hints sit on the last of them
 ---@field hints? [string, string][][] key and word pairs, one list per line
+---@field progress? IterLayoutProgress the reviewed progress, a row under the title
+---@field changed? table<string, boolean> paths with changes; when set, each file group's header has a slot that shows `M` for them
+
+---@class IterSidebarMode the sidebar serving a review
+---@field order fun(): string[] files in the review's order, listed first
+---@field changed fun(): table<string, boolean> paths the review lists
+---@field progress fun(): IterLayoutProgress
+---@field on_cursor fun(item?: IterAnnotationItem) after the cursor settled on a line
+---@field jump fun(item: IterAnnotationItem) `<CR>` on an annotation
+---@field handlers table<string, fun()> actions that replace or join the sidebar's own
+---@field on_close? fun() after the sidebar's window closed
 
 ---@class IterSidebar
 ---@field tab integer
@@ -40,11 +51,16 @@ local M = {}
 ---@field handlers table<string, fun()>
 ---@field group integer
 ---@field help? IterHelp
+---@field mode? IterSidebarMode
+---@field cursor_timer? uv.uv_timer_t runs the last scheduled `mode.on_cursor`
+---@field mapped? table<string, fun()> the actions mapped on the buffer, the mode's joined in
 local Sidebar = {}
 Sidebar.__index = Sidebar
 
 ---@type table<integer, IterSidebar>
 local sidebars = {}
+
+local PREVIEW_DELAY_MS = 50
 
 -- Per hint line, the action and the word shown for it.
 local HINTS = {
@@ -128,15 +144,37 @@ end
 
 ---@param width integer
 ---@param group IterAnnotationGroup
+---@param changed? table<string, boolean>
 ---@return IterRenderLine
-local function header(width, group)
-    local count = tostring(#group.items)
-    local room = width - #count - 1
-    local name = layout.fit(tail(group.path or 'review', room), room)
-    local line = render.line(name .. ' ' .. count)
+local function header(width, group, changed)
+    local code = ''
 
-    render.add_highlight(line, 'IterDrawerTitle', 0, #(name:gsub(' +$', '')))
-    render.add_highlight(line, 'IterDrawerCount', #name + 1, #name + 1 + #count)
+    if changed ~= nil then
+        code = (group.path ~= nil and changed[group.path]) and 'M ' or '  '
+    end
+
+    local count = tostring(#group.items)
+    local room = width - #code - #count - 1
+    local name = layout.fit(tail(group.path or 'review', room), room)
+    local line = render.line(code .. name .. ' ' .. count)
+    local at = #code
+
+    if vim.trim(code) ~= '' then
+        render.add_highlight(line, 'IterDiffHeaderRule', 0, 1)
+    end
+
+    render.add_highlight(
+        line,
+        'IterDrawerTitle',
+        at,
+        at + #(name:gsub(' +$', ''))
+    )
+    render.add_highlight(
+        line,
+        'IterDrawerCount',
+        at + #name + 1,
+        at + #name + 1 + #count
+    )
 
     return line
 end
@@ -212,6 +250,14 @@ function M.lines(groups, opts)
     render.add_highlight(first, 'IterDrawerHint', #title, #title + #note)
     table.insert(lines, first)
 
+    if opts.progress ~= nil then
+        local progress = render.line('')
+
+        progress.text =
+            layout.progress_cell(progress, opts.progress, 0, opts.width)
+        table.insert(lines, progress)
+    end
+
     local labels = {}
     local label_width = 0
 
@@ -233,7 +279,7 @@ function M.lines(groups, opts)
 
     for _, group in ipairs(groups) do
         table.insert(lines, render.line(''))
-        table.insert(lines, header(opts.width, group))
+        table.insert(lines, header(opts.width, group, opts.changed))
         rows[#lines] = { path = group.path, group = group }
 
         for _, item in ipairs(group.items) do
@@ -320,13 +366,20 @@ function Sidebar:render()
     local row = self.rows[cursor]
     local id = row and row.item and row.item.annotation.id
     local annotations = store.cached(self.root).annotations
+    local mode = self.mode
     self.signature = signature(annotations)
 
-    local groups = list.groups(annotations, nil, list.reader(self.root))
+    local groups = list.groups(
+        annotations,
+        mode and mode.order() or nil,
+        list.reader(self.root)
+    )
     local lines, rows = M.lines(groups, {
         width = vim.api.nvim_win_get_width(self.win),
         height = vim.api.nvim_win_get_height(self.win),
         hints = hints_of(self.config.keys.annotate),
+        progress = mode and mode.progress() or nil,
+        changed = mode and mode.changed() or nil,
     })
 
     self.rows = rows
@@ -425,6 +478,14 @@ function Sidebar:jump()
 
     local item = row.item
 
+    if self.mode ~= nil then
+        if item ~= nil then
+            self.mode.jump(item)
+        end
+
+        return
+    end
+
     if item ~= nil and item.annotation.scope == 'review' then
         self:edit()
         return
@@ -504,10 +565,44 @@ function Sidebar:toggle_help()
     self.help = help.open({
         view = 'annotate',
         keys = self.config.keys.annotate,
-        handlers = self.handlers,
+        handlers = self.mapped or self.handlers,
         close_keys = self.config.keys.help,
         zindex = self.config.options.drawer.zindex + 10,
     })
+end
+
+--- Tell the mode, `PREVIEW_DELAY_MS` after the last move, which line the
+--- cursor settled on.
+function Sidebar:schedule_cursor()
+    if self.mode == nil then
+        return
+    end
+
+    self.cursor_timer = self.cursor_timer or vim.uv.new_timer()
+    self.cursor_timer:stop()
+    self.cursor_timer:start(
+        PREVIEW_DELAY_MS,
+        0,
+        vim.schedule_wrap(function()
+            if self.mode ~= nil and self:is_open() then
+                local row = self:row()
+
+                self.mode.on_cursor(row and row.item)
+            end
+        end)
+    )
+end
+
+--- Map the keys of the annotate view, with the mode's actions joined in.
+function Sidebar:attach_keys()
+    local handlers = vim.tbl_extend(
+        'force',
+        self.handlers,
+        self.mode and self.mode.handlers or {}
+    )
+
+    keymap.attach(self.buf, 'annotate', self.config.keys.annotate, handlers)
+    self.mapped = handlers
 end
 
 function Sidebar:close()
@@ -520,16 +615,45 @@ function Sidebar:close()
     end
 end
 
+--- Put the cursor on the annotation with `id`.
+---@param id string
+function Sidebar:select(id)
+    if not self:is_open() then
+        return
+    end
+
+    for lnum, row in pairs(self.rows) do
+        if row.item ~= nil and row.item.annotation.id == id then
+            vim.api.nvim_win_set_cursor(self.win, { lnum, 0 })
+            return
+        end
+    end
+end
+
 --- Drop the sidebar of the tab once its window is gone.
 function Sidebar:forget()
     if self.watch ~= nil then
         self.watch:stop()
     end
 
+    if self.cursor_timer ~= nil then
+        self.cursor_timer:stop()
+        self.cursor_timer:close()
+        self.cursor_timer = nil
+    end
+
     pcall(vim.api.nvim_del_augroup_by_id, self.group)
 
     if sidebars[self.tab] == self then
         sidebars[self.tab] = nil
+    end
+
+    local on_close = self.mode and self.mode.on_close
+
+    self.mode = nil
+
+    if on_close ~= nil then
+        vim.schedule(on_close)
     end
 end
 
@@ -544,8 +668,9 @@ end
 ---@param config IterConfig
 ---@param root string
 ---@param on_change fun()
+---@param mode? IterSidebarMode
 ---@return IterSidebar
-local function create(config, root, on_change)
+local function create(config, root, on_change, mode)
     local opts = config.options.annotate
     local buf = vim.api.nvim_create_buf(false, true)
 
@@ -566,16 +691,14 @@ local function create(config, root, on_change)
         end
     end
 
-    vim.cmd(
-        string.format(
-            '%s vertical %dsplit',
-            opts.side == 'left' and 'topleft' or 'botright',
-            opts.width
-        )
-    )
-
-    local win = vim.api.nvim_get_current_win()
-    vim.api.nvim_win_set_buf(win, buf)
+    -- A split of the tab's full height, with its own buffer from the start:
+    -- a split that copies the current window's buffer would show one of
+    -- iter's buffers in a second window.
+    local win = vim.api.nvim_open_win(buf, true, {
+        split = opts.side == 'left' and 'left' or 'right',
+        win = -1,
+        width = opts.width,
+    })
 
     local settings = {
         number = false,
@@ -605,6 +728,7 @@ local function create(config, root, on_change)
         on_change = on_change,
         rows = {},
         order = {},
+        mode = mode,
     }, Sidebar)
 
     self.handlers = {
@@ -650,10 +774,17 @@ local function create(config, root, on_change)
             self:render()
         end,
     })
-    keymap.attach(buf, 'annotate', config.keys.annotate, self.handlers)
+    self:attach_keys()
 
     self.group =
         vim.api.nvim_create_augroup('iter.sidebar.' .. buf, { clear = true })
+    vim.api.nvim_create_autocmd('CursorMoved', {
+        group = self.group,
+        buffer = buf,
+        callback = function()
+            self:schedule_cursor()
+        end,
+    })
     vim.api.nvim_create_autocmd('WinClosed', {
         group = self.group,
         pattern = tostring(win),
@@ -756,6 +887,45 @@ local function open(config, on_change)
     sidebars[tab] = create(config, root, on_change)
 end
 
+--- Open the sidebar of the current tab for a review without moving the
+--- focus, or give the sidebar the tab has the review's `mode`.
+---@param config IterConfig
+---@param root string
+---@param on_change fun()
+---@param mode IterSidebarMode
+---@return IterSidebar
+function M.open_review(config, root, on_change, mode)
+    local tab = vim.api.nvim_get_current_tabpage()
+    local existing = sidebars[tab]
+
+    if existing ~= nil and existing:is_open() then
+        existing.mode = mode
+        existing:attach_keys()
+        existing:render()
+
+        return existing
+    end
+
+    local current = vim.api.nvim_get_current_win()
+
+    sidebars[tab] = create(config, root, on_change, mode)
+
+    if util.is_valid_win(current) then
+        vim.api.nvim_set_current_win(current)
+    end
+
+    return sidebars[tab]
+end
+
+--- The open sidebar of tabpage `tab`.
+---@param tab integer
+---@return IterSidebar?
+function M.of(tab)
+    local sidebar = sidebars[tab]
+
+    return sidebar ~= nil and sidebar:is_open() and sidebar or nil
+end
+
 --- Draw every open sidebar again, in every tab.
 function M.refresh_all()
     for _, sidebar in pairs(sidebars) do
@@ -764,7 +934,7 @@ function M.refresh_all()
 end
 
 --- Open the sidebar, focus it when it is open elsewhere in the tab, close it
---- when the cursor is in it.
+--- when the cursor is in it, unless it serves a review.
 ---@param config IterConfig
 ---@param on_change fun()
 function M.toggle(config, on_change)
@@ -773,6 +943,7 @@ function M.toggle(config, on_change)
     if
         current ~= nil
         and current:is_open()
+        and current.mode == nil
         and vim.api.nvim_get_current_win() == current.win
     then
         current:close()

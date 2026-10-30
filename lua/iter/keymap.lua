@@ -85,6 +85,7 @@ local ACTIONS = {
         { 'yank_all', 'Copy all annotations' },
         { 'delete', 'Delete the annotation' },
         { 'edit', 'Edit the annotation' },
+        { 'focus_drawer', 'Focus the review drawer' },
         { 'close', 'Close' },
         { 'help', 'Show the keys' },
     },

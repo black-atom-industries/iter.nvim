@@ -25,6 +25,7 @@
 ---@class IterAnnotateOptions
 ---@field side? 'left'|'right' Side of the window the sidebar opens on
 ---@field width? integer Columns of the sidebar, 10 or more
+---@field review_breakpoint? integer Tab width from which the review shows the sidebar in place of the drawer's Annotations column; 0 = always
 
 ---@class IterRefreshOptions
 ---@field poll_ms? integer
@@ -57,7 +58,7 @@
 ---@field drawer { height: number, zindex: integer, breakpoint: integer, wide_breakpoint: integer, commits: integer }
 ---@field diff { expand_step: integer, syntax_max_lines: integer, word_diff: boolean, layout: IterLayoutOption, split_breakpoint: integer, wrap: boolean, args: string[] }
 ---@field export { intro: string }
----@field annotate { side: 'left'|'right', width: integer }
+---@field annotate { side: 'left'|'right', width: integer, review_breakpoint: integer }
 ---@field refresh { poll_ms: integer }
 ---@field confirm { discard: boolean, ignore: boolean }
 ---@field icons { annotation: string }

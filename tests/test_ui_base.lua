@@ -263,6 +263,7 @@ T['open'][':Iter review main lists the changes since main in one column'] = func
 end
 
 T['open']['from the wide breakpoint the column sits beside Annotations'] = function()
+    setup([[{ annotate = { review_breakpoint = 1000 } }]])
     child.o.columns = 180
     open_review('Iter review main')
     wait_diff('base a.txt')
@@ -569,6 +570,7 @@ T['picker']['b opens over the drawer, q goes back without a change'] = function(
 end
 
 T['picker']['b in the Annotations column opens over the whole drawer'] = function()
+    setup([[{ annotate = { review_breakpoint = 1000 } }]])
     child.o.columns = 200
     open_review()
     child.type_keys('l')

@@ -35,7 +35,10 @@ T['resolve()']['returns the defaults without options'] = function()
         resolved.options.export.intro,
         'I reviewed your changes and have these annotations.\nPlease address them.'
     )
-    eq(resolved.options.annotate, { side = 'right', width = 40 })
+    eq(
+        resolved.options.annotate,
+        { side = 'right', width = 40, review_breakpoint = 160 }
+    )
     eq(resolved.options.refresh.poll_ms, 2000)
     eq(resolved.options.confirm.discard, true)
     eq(resolved.options.icons, { annotation = '󰆉' })
@@ -53,6 +56,7 @@ T['resolve()']['returns the defaults without options'] = function()
         yank_all = { 'Y' },
         delete = { 'd' },
         edit = { 'e' },
+        focus_drawer = { '<C-j>' },
         close = { 'q' },
         help = { '?' },
     })
@@ -182,6 +186,16 @@ T['resolve() errors']['on an annotate side other than left or right'] = function
     end, "opts%.annotate%.side must be 'left' or 'right'")
 end
 
+T['resolve() errors']['on a negative or fractional annotate.review_breakpoint'] = function()
+    expect_error(function()
+        config.resolve({ annotate = { review_breakpoint = -1 } })
+    end, 'opts%.annotate%.review_breakpoint must be 0 or more')
+
+    expect_error(function()
+        config.resolve({ annotate = { review_breakpoint = 160.5 } })
+    end, 'opts%.annotate%.review_breakpoint: expected integer')
+end
+
 T['resolve() errors']['on an annotate width below 10 or fractional'] = function()
     expect_error(function()
         config.resolve({ annotate = { width = 9 } })
@@ -198,7 +212,10 @@ T['resolve()']['accepts an annotate side, width and keys'] = function()
         keys = { annotate = { delete = 'x', help = false } },
     })
 
-    eq(resolved.options.annotate, { side = 'left', width = 30 })
+    eq(
+        resolved.options.annotate,
+        { side = 'left', width = 30, review_breakpoint = 160 }
+    )
     eq(resolved.keys.annotate.delete, { 'x' })
     eq(resolved.keys.annotate.help, {})
 end

@@ -398,6 +398,9 @@ T['split']['closing the review leaves no window or buffer behind'] = function()
 end
 
 T['split']['resizing keeps the panes the same width'] = function()
+    child.lua(
+        [[require('iter').setup({ annotate = { review_breakpoint = 1000 } })]]
+    )
     open_review()
     split()
 
@@ -877,7 +880,10 @@ local function resize_to(columns, layout)
 end
 
 T['drawer']['diff.layout auto follows the width of the diff'] = function()
-    child.lua([[require('iter').setup({ diff = { layout = 'auto' } })]])
+    child.lua([[require('iter').setup({
+        diff = { layout = 'auto' },
+        annotate = { review_breakpoint = 1000 },
+    })]])
     open_review()
 
     eq(child.lua_get(R .. [[.drawer.view.layout]]), 'unified')
@@ -891,7 +897,10 @@ T['drawer']['diff.layout auto follows the width of the diff'] = function()
 end
 
 T['drawer']['under diff.layout auto, - holds until a resize crosses'] = function()
-    child.lua([[require('iter').setup({ diff = { layout = 'auto' } })]])
+    child.lua([[require('iter').setup({
+        diff = { layout = 'auto' },
+        annotate = { review_breakpoint = 1000 },
+    })]])
     child.o.columns = 160
     open_review()
     helpers.wait_until(child, R .. [[.drawer.view.layout == 'split']])

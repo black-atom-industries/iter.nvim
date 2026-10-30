@@ -29,6 +29,7 @@ M.options = {
     annotate = {
         side = 'right',
         width = 40,
+        review_breakpoint = 160,
     },
     refresh = {
         poll_ms = 2000,
@@ -125,6 +126,7 @@ M.keys = {
         yank_all = 'Y',
         delete = 'd',
         edit = 'e',
+        focus_drawer = '<C-j>',
         close = 'q',
         help = '?',
     },

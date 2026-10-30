@@ -169,6 +169,14 @@ the review straight to an agent pane.
   from the stored one, and is the same for the drawer and the sidebar. Without a base the text has no such line.
 - The annotation sidebar (`iter.ui.sidebar`) is a vertical split at the tab's edge, one per tabpage. Every sidebar
   redraws through `refresh_annotations` and the store watcher.
+- In the review tab from `annotate.review_breakpoint` tab columns (`vim.o.columns`, never the drawer's width, which the
+  sidebar narrows) the sidebar replaces the drawer's Annotations column, through an `IterSidebarMode`: the review's
+  file order, `M` on its files, the reviewed progress under the title, previews in the diff pane on cursor moves,
+  `<CR>` into the diff, `<C-j>` back to the drawer, `q` closing the review. `l` past the drawer's last column enters it
+  (`drawer_past_last`). `Review:place_annotations` switches on `VimResized` and `TabEnter` and carries the selected
+  annotation across; closing the sidebar's window brings the column back.
+- An annotation of a file the review doesn't list previews that file at `HEAD` (the worktree file when `HEAD` lacks
+  it) as a `commit`-side document of context rows, read-only: staging, annotating and reviewed marks refuse there.
 - `iter.annotations.statuscolumn` backs `require('iter').statuscolumn()`: a wrapped row of an annotated line draws the
   sign's bar in the sign column. It reads the sign extmarks of the buffer marks once per render and text change, never
   the store per row. iter never sets the global 'statuscolumn'; its own windows set a window-local one.

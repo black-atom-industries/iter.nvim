@@ -603,21 +603,58 @@ T['preview']['a deleted line shows on the side of its base'] = function()
     eq(diff_cursor(), mark_lnum('Why remove it?'))
 end
 
-T['preview']['a review annotation and a file outside the changes keep the pane'] = function()
+T['preview']['a file outside the changes shows at HEAD with its annotation'] = function()
+    open_column()
+    down(6)
+    eq(selected(), 'Not in the changes')
+    wait_focus('Not in the changes')
+
+    local file = child.lua_get(R .. [[.drawer.view.files[1] ]])
+
+    eq({ file.path, file.side, file.base }, { 'c.txt', 'commit', 'HEAD' })
+    eq(
+        child.lua_get(
+            'vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf('
+                .. R
+                .. '.diff_win), 1, 3, false)'
+        ),
+        { 'c1', 'c2' }
+    )
+    eq(diff_cursor(), mark_lnum('Not in the changes'))
+    helpers.expect_screenshot(child, 'review-annotation-outside')
+end
+
+T['preview']['the file outside the changes takes no annotations'] = function()
+    child.lua([[
+        _G.notes = {}
+        vim.notify = function(msg) table.insert(_G.notes, msg) end
+    ]])
+    open_column()
+    down(6)
+    wait_focus('Not in the changes')
+    child.lua('vim.api.nvim_set_current_win(' .. R .. '.diff_win)')
+    child.type_keys('a')
+
+    eq(
+        child.lua_get('_G.notes'),
+        { '[iter] The file has no changes in this review' }
+    )
+end
+
+T['preview']['a review annotation keeps the pane'] = function()
     open_column()
     down(3)
     wait_focus('Extract a helper\nfor these lines')
 
-    down(3)
-    eq(selected(), 'Not in the changes')
-    child.lua('vim.wait(150)')
-    eq(child.lua_get(R .. [[.drawer.view.files[1].path]]), 'm.txt')
-    eq(child.lua_get(R .. '.drawer.view.focus'), vim.NIL)
-
-    down(1)
+    down(4)
     eq(selected(), 'Overall looks good')
     child.lua('vim.wait(150)')
-    eq(child.lua_get(R .. [[.drawer.view.files[1].path]]), 'm.txt')
+
+    local shown = child.lua_get(R .. [[.drawer.view.files[1].path]])
+
+    child.lua('vim.wait(150)')
+    eq(child.lua_get(R .. [[.drawer.view.files[1].path]]), shown)
+    eq(child.lua_get(R .. '.drawer.view.focus'), vim.NIL)
     eq(child.lua_get(R .. '.drawer.view:is_shown()'), true)
 end
 

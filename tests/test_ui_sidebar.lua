@@ -470,6 +470,88 @@ T['open']['screenshot'] = function()
     helpers.expect_screenshot(child, 'sidebar-open')
 end
 
+T['review mode'] = new_set()
+
+--- Open the sidebar for a review stub: `_G.moved` records what the cursor
+--- settles on, `_G.jumped` what `<CR>` hits, `<C-j>` sets `_G.back`.
+local function open_review_mode()
+    child.cmd('edit ch1.md')
+    child.lua([[
+        _G.moved, _G.jumped, _G.back = {}, {}, false
+        require('iter.ui.sidebar').open_review(
+            require('iter').config,
+            vim.fn.getcwd(),
+            function() end,
+            {
+                order = function() return { 'ch2.md' } end,
+                changed = function() return { ['ch2.md'] = true } end,
+                progress = function()
+                    return { reviewed = 0, changed = 0, total = 1 }
+                end,
+                on_cursor = function(item)
+                    table.insert(_G.moved, item and item.annotation.body or vim.NIL)
+                end,
+                jump = function(item)
+                    table.insert(_G.jumped, item.annotation.body)
+                end,
+                handlers = {
+                    focus_drawer = function() _G.back = true end,
+                },
+            }
+        )
+    ]])
+    helpers.wait_until(child, [[vim.fn.bufnr('iter://annotate/1') > 0]])
+end
+
+T['review mode']['opens without taking the focus, the review order first'] = function()
+    open_review_mode()
+
+    eq(where().name, 'ch1.md')
+
+    local lines = sidebar_lines()
+
+    eq(lines[2]:find('reviewed', 1, true) ~= nil, true)
+    eq(vim.startswith(lines[4], 'M ch2.md'), true)
+end
+
+T['review mode']['tells the review where the cursor settles and what <CR> hits'] = function()
+    open_review_mode()
+    child.api.nvim_set_current_win(sidebar_win())
+    goto_row('5')
+    helpers.wait_until(child, [[_G.moved[#_G.moved] == 'Stale remark']])
+    child.type_keys('<CR>')
+
+    eq(child.lua_get('_G.jumped'), { 'Stale remark' })
+end
+
+T['review mode']['<C-j> runs the mode handler, outside a review it is unmapped'] = function()
+    open_review_mode()
+    child.api.nvim_set_current_win(sidebar_win())
+    child.type_keys('<C-j>')
+
+    eq(child.lua_get('_G.back'), true)
+end
+
+T['review mode']['the command focuses it and never closes it'] = function()
+    open_review_mode()
+    child.cmd('Iter annotate')
+
+    eq(child.lua_get('vim.api.nvim_get_current_win()'), sidebar_win())
+
+    child.cmd('Iter annotate')
+
+    eq(child.lua_get('vim.api.nvim_get_current_win()'), sidebar_win())
+end
+
+T['open']['outside a review <C-j> is not mapped'] = function()
+    open_beside_chapter()
+
+    eq(
+        child.lua_get([[vim.fn.maparg('<C-j>', 'n', false, true).buffer]]),
+        vim.NIL
+    )
+end
+
 T['toggle'] = new_set()
 
 T['toggle']['a second command from the sidebar closes it'] = function()

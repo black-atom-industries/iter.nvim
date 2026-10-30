@@ -328,6 +328,15 @@ iter warns and opens nothing.
 
 In narrow windows all three stack, and `h` and `l` still step through them.
 
+From 160 tab columns (`annotate.review_breakpoint`) the annotations move out of
+the drawer into the annotation sidebar, beside the diff at full height, and the
+drawer keeps Unstaged and Staged. `l` past the last file column goes into the
+sidebar and `<C-j>` comes back. Moving through the sidebar previews each
+annotation in the diff as the Annotations column does, `<CR>` goes into the
+diff at it, and `q` closes the review. Files with changes carry an `M`, and the
+reviewed progress sits under the title. The layout switches as the window
+resizes, keeping the selected annotation.
+
 **Base.** `b` picks what the review compares with, in a list over the drawer
 (`/` searches it):
 
@@ -359,8 +368,9 @@ the base's branch is gone, or a remembered commit is no longer in the history of
    `:line`, `:first–last` or ` old` for a deleted line, and the start of the
    text. Outdated annotations are dimmed.
 
-`<CR>` on an annotation of a file without changes opens it in the tab the
-review came from. On a review annotation it opens the editor.
+An annotation of a file without changes shows that file at `HEAD` in the diff,
+read-only, with the annotation in place. `<CR>` on it opens the file in the
+tab the review came from. On a review annotation `<CR>` opens the editor.
 
 **Diff header.** The reviewed state, the stat and the number of annotations.
 
@@ -449,7 +459,8 @@ sidebar keeps the repository it opened in.
 - The key hints sit at the bottom.
 
 The command toggles: in another window it focuses the sidebar, in the sidebar
-it closes it, and `q` closes it too.
+it closes it, and `q` closes it too. In a wide review tab the sidebar belongs
+to the review (see [Review tab](#review-tab)), and the command only focuses it.
 
 On a row:
 
@@ -559,15 +570,16 @@ The diff pane (`diff`), in the review tab and above the status drawer:
 
 The annotation sidebar (`annotate`):
 
-| Key    | Action     | Does                        |
-| ------ | ---------- | --------------------------- |
-| `<CR>` | `jump`     | Jump to the annotation      |
-| `y`    | `yank`     | Copy the annotation or file |
-| `Y`    | `yank_all` | Copy all annotations        |
-| `d`    | `delete`   | Delete the annotation       |
-| `e`    | `edit`     | Edit the annotation         |
-| `q`    | `close`    | Close                       |
-| `?`    | `help`     | Show the keys               |
+| Key     | Action         | Does                                   |
+| ------- | -------------- | -------------------------------------- |
+| `<CR>`  | `jump`         | Jump to the annotation                 |
+| `y`     | `yank`         | Copy the annotation or file            |
+| `Y`     | `yank_all`     | Copy all annotations                   |
+| `d`     | `delete`       | Delete the annotation                  |
+| `e`     | `edit`         | Edit the annotation                    |
+| `<C-j>` | `focus_drawer` | Focus the review drawer, in the review |
+| `q`     | `close`        | Close                                  |
+| `?`     | `help`         | Show the keys                          |
 
 The annotation float (`annotation`):
 
@@ -630,6 +642,7 @@ require('iter').setup({
     annotate = {
         side = 'right',   -- tab edge the sidebar opens on: 'left' or 'right'
         width = 40,       -- sidebar columns, 10 or more
+        review_breakpoint = 160, -- tab columns from which the review shows the sidebar, 0 = always
     },
     refresh = {
         poll_ms = 2000,   -- poll interval while a drawer or the sidebar is open

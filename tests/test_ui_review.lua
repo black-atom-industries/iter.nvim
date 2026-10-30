@@ -2368,6 +2368,7 @@ local function drawer_line_with(title)
 end
 
 T['files']['from the wide breakpoint Unstaged and Staged sit side by side'] = function()
+    setup([[{ annotate = { review_breakpoint = 1000 } }]])
     child.o.columns = 180
     open_review()
     wait_diff('unstaged a.txt')
@@ -2391,6 +2392,7 @@ T['files']['from the wide breakpoint Unstaged and Staged sit side by side'] = fu
 end
 
 T['files']['in the wide layout h and l step through Unstaged, Staged and Annotations'] = function()
+    setup([[{ annotate = { review_breakpoint = 1000 } }]])
     child.o.columns = 180
     open_review()
     wait_diff('unstaged a.txt')
@@ -2411,7 +2413,10 @@ T['files']['in the wide layout h and l step through Unstaged, Staged and Annotat
 end
 
 T['files']['drawer.wide_breakpoint sets where the file columns go side by side'] = function()
-    setup([[{ drawer = { wide_breakpoint = 200 } }]])
+    setup([[{
+        drawer = { wide_breakpoint = 200 },
+        annotate = { review_breakpoint = 1000 },
+    }]])
     child.o.columns = 180
     open_review()
     wait_diff('unstaged a.txt')

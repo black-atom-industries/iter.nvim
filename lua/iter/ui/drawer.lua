@@ -29,6 +29,7 @@ local watch = require('iter.watch')
 ---@field drawer_handlers fun(self, drawer: IterDrawer, handlers: table<string, fun()>) changes the drawer actions in place
 ---@field drawer_collapsed fun(self, drawer: IterDrawer, item: IterChange): boolean in all-files mode, whether the file shows its header row alone
 ---@field drawer_base fun(self, drawer: IterDrawer, root: string): IterChangesBase? on every status read, what the files compare with; nil for working changes
+---@field drawer_past_last? fun(self, drawer: IterDrawer) `column_right` on the last column
 
 ---@class IterDrawerOpenOptions
 ---@field pane integer window the float is anchored to
@@ -884,6 +885,7 @@ function Drawer:render()
         self.context == 'review'
         and self.layout == 'columns'
         and self.side_buf ~= nil
+        and #self.extra > 0
     then
         side = layout.split(columns, width)
         built = side.left
@@ -1313,6 +1315,10 @@ function Drawer:step_column(dir)
         end
 
         index = index + dir
+    end
+
+    if dir > 0 and self.extras ~= nil and self.extras.drawer_past_last then
+        self.extras:drawer_past_last(self)
     end
 end
 
