@@ -84,6 +84,21 @@ T['ranges()']['merges changes separated only by whitespace'] = function()
     eq(covered(new, add), { 'x or y' })
 end
 
+T['ranges()']['marks nothing when only the indentation changed'] = function()
+    local del, add = words.ranges('  <Select.Root>', '    <Select.Root>')
+
+    eq(del, {})
+    eq(add, {})
+end
+
+T['ranges()']['leaves a changed indentation out of a word change'] = function()
+    local old, new = '  value={value}', '    value={preset}'
+    local del, add = words.ranges(old, new)
+
+    eq(covered(old, del), { 'value' })
+    eq(covered(new, add), { 'preset' })
+end
+
 T['ranges()']['keeps changes apart across unchanged code'] = function()
     local old, new = 'f(a, b)', 'f(x, y)'
     local del, add = words.ranges(old, new)

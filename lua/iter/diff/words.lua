@@ -38,20 +38,37 @@ local function tokenize(text)
 end
 
 --- Byte ranges of tokens `first` to `first + count - 1`, merged with the
---- range before when only whitespace sits between them.
+--- range before when only whitespace sits between them. Whitespace at either
+--- end of the run is left out, so a change in indentation alone marks nothing.
 ---@param ranges integer[][]
 ---@param text string
 ---@param tokens IterWordTokens
 ---@param first integer
 ---@param count integer
----@return integer changed bytes
+---@return integer changed bytes, whitespace included
 local function push_range(ranges, text, tokens, first, count)
     if count == 0 then
         return 0
     end
 
-    local col = tokens.starts[first]
     local last = first + count - 1
+    local changed = tokens.starts[last]
+        + #tokens.texts[last]
+        - tokens.starts[first]
+
+    while first <= last and tokens.texts[first]:match('^%s+$') do
+        first = first + 1
+    end
+
+    while last >= first and tokens.texts[last]:match('^%s+$') do
+        last = last - 1
+    end
+
+    if first > last then
+        return changed
+    end
+
+    local col = tokens.starts[first]
     local end_col = tokens.starts[last] + #tokens.texts[last]
     local prev = ranges[#ranges]
 
@@ -61,7 +78,7 @@ local function push_range(ranges, text, tokens, first, count)
         table.insert(ranges, { col, end_col })
     end
 
-    return end_col - col
+    return changed
 end
 
 --- Changed byte ranges of `old` and `new`, or nothing when a line is too
