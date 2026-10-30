@@ -1,5 +1,118 @@
 # Changelog
 
+## [0.6.0](https://github.com/black-atom-industries/iter.nvim/compare/v0.5.0...v0.6.0) (2026-10-30)
+
+### Highlights
+
+#### Review a branch or a pull request
+
+The review can now compare the files on disk with a base instead of the index, so work that is already committed shows up
+too. Check out the branch of a pull request and press `b` in the review drawer: the first row is the merge base with the
+branch it was created from, which is what the pull request shows. Working changes, the other branches and the last 20
+commits follow, each commit with its date, author and message. `:Iter review main` opens against a ref directly.
+
+Against a base the drawer has one column, `Since main`, and staging doesn't apply. Reviewed marks belong to the base they
+were made against, annotations are shared, the copied prompt names the base, and iter remembers the base per branch. The
+picker opens over the drawer whichever picker plugin you use.
+
+![b in the review drawer opens the base picker with the merge base with main first, then branches and commits; picking the merge base switches the drawer to Since main](https://raw.githubusercontent.com/black-atom-industries/iter.nvim/v0.6.0/docs/assets/changelog/0.6.0-base-picker.webp)
+
+#### Browse commits with `:Iter commits`
+
+`:Iter commits` lists the branch's last 100 commits. Moving through them shows a summary above: the message, author, date
+and the changed files with their counts. `<CR>` opens the files of a commit, or of a range selected with `V`, one diff at
+a time. `q` goes back to the list, and `r` starts a review from the oldest selected commit.
+
+![:Iter commits shows a summary of each commit above the list; V selects two commits, Enter lists their files one diff at a time, q goes back and r opens the review](https://raw.githubusercontent.com/black-atom-industries/iter.nvim/v0.6.0/docs/assets/changelog/0.6.0-commits.webp)
+
+#### Annotate the exact words
+
+A charwise `v` selection annotates just the selected words. The annotation follows them when the text around them changes
+and turns outdated when they are gone. Annotated text is tinted in buffers and in the diff (`IterAnnotationText`), and the
+export names a passage as `file:line:col` with only its words quoted.
+
+![In the review diff, v selects hear when it is ready, a annotates it, and the words stay tinted in the diff and in the README buffer](https://raw.githubusercontent.com/black-atom-industries/iter.nvim/v0.6.0/docs/assets/changelog/0.6.0-passages.webp)
+
+#### Every annotation in a sidebar
+
+`:Iter annotate` toggles a sidebar at the edge of the tab with every annotation of the repository, grouped by file, whether
+the file has changes or not. `<CR>` jumps to the annotation, and `y`, `Y`, `d` and `e` work as in the review.
+`require('iter').clear()` drops every annotation at once.
+
+![:Iter annotate opens the sidebar with three annotations in two files; Enter on the teas.lua annotation jumps to its line](https://raw.githubusercontent.com/black-atom-industries/iter.nvim/v0.6.0/docs/assets/changelog/0.6.0-sidebar.webp)
+
+#### Copy one annotation or all of them
+
+`y` in the review drawer and the diff pane copies the annotation under the cursor, or a file's annotations on a file row.
+`Y` copies all of them. iter then asks about clearing only what was copied.
+
+#### Wrap long lines
+
+`gw` toggles wrapping in the unified diff, and `diff.wrap` sets how a session starts.
+
+#### Important fixes
+
+- The drawer stays opaque under a global `winblend` and under a colorscheme with a transparent `Normal`.
+- Side-by-side panes stay aligned under `scrolloff`.
+- Word emphasis leaves the whitespace at the edges of a change unmarked, so a changed indent alone marks nothing.
+
+#### Upgrading from 0.5
+
+`mode` moves to `=`, so `m` is free again:
+
+```diff
+- m   toggle one file or all files
++ =   toggle one file or all files
+```
+
+Deleting an annotation moves from `x` to `d`, and `y` copies the annotation under the cursor instead of all of them:
+
+```diff
+- x   delete the annotation
++ d   delete the annotation
+- y   copy all annotations
++ y   copy the annotation or file under the cursor
++ Y   copy all annotations
+```
+
+To keep the old keys, set them in `keys`, as in `keys.drawer.mode = 'm'`.
+
+
+
+### ⚠ BREAKING CHANGES
+
+* **review:** `y` in the review drawer and the diff pane copies the annotation or file under the cursor; `Y` copies all. Deleting an annotation moves from `x` to `d`.
+* the default key of `mode` is `=`, it was `m`. Set `keys.drawer.mode`, `keys.review_drawer.mode` and `keys.diff.mode` to 'm' to keep it.
+
+### Features
+
+* = toggles one file or all files ([cecdcd6](https://github.com/black-atom-industries/iter.nvim/commit/cecdcd6c6b834dd43b2572a4b3d6627dc978cb3e))
+* **annotations:** annotate passages and tint annotated text ([dc23283](https://github.com/black-atom-industries/iter.nvim/commit/dc23283d40ccf04b1b902a41f946abdcdceda4d5)), closes [#35](https://github.com/black-atom-industries/iter.nvim/issues/35)
+* **annotations:** clear every annotation with iter.clear() ([f3ab205](https://github.com/black-atom-industries/iter.nvim/commit/f3ab205e9b7b0181fa389891ef71f67f039ac7f8))
+* **annotations:** list every annotation in a sidebar with :Iter annotate ([502e25c](https://github.com/black-atom-industries/iter.nvim/commit/502e25ce387492cdea05c50801d34828b5aba57c)), closes [#35](https://github.com/black-atom-industries/iter.nvim/issues/35)
+* **commits:** browse commits with :Iter commits ([5725be8](https://github.com/black-atom-industries/iter.nvim/commit/5725be88491800372b13ce4b86117c5d55233a68))
+* **diff:** gw wraps long lines in the unified layout ([2afa271](https://github.com/black-atom-industries/iter.nvim/commit/2afa271a159c46126368ec44c46111cd86b9117d))
+* **review:** colour the commit rows of the base picker ([a81bde4](https://github.com/black-atom-industries/iter.nvim/commit/a81bde4982b9bf3eacda9ac63f23c00ae537cfe3))
+* **review:** pick the base in a list over the drawer ([1b42f32](https://github.com/black-atom-industries/iter.nvim/commit/1b42f32e18a58cd7da0724ed35ccd0cfff2ba09b))
+* **review:** review committed work against a picked base ([8bd7aa8](https://github.com/black-atom-industries/iter.nvim/commit/8bd7aa8bbb76f27ed7dadb3b241daac2440c9cbf))
+* **review:** y copies one annotation or a file's, Y copies all ([85c5172](https://github.com/black-atom-industries/iter.nvim/commit/85c5172f2a7a2430f224c445f00c3ac339bcfa39)), closes [#35](https://github.com/black-atom-industries/iter.nvim/issues/35)
+
+
+### Bug Fixes
+
+* **diff:** leave whitespace at the edges out of word emphasis ([bc92256](https://github.com/black-atom-industries/iter.nvim/commit/bc922565a5d93fb973a0de9a919dc10715e94dae))
+* **diff:** side-by-side panes stay aligned under scrolloff ([7f4abe9](https://github.com/black-atom-industries/iter.nvim/commit/7f4abe902e56e3dee6b604d22999cac0e8dfe289))
+* **drawer:** keep the drawer opaque under a global winblend ([ebc8878](https://github.com/black-atom-industries/iter.nvim/commit/ebc88786ed7a25c90fe34a94e5d12a647df14473))
+* **highlight:** keep the drawer opaque under a transparent Normal ([bda719d](https://github.com/black-atom-industries/iter.nvim/commit/bda719d0a5a4b843b8b2ff9e3305f3a4a95698ee))
+
+
+### Documentation
+
+* give launching from the shell its own section ([01942df](https://github.com/black-atom-industries/iter.nvim/commit/01942df4b90fb556580b2380bc68c4fb9caf6f3c))
+* link mini.git in the README ([1c55c76](https://github.com/black-atom-industries/iter.nvim/commit/1c55c767e070d3adc2928eb3b87f72486e599246))
+* note that launching from the shell needs iter loaded at startup ([4cd64c0](https://github.com/black-atom-industries/iter.nvim/commit/4cd64c0d53badb2b779775d6c7906e0fbaa25abc))
+* open the review straight from the shell ([e6c669f](https://github.com/black-atom-industries/iter.nvim/commit/e6c669f4f3ab7b998406117249a469252c846107))
+
 ## [0.5.0](https://github.com/black-atom-industries/iter.nvim/compare/v0.4.0...v0.5.0) (2026-10-21)
 
 ### Highlights
