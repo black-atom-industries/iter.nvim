@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/black-atom-industries/iter.nvim/compare/v0.6.0...v0.7.0) (2026-10-30)
+
+
+### Features
+
+* **review:** the annotation sidebar beside the diff on wide screens ([b24bd9c](https://github.com/black-atom-industries/iter.nvim/commit/b24bd9c1c8ecdd29094dce21338223d0cbc42d68)), closes [#37](https://github.com/black-atom-industries/iter.nvim/issues/37)
+
 ## [0.6.0](https://github.com/black-atom-industries/iter.nvim/compare/v0.5.0...v0.6.0) (2026-10-30)
 
 ### Highlights
