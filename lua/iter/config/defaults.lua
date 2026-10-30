@@ -137,6 +137,10 @@ M.keys = {
     help = {
         close = { 'q', '?', '<Esc>' },
     },
+    picker = {
+        pick = '<CR>',
+        close = { 'q', '<Esc>' },
+    },
 }
 
 return M

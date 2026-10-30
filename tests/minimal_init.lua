@@ -33,6 +33,9 @@ vim.env.GIT_COMMITTER_NAME = 'Iter Test'
 vim.env.GIT_COMMITTER_EMAIL = 'iter@example.test'
 vim.env.GIT_AUTHOR_DATE = '2026-01-01T00:00:00Z'
 vim.env.GIT_COMMITTER_DATE = '2026-01-01T00:00:00Z'
+-- Local times, such as the base picker's commit dates, render the same
+-- everywhere.
+vim.env.TZ = 'UTC'
 
 -- With a UI attached this file is being sourced by a person, whose session
 -- owns its own mini.test setup; only headless runs set it up here.

@@ -97,6 +97,10 @@ local ACTIONS = {
     help = {
         { 'close', 'Close' },
     },
+    picker = {
+        { 'pick', 'Pick the item' },
+        { 'close', 'Close without picking' },
+    },
 }
 
 --- Every action of `view`, in help order.

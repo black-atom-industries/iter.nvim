@@ -8,6 +8,7 @@ local help = require('iter.ui.help')
 local layout = require('iter.ui.layout')
 local list = require('iter.annotations.list')
 local patch = require('iter.diff.patch')
+local picker = require('iter.ui.picker')
 local store = require('iter.store')
 local uri = require('iter.uri')
 local util = require('iter.util')
@@ -35,6 +36,7 @@ local reviewed = require('iter.reviewed')
 ---@field expanded table<string, true> per path, reviewed files shown whole in all-files mode
 ---@field fresh? boolean read the store on the next load whatever its stat says
 ---@field help? IterHelp help float of the diff pane
+---@field picker? IterPicker the base picker over the drawer
 ---@field preview_target? { id: string, file: IterChange } the annotation the Annotations column showed last and the file it showed it in
 ---@field base_spec? IterBaseSpec what the review compares with, nil for working changes; resolved on every status read
 ---@field base_branch? string the branch `base_spec` belongs to, nil on a detached HEAD
@@ -68,6 +70,9 @@ local ANNOTATIONS = 'annotations'
 
 -- Recent commits the base picker offers.
 local PICKER_COMMITS = 20
+-- Display cells of the author column in the base picker; longer names are
+-- cut.
+local PICKER_AUTHOR_WIDTH = 20
 
 -- Actions the key hint line shows in the Annotations column.
 local ANNOTATION_HINTS = {
@@ -738,26 +743,37 @@ end
 ---@field spec? IterBaseSpec nil for working changes
 ---@field commit? string abbreviated sha of a commit, resolved when picked
 
---- Pick what the review compares with through `vim.ui.select`: the parent
---- branch when there is one, working changes, the other branches, then the
---- recent commits. A picked commit is part of the review.
+--- Pick what the review compares with in a list over the drawer: the merge
+--- base with the parent branch when there is one, working changes, the
+--- other branches, then the recent commits. Without a parent, as on the
+--- default branch, the merge base with the upstream follows working changes.
+--- A picked commit is part of the review.
 function Review:pick_base()
     local root = self.drawer.changes.root
     local head = git.head_branch(root)
     local parent = git.parent_branch(root)
+    local recent = git.recent(root, PICKER_COMMITS)
+    local merge = parent or (recent and recent.upstream)
     ---@type IterBaseChoice[]
     local choices = { { label = 'Working changes' } }
 
-    -- `vim.ui.select` presets its first item.
-    if parent ~= nil then
-        table.insert(choices, 1, {
-            label = parent .. ' (parent)',
-            spec = { kind = 'branch', ref = parent },
+    if merge ~= nil then
+        local spec = { kind = 'branch', ref = merge }
+        local sha = git.resolve_base(root, spec)
+        local label = 'Merge base with ' .. merge
+
+        -- The picker selects its first item: the parent's merge base, else
+        -- working changes.
+        table.insert(choices, parent and 1 or 2, {
+            label = sha and (label .. ' (' .. sha:sub(1, 7) .. ')') or label,
+            spec = spec,
         })
     end
 
+    local presets = #choices
+
     for _, branch in ipairs(git.branches(root) or {}) do
-        if branch ~= parent and branch ~= head then
+        if branch ~= merge and branch ~= head then
             table.insert(choices, {
                 label = branch,
                 spec = { kind = 'branch', ref = branch },
@@ -765,40 +781,76 @@ function Review:pick_base()
         end
     end
 
-    local recent = git.recent(root, PICKER_COMMITS)
+    local branches = #choices
 
-    for _, commit in ipairs(recent and recent.commits or {}) do
+    local commits = recent and recent.commits or {}
+    local author_width = 0
+
+    for _, commit in ipairs(commits) do
+        author_width =
+            math.max(author_width, vim.fn.strdisplaywidth(commit.author))
+    end
+
+    author_width = math.min(author_width, PICKER_AUTHOR_WIDTH)
+
+    for _, commit in ipairs(commits) do
         table.insert(choices, {
-            label = commit.sha .. ' ' .. commit.subject,
+            label = table.concat({
+                commit.sha,
+                os.date('%Y-%m-%d %H:%M', commit.time) --[[@as string]],
+                layout.fit(commit.author, author_width),
+                commit.subject,
+            }, '  '),
             commit = commit.sha,
         })
     end
 
-    vim.ui.select(choices, {
-        prompt = 'Review since',
-        format_item = function(choice)
+    ---@type table<integer, string>
+    local sections = {}
+
+    if branches > presets then
+        sections[presets + 1] = 'Branches'
+    end
+
+    if #choices > branches then
+        sections[branches + 1] = 'Commits'
+    end
+
+    self.picker = picker.open({
+        over = self.drawer.float,
+        title = 'Review since',
+        items = vim.tbl_map(function(choice)
             return choice.label
+        end, choices),
+        sections = sections,
+        keys = self.drawer.config.keys.picker,
+        on_close = function()
+            if not self.closed and self.drawer:is_open() then
+                vim.api.nvim_set_current_win(self.drawer:selection_win())
+            end
         end,
-    }, function(choice)
-        if choice == nil or self.closed then
-            return
-        end
-
-        local spec = choice.spec
-
-        if choice.commit ~= nil then
-            local sha, err = git.commit_sha(root, choice.commit)
-
-            if sha == nil then
-                util.error(err, 'Unknown commit ' .. choice.commit)
+        on_pick = function(index)
+            if self.closed then
                 return
             end
 
-            spec = { kind = 'commit', sha = sha }
-        end
+            local choice = choices[index]
+            local spec = choice.spec
 
-        self:set_base(spec)
-    end)
+            if choice.commit ~= nil then
+                local sha, err = git.commit_sha(root, choice.commit)
+
+                if sha == nil then
+                    util.error(err, 'Unknown commit ' .. choice.commit)
+                    return
+                end
+
+                spec = { kind = 'commit', sha = sha }
+            end
+
+            self:set_base(spec)
+        end,
+    })
 end
 
 --- The Annotations column: the reviewed progress, then every annotation in
@@ -1669,6 +1721,10 @@ function Review:close()
 
     if self.help ~= nil then
         self.help:close()
+    end
+
+    if self.picker ~= nil then
+        self.picker:close()
     end
 
     local current = vim.api.nvim_get_current_tabpage() == self.tab

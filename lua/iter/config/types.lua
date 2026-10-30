@@ -38,7 +38,7 @@
 
 ---@alias IterLayoutOption 'unified'|'split'|'auto'
 
----@alias IterView 'drawer'|'review_drawer'|'diff'|'annotate'|'annotation'|'help'
+---@alias IterView 'drawer'|'review_drawer'|'diff'|'annotate'|'annotation'|'help'|'picker'
 
 ---@alias IterKeyValue string|string[]|false
 

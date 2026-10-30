@@ -233,6 +233,7 @@ T['recent()']['without an upstream: commits, no markers, no counts'] = function(
     eq({ recent.ahead, recent.behind }, { 0, 0 })
     eq(rows(recent), { '  second', '  initial' })
     eq(recent.commits[1].time, 1767225600)
+    eq(recent.commits[1].author, 'Iter Test')
     eq(#recent.commits[1].sha >= 7, true)
 end
 

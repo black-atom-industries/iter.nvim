@@ -803,6 +803,7 @@ end
 ---@field sha string abbreviated
 ---@field subject string
 ---@field time integer committer date, seconds since the epoch
+---@field author string the author's name
 ---@field unpushed boolean not on the upstream
 
 ---@class GitRecent where HEAD stands against its upstream
@@ -895,7 +896,7 @@ function git.recent(root, count, prev)
         '--no-color',
         '--no-show-signature',
         '--max-count=' .. count,
-        '--format=%H%x1f%h%x1f%ct%x1f%s',
+        '--format=%H%x1f%h%x1f%ct%x1f%an%x1f%s',
         head,
         '--',
     }, { cwd = root, ignore_error = true })
@@ -903,11 +904,12 @@ function git.recent(root, count, prev)
     for _, line in ipairs(split_output(commits.output)) do
         local fields = vim.split(line, SEP, { plain = true })
 
-        if #fields >= 4 then
+        if #fields >= 5 then
             table.insert(recent.commits, {
                 sha = fields[2],
-                subject = table.concat(fields, SEP, 4),
+                subject = table.concat(fields, SEP, 5),
                 time = tonumber(fields[3]) or 0,
+                author = fields[4],
                 unpushed = unpushed[fields[1]] == true,
             })
         end

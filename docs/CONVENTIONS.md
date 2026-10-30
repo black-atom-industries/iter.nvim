@@ -35,7 +35,9 @@ the review straight to an agent pane.
   that ref still exists, else the candidate (local branches and the remote default branch) whose merge-base with HEAD is
   the fewest commits back. Branches that contain HEAD don't count, and ties go to the default branch, then to a local
   branch over a remote one. The default branch is the target of `origin/HEAD`, else `main`, else `master`. On the default
-  branch there is no parent, and the picker presets working changes.
+  branch there is no parent: the picker presets working changes and offers the merge base with the upstream after it.
+- The base picker (`iter.ui.picker`) titles its Branches and Commits with `virt_lines`, so a buffer line is an item's
+  index.
 - Against a base the drawer has one file column beside Annotations: one diff per file, the changes from
   `git.base_changes` (`git diff -M --name-status` against the resolved sha plus the untracked files of the status read
   the poll already made). Stage, unstage,
@@ -112,8 +114,9 @@ the review straight to an agent pane.
   (`reviewed.base_key`). Empty buckets are pruned.
 - Discard never touches the index or ignored files: an unstaged row restores from the index, an untracked row deletes
   only its untracked files, and the confirm names the paths. The Staged column has no discard.
-- The drawer float sits at the bottom of its pane (`relative = 'win'`, `anchor = 'SW'`) at `drawer.zindex`; the help
-  float uses `drawer.zindex + 10`, the annotation float `+ 20`. Every float follows editor and window resizes through
+- The drawer float sits at the bottom of its pane (`relative = 'win'`, `anchor = 'SW'`) at `drawer.zindex`; the base
+  picker `drawer.zindex + 5`, over the drawer's footprint with its chrome, so it shows there whatever picker plugin
+  is installed; the help float uses `drawer.zindex + 10`, the annotation float `+ 20`. Every float follows editor and window resizes through
   `iter.ui.float`: the drawer through `float.open`, the help and annotation floats through `float.follow_resize`. In the
   review tab the drawer covers a spacer split of its own height, so it never hides the diff.
 - In the status drawer the pane above shows the diff view in place of its buffer. The view saves the window-local

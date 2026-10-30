@@ -164,27 +164,42 @@ local function cursor_on(text)
     )
 end
 
---- Stub `vim.ui.select` to record its items and pick the one whose label
---- starts with `pick`.
----@param pick string
-local function stub_select(pick)
-    child.lua(
-        [[
-        local pick = ...
-        _G.choices = nil
-        vim.ui.select = function(items, opts, on_choice)
-            _G.choices = vim.tbl_map(opts.format_item, items)
-            _G.prompt = opts.prompt
-            for _, item in ipairs(items) do
-                if vim.startswith(opts.format_item(item), pick) then
-                    return on_choice(item)
-                end
-            end
-            on_choice(nil)
-        end
-    ]],
-        { pick }
+--- The lines of the open base picker, without their leading column.
+---@return string[]
+local function picker_items()
+    helpers.wait_until(
+        child,
+        R .. '.picker ~= nil and ' .. R .. '.picker:is_open()'
     )
+
+    return vim.tbl_map(
+        function(line)
+            return line:sub(2)
+        end,
+        child.api.nvim_buf_get_lines(
+            child.lua_get(R .. '.picker.buf'),
+            0,
+            -1,
+            false
+        )
+    )
+end
+
+--- Open the base picker with `b` and pick the item whose label starts with
+--- `label`.
+---@param label string
+local function pick(label)
+    child.type_keys('b')
+
+    for index, item in ipairs(picker_items()) do
+        if vim.startswith(item, label) then
+            child.api.nvim_win_set_cursor(0, { index, 0 })
+            child.type_keys('<CR>')
+            return
+        end
+    end
+
+    error('no picker item ' .. label)
 end
 
 --- The stored base of the review's branch.
@@ -457,28 +472,149 @@ end
 T['picker'] = new_set()
 
 T['picker']['b offers the parent first, working changes, branches and commits'] = function()
-    stub_select('nothing')
     open_review()
     child.type_keys('b')
 
+    local items = picker_items()
     local edit = rev({ 'rev-parse', '--short', 'feat' })
     local add = rev({ 'rev-parse', '--short', 'feat~1' })
     local initial = rev({ 'rev-parse', '--short', 'feat~2' })
 
-    eq(child.lua_get('_G.prompt'), 'Review since')
-    eq(child.lua_get('_G.choices'), {
-        'main (parent)',
+    eq(
+        child
+            .lua_get('vim.wo[' .. R .. '.picker.float.win].winbar')
+            :gsub('%%#[%w]+#', ''),
+        '%* Review since'
+    )
+    eq(items, {
+        'Merge base with main (' .. initial .. ')',
         'Working changes',
-        edit .. ' edit a',
-        add .. ' add c',
-        initial .. ' initial',
+        edit .. '  2026-01-01 00:00  Iter Test  edit a',
+        add .. '  2026-01-01 00:00  Iter Test  add c',
+        initial .. '  2026-01-01 00:00  Iter Test  initial',
     })
 end
 
-T['picker']['a picked branch shows and is remembered for the branch'] = function()
-    stub_select('main (parent)')
+--- The section titles of the open base picker, by the item they sit above.
+---@return table<integer, string>
+local function picker_sections()
+    return child.lua_get([[(function()
+        local buf = require('iter').current_review.picker.buf
+        local ns = vim.api.nvim_get_namespaces()['iter.picker.sections']
+        local titles = {}
+        for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
+            titles[tostring(mark[2] + 1)] = vim.trim(mark[4].virt_lines[#mark[4].virt_lines][1][1])
+        end
+        return titles
+    end)()]])
+end
+
+T['picker']['sections title the branches and the commits'] = function()
+    helpers.git(repo, { 'branch', 'other', 'main' })
     open_review()
     child.type_keys('b')
+
+    eq(picker_items()[3], 'other')
+    eq(picker_sections(), { ['3'] = 'Branches', ['4'] = 'Commits' })
+end
+
+T['picker']['on the default branch the upstream merge base follows working changes'] = function()
+    helpers.git(repo, { 'switch', '--quiet', 'main' })
+    helpers.create_remote(repo)
+    helpers.write_file(vim.fs.joinpath(repo, 'main.txt'), { 'main changed' })
+    helpers.git(repo, { 'commit', '--quiet', '-am', 'unpushed' })
+
+    local pushed = rev({ 'rev-parse', '--short', 'origin/main' })
+
+    open_review()
+    child.type_keys('b')
+
+    local items = picker_items()
+
+    eq(items[1], 'Working changes')
+    eq(items[2], 'Merge base with origin/main (' .. pushed .. ')')
+    eq(vim.tbl_contains(items, 'main'), false)
+
+    pick('Merge base with origin/main')
+    helpers.wait_until(child, R .. '.drawer.changes.since ~= nil')
+    eq(file_columns()[1].title, 'Since origin/main')
+    eq(file_columns()[1].items, { 'M b.txt', '? d.txt', 'M main.txt' })
+end
+
+T['picker']['b opens over the drawer, q goes back without a change'] = function()
+    open_review()
+    child.type_keys('b')
+    picker_items()
+
+    local drawer =
+        child.lua_get('vim.api.nvim_win_get_position(' .. R .. '.drawer.win)')
+    local win = child.lua_get(R .. '.picker.float.win')
+
+    eq(child.api.nvim_get_current_win(), win)
+    eq(child.api.nvim_win_get_position(win), drawer)
+    eq(
+        child.api.nvim_win_get_width(win),
+        child.lua_get('vim.api.nvim_win_get_width(' .. R .. '.drawer.win)')
+    )
+    helpers.expect_screenshot(child, 'base-picker')
+
+    child.type_keys('q')
+
+    eq(child.lua_get(R .. '.picker:is_open()'), false)
+    eq(
+        child.api.nvim_get_current_win(),
+        child.lua_get(R .. '.drawer:selection_win()')
+    )
+    eq(file_columns()[1].title, 'Unstaged')
+end
+
+T['picker']['b in the Annotations column opens over the whole drawer'] = function()
+    child.o.columns = 200
+    open_review()
+    child.type_keys('l')
+    helpers.wait_until(
+        child,
+        'vim.api.nvim_get_current_win() == ' .. R .. '.drawer.float.side_win'
+    )
+    child.type_keys('b')
+    picker_items()
+
+    eq(
+        child.api.nvim_win_get_position(child.lua_get(R .. '.picker.float.win')),
+        child.lua_get('vim.api.nvim_win_get_position(' .. R .. '.drawer.win)')
+    )
+
+    child.type_keys('<Esc>')
+
+    eq(
+        child.api.nvim_get_current_win(),
+        child.lua_get(R .. '.drawer.float.side_win')
+    )
+end
+
+T['picker']['a refresh keeps the picker open and focused'] = function()
+    setup([[{ refresh = { poll_ms = 100 } }]])
+    open_review()
+    child.type_keys('b')
+    picker_items()
+
+    local win = child.lua_get(R .. '.picker.float.win')
+
+    helpers.write_file(vim.fs.joinpath(repo, 'e.txt'), { 'new' })
+    helpers.wait_until(
+        child,
+        'vim.iter('
+            .. R
+            .. '.drawer:files()):any(function(f) return f.path == "e.txt" end)'
+    )
+
+    eq(child.lua_get(R .. '.picker:is_open()'), true)
+    eq(child.api.nvim_get_current_win(), win)
+end
+
+T['picker']['a picked branch shows and is remembered for the branch'] = function()
+    open_review()
+    pick('Merge base with main')
 
     helpers.wait_until(child, R .. '.drawer.changes.since ~= nil')
     eq(file_columns()[1].title, 'Since main')
@@ -489,8 +625,7 @@ T['picker']['a picked branch shows and is remembered for the branch'] = function
 
     eq(file_columns()[1].title, 'Since main')
 
-    stub_select('Working changes')
-    child.type_keys('b')
+    pick('Working changes')
 
     helpers.wait_until(child, R .. '.drawer.changes.since == nil')
     eq(file_columns()[1].title, 'Unstaged')
@@ -500,9 +635,8 @@ end
 T['picker']['a picked commit is part of the review'] = function()
     local edit = rev({ 'rev-parse', 'feat' })
 
-    stub_select(edit:sub(1, 7))
     open_review()
-    child.type_keys('b')
+    pick(edit:sub(1, 7))
 
     helpers.wait_until(child, R .. '.drawer.changes.since ~= nil')
     eq(file_columns(), {
@@ -520,9 +654,8 @@ end
 
 T['picker']['on a detached HEAD a pick applies to the open review only'] = function()
     helpers.git(repo, { 'switch', '--quiet', '--detach' })
-    stub_select('main')
     open_review()
-    child.type_keys('b')
+    pick('Merge base with main')
 
     helpers.wait_until(child, R .. '.drawer.changes.since ~= nil')
     eq(file_columns()[1].title, 'Since main')
@@ -579,12 +712,11 @@ local function mark(side, path)
 end
 
 --- Switch the review's base through `b` to the picker item starting with
---- `pick`.
----@param pick string
+--- `label`.
+---@param label string
 ---@param since boolean whether the review compares with a base afterwards
-local function switch(pick, since)
-    stub_select(pick)
-    child.type_keys('b')
+local function switch(label, since)
+    pick(label)
     helpers.wait_until(
         child,
         R .. '.drawer.changes.since ' .. (since and '~=' or '==') .. ' nil'
@@ -596,7 +728,7 @@ T['reviewed']['a mark in working changes does not show since main'] = function()
     mark('unstaged', 'b.txt')
     eq(row_line('unstaged', 'b.txt'):find('✓', 1, true) ~= nil, true)
 
-    switch('main (parent)', true)
+    switch('Merge base with main', true)
     eq(child.lua_get(R .. '.reviewed["b.txt"]'), 'unreviewed')
     eq(row_line('base', 'b.txt'):find('○', 1, true) ~= nil, true)
 
@@ -619,7 +751,7 @@ T['reviewed']['a mark since main does not show in working changes'] = function()
         { 'branch:main' }
     )
 
-    switch('main (parent)', true)
+    switch('Merge base with main', true)
     eq(child.lua_get(R .. '.reviewed["b.txt"]'), 'reviewed')
 end
 
@@ -865,9 +997,8 @@ end
 T['annotations']['a deleted line from a picked commit keeps its parent and sits on its del row'] = function()
     local edit = rev({ 'rev-parse', 'feat' })
 
-    stub_select(edit:sub(1, 7))
     open_review()
-    child.type_keys('b')
+    pick(edit:sub(1, 7))
     helpers.wait_until(child, R .. '.drawer.changes.since ~= nil')
     wait_diff('base a.txt')
     cursor_on('a3')

@@ -327,13 +327,17 @@ iter warns and opens nothing.
 
 In narrow windows all three stack, and `h` and `l` still step through them.
 
-**Base.** `b` picks what the review compares with, through `vim.ui.select`:
+**Base.** `b` picks what the review compares with, in a list over the drawer
+(`/` searches it):
 
-1. The parent branch, the branch this one was created from, when it can be
-   told. On the default branch the list starts with Working changes.
+1. The merge base with the parent branch, the branch this one was created
+   from, when it can be told: what a pull request shows. On the default branch
+   the list starts with Working changes, then the merge base with the upstream,
+   which shows what isn't pushed yet.
 2. Working changes, the index and worktree as in the status drawer.
 3. Local, then remote branches. A branch means its merge-base with `HEAD`.
-4. The last 20 commits. A commit means its parent, so the commit is included.
+4. The last 20 commits, each with its date, time and author. A commit means
+   its parent, so the commit is included.
 
 The header names the base when it fits: `· since main (a1b2c3d)` for a branch
 and its merge-base, `· since v1.0 (a1b2c3d)` for a typed ref and its commit,
@@ -550,6 +554,13 @@ The annotation float (`annotation`):
 | `q`     | `close`  | Close a saved annotation                                         |
 
 The help float (`help`) closes on `q`, `?` and `<Esc>`.
+
+The base picker (`picker`):
+
+| Key         | Action  | Does                  |
+| ----------- | ------- | --------------------- |
+| `<CR>`      | `pick`  | Pick the item         |
+| `q` `<Esc>` | `close` | Close without picking |
 
 ### Configuration
 
