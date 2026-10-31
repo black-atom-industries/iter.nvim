@@ -10,7 +10,7 @@
 ---@field height? number Fraction of the pane height, in (0, 1]
 ---@field zindex? integer
 ---@field breakpoint? integer Drawer width below which the columns stack
----@field commits? integer Recent commits the status drawer lists, 0 hides them
+---@field commits? integer Recent commits the status lists, drawer and sidebar alike, 0 hides them
 
 ---@class IterReviewOptions
 ---@field tree_width? integer Columns of the review's file tree, 10 or more

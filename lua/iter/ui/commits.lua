@@ -31,6 +31,7 @@ local selection_ns = vim.api.nvim_create_namespace('iter.commits.selection')
 
 ---@class IterCommitsOpenOptions
 ---@field config IterConfig
+---@field sha? string a commit to enter: the list's cursor on it and its files shown
 ---@field on_close? fun(commits: IterCommits)
 
 ---@class IterCommitsRange the commits a preview or review covers
@@ -92,6 +93,7 @@ end
 function M.open(opts)
     vim.validate('opts', opts, 'table')
     vim.validate('opts.config', opts.config, 'table')
+    vim.validate('opts.sha', opts.sha, 'string', true)
     vim.validate('opts.on_close', opts.on_close, 'function', true)
 
     local root = git.root()
@@ -170,9 +172,56 @@ function M.open(opts)
     self:attach()
     self.panel:show(self.list)
     self.panel:focus()
-    self:preview()
+
+    if opts.sha ~= nil then
+        self:enter(opts.sha)
+    else
+        self:preview()
+    end
 
     return self
+end
+
+--- The summary of the commits from `oldest` to `newest`, the same commit
+--- for one: each commit's whole message, then the files with the lines
+--- added and deleted. Nil with an error when git can't read them.
+---@param root string
+---@param oldest GitCommit
+---@param newest GitCommit
+---@return IterRenderLine[]? lines
+---@return string? err
+function M.summary(root, oldest, newest)
+    local label = oldest.full_sha == newest.full_sha and newest.sha
+        or (oldest.sha .. '..' .. newest.sha)
+
+    ---@param err? string
+    ---@param fallback string
+    ---@return nil, string
+    local function failed(err, fallback)
+        return nil, (err ~= nil and err ~= '') and err or fallback
+    end
+
+    local base, err = git.parent_of(root, oldest.full_sha)
+
+    if base == nil then
+        return failed(err, 'Cannot read the parent of ' .. oldest.sha)
+    end
+
+    local messages
+    messages, err = git.messages(root, oldest.full_sha, newest.full_sha)
+
+    if messages == nil then
+        return failed(err, 'Cannot read the messages of ' .. label)
+    end
+
+    local stats
+    stats, err = git.stats(root, base, newest.full_sha)
+
+    if stats == nil then
+        return failed(err, 'Cannot read the changes of ' .. label)
+    end
+
+    return layout.commit_summary(messages, stats)
 end
 
 --- The commit list page: a title, the selection, a commit per line, and
@@ -480,24 +529,13 @@ function Commits:show_summary(range)
         return
     end
 
-    local messages
-    messages, err =
-        git.messages(self.root, range.oldest.full_sha, range.newest.full_sha)
+    local lines
+    lines, err = M.summary(self.root, range.oldest, range.newest)
 
-    if messages == nil then
-        util.error(err, 'Cannot read the messages of ' .. range_label(range))
+    if lines == nil then
+        util.error(err)
         return
     end
-
-    local stats
-    stats, err = git.stats(self.root, base, range.newest.full_sha)
-
-    if stats == nil then
-        util.error(err, 'Cannot read the changes of ' .. range_label(range))
-        return
-    end
-
-    local lines = layout.commit_summary(messages, stats)
 
     vim.bo[self.buf].modifiable = true
     vim.api.nvim_buf_set_lines(self.buf, 0, -1, false, render.text_lines(lines))
@@ -611,6 +649,33 @@ function Commits:open_files()
         self.files:line_of(tree.files(self.files.root)[1].path) or 1
     )
     self.quiet = false
+    self:preview()
+end
+
+--- Show the files of the commit `sha`, a full or short sha, with the
+--- list's cursor on it; warn and show the list when it isn't among the
+--- commits the list shows.
+---@param sha string
+function Commits:enter(sha)
+    if self.files ~= nil then
+        self:back()
+    end
+
+    for index, commit in ipairs(self.commits) do
+        if vim.startswith(commit.full_sha, sha) then
+            self.panel:set_cursor(LIST_TOP + index)
+            self:open_files()
+            return
+        end
+    end
+
+    util.warn(
+        string.format(
+            '%s is not among the last %d commits',
+            sha:sub(1, 7),
+            COMMITS
+        )
+    )
     self:preview()
 end
 

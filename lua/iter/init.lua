@@ -124,9 +124,13 @@ function M.open_status()
 end
 
 --- Open the commits tab, or switch to it when it is open. An open status
---- drawer closes first.
-function M.commits()
+--- drawer closes first. `opts.sha`, a full or short sha, enters that
+--- commit: the list's cursor on it and its files shown.
+---@param opts? { sha?: string }
+function M.commits(opts)
     log.info('commits command called')
+
+    local sha = opts and opts.sha
 
     if require('iter.git').root() == '' then
         util.warn('Not inside a git repository')
@@ -135,6 +139,11 @@ function M.commits()
 
     if M.current_commits ~= nil and M.current_commits:is_open() then
         M.current_commits:focus()
+
+        if sha ~= nil then
+            M.current_commits:enter(sha)
+        end
+
         return
     end
 
@@ -144,6 +153,7 @@ function M.commits()
 
     M.current_commits = require('iter.ui.commits').open({
         config = M.config,
+        sha = sha,
         on_close = function(commits)
             if M.current_commits == commits then
                 M.current_commits = nil

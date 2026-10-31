@@ -151,7 +151,9 @@ the review straight to an agent pane.
   the cursor in the window it opened from. At open it saves that window's buffer and view and the tab's
   `winrestcmd()`; closing gives the window its buffer and view back, the view restores the options, and the tab gets
   its sizes back while its windows are the ones it had. Its line counts come from one `git diff --numstat HEAD` per
-  read.
+  read. The Recent commits are lines of the tree page, after the rows and above the hints (`review_tree`'s `footer`),
+  and the cursor stops on them; a commit under it shows its summary (`commits.summary`, `layout.commit_summary`) in
+  the window in the diff's place, with the options `tab.show_summary` sets.
 - The status drawer's lines come from `iter.ui.layout`: pure functions from a list of column specs and the width to
   render lines, side by side at `drawer.breakpoint` and wider, stacked below it; `h` and `l` step between the
   columns. The drawer and the review share the diff preview (`iter.ui.preview`: the view, the file it shows, all-files
@@ -170,12 +172,12 @@ the review straight to an agent pane.
 - iter's tabs, the review and the commits, carry their label in the tab variable `iter_label`; `iter.tabline` renders
   it for users who set 'tabline' to it.
 - The ahead and behind counts with the upstream's name, and the Recent commits section, show only in the status
-  drawer. They count against the upstream as last fetched; iter never fetches. A poll reads HEAD and the upstream with
+  drawer and the status sidebar. They count against the upstream as last fetched; iter never fetches. A poll reads HEAD and the upstream with
   one `git rev-parse`, and reads the counts (`rev-list --left-right`) and the commits (`log`) again only when either
   moved. Commit ages are computed at render from the committer date.
-- The Recent commits section is a second, non-focusable float (`IterFloat`'s strip) pinned between the file area and
-  the key hint line inside the drawer's footprint; only the file columns scroll. The float owns the strip and closes it
-  with itself.
+- In the drawer, the Recent commits section is a second, non-focusable float (`IterFloat`'s strip) pinned between
+  the file area and the key hint line inside the drawer's footprint; only the file columns scroll. The float owns the
+  strip and closes it with itself.
 - The status header keeps `HEAD <branch>` whole and sheds from the right when it doesn't fit: the summary shrinks to
   the total, then goes, then the upstream, then the arrows.
 - The export and the sidebar list annotations through `iter.annotations.list`: in the review files in tree order,

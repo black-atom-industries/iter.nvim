@@ -466,12 +466,45 @@ T['commits()']['without an upstream no markers and no counts'] = function()
     })
 end
 
+T['commits()']['in the panel: a bare title, the gutter, and ↑ by the age'] = function()
+    local result = layout.commits(recent('origin/main', 1, 2), 34, NOW, true)
+
+    eq(
+        vim.tbl_map(function(line)
+            return line.text
+        end, result.lines),
+        {
+            ' Recent commits',
+            '   3f2a9c1 refactor(drawer…  ↑ 2h ',
+            '   0aa4465 fix: keep           1d ',
+        }
+    )
+    eq(result.rows[2].commit.sha, '3f2a9c1')
+    eq(spans(result.lines[2], 'IterCommitSha'), { { 3, 10 } })
+    eq(spans(result.lines[2], 'IterUnpushed'), { { 31, 34 } })
+    eq(spans(result.lines[2], 'IterDrawerHint'), { { 35, 38 } })
+    eq(spans(result.lines[3], 'IterUnpushed'), {})
+end
+
 T['commits()']['empty without commits'] = function()
     local none = recent(nil, 0, 0)
     none.commits = {}
 
     eq(layout.commits(none, 40, NOW).lines, {})
     eq(layout.commits(nil, 40, NOW).lines, {})
+end
+
+T['commit_ages()'] = new_set()
+
+T['commit_ages()']['joins the ages of the commits'] = function()
+    local now = os.time()
+    local commits = recent(nil, 0, 0)
+
+    commits.commits[1].time = now - 2 * 3600
+    commits.commits[2].time = now - 86400
+
+    eq(layout.commit_ages(commits), '2h 1d')
+    eq(layout.commit_ages(nil), '')
 end
 
 T['status_head()'] = new_set()

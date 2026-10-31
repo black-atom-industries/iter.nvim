@@ -349,8 +349,20 @@ shows the unstaged and the staged section.
 **Diff.** `<CR>` on a code line opens the file at that line and closes the
 sidebar. `<C-j>` in the diff goes back to the sidebar.
 
-On a clean tree the sidebar says "Working tree clean" and the window keeps its
-buffer.
+**Recent commits.** The last commits (`drawer.commits`, `0` hides them) sit at
+the bottom above the key hints, each as its short sha, subject, `↑` when it
+isn't pushed, and its age. With more files than fit, they follow the rows and
+scroll with them.
+
+- A commit under the cursor shows its summary in the window: its whole message,
+  then the files it changed with the lines added and deleted.
+- `<CR>` on a commit closes the sidebar and opens the commits tab with that
+  commit entered, its files shown.
+- `r` on a commit closes the sidebar and opens the review from that commit.
+- `s`, `u`, `d` and `I` do nothing on a commit.
+
+On a clean tree the sidebar says "Working tree clean", the cursor starts on
+the newest commit, and the window keeps its buffer until the cursor moves.
 
 ### Review tab
 
@@ -718,7 +730,7 @@ require('iter').setup({
         height = 0.3,     -- fraction of the window height, drawer only
         zindex = 40,      -- float stacking order; help and annotation floats sit above it
         breakpoint = 80,  -- drawer width below which the columns stack, drawer only
-        commits = 3,      -- recent commits the status drawer lists, 0 hides them
+        commits = 3,      -- recent commits the status lists, 0 hides them
     },
     diff = {
         expand_step = 20,          -- hidden context lines shown per expand
@@ -788,6 +800,7 @@ iter.open_status()                   -- open the status, or focus it; never clos
 iter.review()                        -- same as :Iter review
 iter.review({ base = 'main' })       -- review against a branch or another ref
 iter.commits()                       -- same as :Iter commits
+iter.commits({ sha = 'a1b2c3d' })    -- the commits tab with that commit entered
 iter.annotate()                      -- annotate the cursor line or the visual range
 iter.annotate({ scope = 'file' })    -- annotate the current buffer's file
 iter.annotate({ scope = 'review' })  -- annotate the whole review

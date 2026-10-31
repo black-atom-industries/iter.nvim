@@ -411,24 +411,6 @@ function Drawer:load()
     return true
 end
 
---- The ages the Recent commits rows show now, joined.
----@param recent? GitRecent
----@return string
-local function commit_ages(recent)
-    if recent == nil then
-        return ''
-    end
-
-    local now = os.time()
-
-    return table.concat(
-        vim.tbl_map(function(commit)
-            return layout.age(now - commit.time)
-        end, recent.commits),
-        ' '
-    )
-end
-
 --- Replace the lines of `buf` with `lines` and their highlights, the
 --- selection mark cleared.
 ---@param buf integer
@@ -491,7 +473,7 @@ end
 function Drawer:render_section(width)
     local section = layout.commits(self.recent, width, os.time())
 
-    self.ages = commit_ages(self.recent)
+    self.ages = layout.commit_ages(self.recent)
 
     if #section.lines == 0 then
         return false
@@ -874,7 +856,7 @@ function Drawer:refresh(reason, target)
     if reason == 'poll' and same then
         if
             self.recent ~= before_recent
-            or commit_ages(self.recent) ~= self.ages
+            or layout.commit_ages(self.recent) ~= self.ages
         then
             self:render()
             self:restore_selection(mark)

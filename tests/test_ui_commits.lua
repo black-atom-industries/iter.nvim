@@ -331,6 +331,59 @@ T['commits']['? lists the keys'] = function()
     end
 end
 
+T['enter'] = new_set()
+
+T['enter']['iter.commits({ sha }) opens the tab on the commit and its files'] = function()
+    child.lua('require("iter").commits({ sha = ... })', { sha('HEAD~2') })
+
+    shown_file(sha('HEAD~3'), sha('HEAD~2'), 'a.txt')
+    eq(page(), {
+        ' Commits ‹ ' .. short('HEAD~2'),
+        ' edit a',
+        ' 1 file · +1 −1',
+        '',
+        '   M a.txt                     ±2',
+    })
+    eq(child.api.nvim_get_current_win(), panel_win())
+    helpers.expect_screenshot(child, 'commits-entered')
+
+    child.type_keys('q')
+
+    eq(child.api.nvim_win_get_cursor(panel_win()), { 5, 0 })
+end
+
+T['enter']['an open tab goes back to the list and enters the commit'] = function()
+    open_commits()
+    child.type_keys('<CR>')
+    shown_file(sha('HEAD~1'), sha('HEAD'), 'c.txt')
+    child.cmd('tabprevious')
+
+    child.lua('require("iter").commits({ sha = ... })', { short('HEAD~1') })
+
+    eq(child.lua_get(C .. '.tab == vim.api.nvim_get_current_tabpage()'), true)
+    shown_file(sha('HEAD~2'), sha('HEAD~1'), 'b.txt')
+    eq(page()[1], ' Commits ‹ ' .. short('HEAD~1'))
+end
+
+T['enter']['a commit not in the list warns and shows the list'] = function()
+    child.lua([[
+        _G.notes = {}
+        vim.notify = function(msg, level)
+            table.insert(_G.notes, { msg, level })
+        end
+    ]])
+    child.lua('require("iter").commits({ sha = ... })', { string.rep('0', 40) })
+    summary(sha('HEAD~1'), sha('HEAD'))
+
+    eq(child.lua_get(C .. '.files'), vim.NIL)
+    eq(child.lua_get('_G.notes'), {
+        {
+            '[iter] 0000000 is not among the last 100 commits',
+            vim.log.levels.WARN,
+        },
+    })
+end
+
 T['range'] = new_set()
 
 T['range']['V sums up the selected commits as one change'] = function()

@@ -139,6 +139,11 @@ end
 
 local function stub_ui()
     child.lua([[
+        -- The fixture commits are dated 2026-01-01T00:00:00Z; now is 2h later.
+        local time = os.time
+        os.time = function(date)
+            return date and time(date) or 1767232800
+        end
         _G.notes = {}
         vim.notify = function(msg, level)
             table.insert(_G.notes, { msg, level })
@@ -675,6 +680,187 @@ T['refresh']['a poll picks up a write from outside'] = function()
     helpers.wait_until(child, S .. ':file_at("polled.txt") ~= nil')
 
     eq(cursor_path(), 'a.txt')
+end
+
+T['commits'] = new_set()
+
+--- The panel's Recent commits and hint lines, every short sha as `sha`.
+---@return string[]
+local function commit_lines()
+    local lines = panel_lines()
+    local first = assert(vim.iter(ipairs(lines)):find(function(_, line)
+        return line == ' Recent commits'
+    end))
+
+    return vim.tbl_map(function(line)
+        return (line:gsub('%f[%w]%x%x%x%x%x%x%x+%f[%W]', 'sha'))
+    end, vim.list_slice(lines, first))
+end
+
+--- Put the cursor on the first commit, as `j` from the last file does.
+local function to_commit()
+    move_to('new.txt')
+    child.type_keys('j')
+end
+
+--- Wait until the pane shows the summary of a commit, and return its lines.
+---@return string[]
+local function wait_summary()
+    helpers.wait_until(
+        child,
+        'vim.api.nvim_win_get_buf(' .. S .. '.pane) == ' .. S .. '.summary_buf'
+    )
+
+    return child.api.nvim_buf_get_lines(
+        child.lua_get(S .. '.summary_buf'),
+        0,
+        -1,
+        false
+    )
+end
+
+T['commits']['the recent commits sit above the hints, ↑ on unpushed ones'] = function()
+    local remote = helpers.create_remote(repo)
+    helpers.git(repo, { 'commit', '--quiet', '--allow-empty', '-m', 'second' })
+
+    open_status()
+
+    eq(commit_lines(), {
+        ' Recent commits',
+        '   sha second            ↑ 2h',
+        '   sha initial             2h',
+        '',
+        ' s stage  u unstage  d discard',
+        ' <CR> open  r review  ? help',
+    })
+    helpers.expect_screenshot(child, 'status-sidebar-commits')
+    helpers.cleanup(remote)
+end
+
+T['commits']['a commit under the cursor shows its summary in the window'] = function()
+    open_status()
+    wait_preview({ 'unstaged dir/sub/d.txt' })
+    to_commit()
+
+    local lines = wait_summary()
+
+    eq(lines[3], ' initial')
+    eq(
+        child.api.nvim_buf_get_name(child.lua_get(S .. '.summary_buf')),
+        'iter://status#preview'
+    )
+    eq(child.lua_get(S .. '.tree:node()'), vim.NIL)
+    eq(child.lua_get(S .. '.tree:extra().subject'), 'initial')
+    helpers.expect_screenshot(child, 'status-sidebar-commit-summary')
+
+    child.type_keys('k')
+    wait_preview({ 'unstaged new.txt' })
+end
+
+T['commits']['q after a summary gives the window back its buffer and options'] = function()
+    child.cmd('edit long.txt')
+    set_pane_opts()
+    local buf = child.api.nvim_get_current_buf()
+
+    open_status()
+    to_commit()
+    wait_summary()
+    child.type_keys('k')
+    wait_preview({ 'unstaged new.txt' })
+    to_commit()
+    wait_summary()
+    child.type_keys('q')
+
+    eq(child.lua_get(S), vim.NIL)
+    eq(child.api.nvim_get_current_buf(), buf)
+    eq(pane_opts(), PANE_OPTS)
+    eq(#child.api.nvim_list_bufs(), 1)
+end
+
+T['commits']['s, u, d and I on a commit do nothing'] = function()
+    open_status()
+    to_commit()
+
+    local before = status()
+
+    child.type_keys('s', 'u', 'd', 'I')
+
+    eq(status(), before)
+    eq(child.lua_get('_G.notes'), {})
+    eq(child.lua_get('_G.confirms'), {})
+end
+
+T['commits']['<CR> on a commit opens the commits tab on its files'] = function()
+    open_status()
+    to_commit()
+    child.type_keys('<CR>')
+
+    local C = [[require('iter').current_commits]]
+
+    helpers.wait_until(
+        child,
+        C
+            .. ' ~= nil and '
+            .. C
+            .. '.files ~= nil and '
+            .. C
+            .. '.previewed ~= nil'
+    )
+    eq(child.lua_get(S), vim.NIL)
+    eq(
+        child.lua_get(C .. '.opened.head'),
+        vim.trim(helpers.git(repo, { 'rev-parse', 'HEAD' }))
+    )
+    eq(child.lua_get(C .. '.tab == vim.api.nvim_get_current_tabpage()'), true)
+end
+
+T['commits']['r on a commit opens the review from it'] = function()
+    open_status()
+    to_commit()
+    child.type_keys('r')
+
+    local R = [[require('iter').current_review]]
+
+    helpers.wait_until(
+        child,
+        R .. ' ~= nil and ' .. R .. '.changes.since ~= nil'
+    )
+    eq(child.lua_get(S), vim.NIL)
+    eq(child.lua_get([[require('iter.store').load(vim.fn.getcwd()).base]]), {
+        kind = 'commit',
+        sha = vim.trim(helpers.git(repo, { 'rev-parse', 'HEAD' })),
+    })
+end
+
+T['commits']['drawer.commits = 0 shows no commits'] = function()
+    configure('{ drawer = { commits = 0 } }')
+
+    open_status()
+
+    local lines = panel_lines()
+
+    eq(vim.tbl_contains(lines, ' Recent commits'), false)
+    eq(vim.list_slice(lines, #lines - 1), {
+        ' s stage  u unstage  d discard',
+        ' <CR> open  r review  ? help',
+    })
+end
+
+T['commits']['a clean tree puts the cursor on the newest commit'] = function()
+    helpers.git(repo, { 'add', '--all' })
+    helpers.git(repo, { 'commit', '--quiet', '-m', 'all' })
+    child.cmd('edit long.txt')
+    local buf = child.api.nvim_get_current_buf()
+
+    open_status()
+
+    eq(child.lua_get(S .. '.tree:extra().subject'), 'all')
+    child.lua('vim.wait(300)')
+    eq(child.api.nvim_win_get_buf(child.lua_get(S .. '.pane')), buf)
+
+    child.type_keys('j')
+
+    eq(wait_summary()[3], ' initial')
 end
 
 return T

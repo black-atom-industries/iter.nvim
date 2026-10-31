@@ -474,6 +474,25 @@ function M.age(seconds)
     return 'now'
 end
 
+--- The ages the Recent commits rows show now, joined, to tell when a
+--- render would change them.
+---@param recent? GitRecent
+---@return string
+function M.commit_ages(recent)
+    if recent == nil then
+        return ''
+    end
+
+    local now = os.time()
+
+    return table.concat(
+        vim.tbl_map(function(commit)
+            return M.age(now - commit.time)
+        end, recent.commits),
+        ' '
+    )
+end
+
 --- One row of a recent commit: with an upstream a `↑` slot, then the short
 --- sha, the subject cut with `…` to fit and the age at the right edge.
 --- A commit on the upstream is dimmed.
@@ -907,14 +926,47 @@ function M.status_head(branch, recent, width, summary, total)
         or head
 end
 
+--- A recent commit's row in the panel: the panel's 3-cell gutter, the
+--- short sha, the subject cut with `…` to fit, then `↑` when unpushed and
+--- the age at the right edge.
+---@param commit GitCommit
+---@param age string
+---@param width integer
+---@return IterRenderLine
+local function panel_commit_line(commit, age, width)
+    local line = render.line('')
+    local prefix = '   ' .. commit.sha .. ' '
+    local marker = commit.unpushed and '↑ ' or ''
+    local suffix = '  ' .. marker .. age .. ' '
+    local room = width
+        - vim.fn.strdisplaywidth(prefix)
+        - vim.fn.strdisplaywidth(suffix)
+    local subject = fit(commit.subject, math.max(room, 0))
+    local right = #prefix + #subject + 2
+
+    line.text = prefix .. subject .. suffix
+    render.add_highlight(line, 'IterCommitSha', 3, 3 + #commit.sha)
+
+    if commit.unpushed then
+        render.add_highlight(line, 'IterUnpushed', right, right + #'↑')
+    end
+
+    render.add_highlight(line, 'IterDrawerHint', right + #marker, #line.text)
+
+    return line
+end
+
 --- The Recent commits section, `width` cells wide: a title with
 --- `· ↑n unpushed` and `· ↓m behind` when not 0, then a row per commit,
---- each holding its commit as `commit`. Empty without commits.
+--- each holding its commit as `commit`. Empty without commits. With
+--- `panel`, the title is the bare `Recent commits` and the rows take the
+--- panel's shape (`panel_commit_line`).
 ---@param recent GitRecent?
 ---@param width integer
 ---@param now integer seconds since the epoch the ages count to
+---@param panel? boolean
 ---@return IterLayout
-function M.commits(recent, width, now)
+function M.commits(recent, width, now, panel)
     local result = { lines = {}, rows = {}, cells = {} }
 
     if recent == nil or #recent.commits == 0 then
@@ -923,7 +975,7 @@ function M.commits(recent, width, now)
 
     local parts = { { ' Recent commits', 'IterDrawerTitle' } }
 
-    if recent.ahead > 0 then
+    if not panel and recent.ahead > 0 then
         table.insert(parts, { ' · ', 'IterDrawerHint' })
         table.insert(
             parts,
@@ -931,7 +983,7 @@ function M.commits(recent, width, now)
         )
     end
 
-    if recent.behind > 0 then
+    if not panel and recent.behind > 0 then
         table.insert(parts, { ' · ', 'IterDrawerHint' })
         table.insert(
             parts,
@@ -951,14 +1003,12 @@ function M.commits(recent, width, now)
     local lines = { title }
 
     for _, commit in ipairs(recent.commits) do
+        local age = M.age(now - commit.time)
+
         table.insert(
             lines,
-            commit_line(
-                commit,
-                recent.upstream ~= nil,
-                M.age(now - commit.time),
-                width
-            )
+            panel and panel_commit_line(commit, age, width)
+                or commit_line(commit, recent.upstream ~= nil, age, width)
         )
     end
 
