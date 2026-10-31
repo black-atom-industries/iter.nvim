@@ -7,7 +7,7 @@ local child = MiniTest.new_child_neovim()
 ---@type string
 local repo
 
-local C = [[require('iter').commits_drawer]]
+local C = [[require('iter').current_commits]]
 local R = [[require('iter').current_review]]
 
 ---@param args string[]
@@ -49,7 +49,7 @@ local T = new_set({
     },
 })
 
---- Run `:Iter commits` and wait for the drawer and its first preview.
+--- Run `:Iter commits` and wait for the tab and its first preview.
 local function open_commits()
     child.cmd('Iter commits')
     helpers.wait_until(child, C .. ' ~= nil and ' .. C .. '.previewed ~= nil')
@@ -67,7 +67,7 @@ local function short(name)
     return rev({ 'rev-parse', '--short', name })
 end
 
---- The lines of the summary once it shows `base..head`.
+--- The lines of the summary once the main window shows `base..head`.
 ---@param base string
 ---@param head string
 ---@return string[]
@@ -78,17 +78,13 @@ local function summary(base, head)
     )
     eq(
         child.lua_get(
-            'vim.api.nvim_win_get_buf('
-                .. C
-                .. '.pane) == '
-                .. C
-                .. '.summary_buf'
+            'vim.api.nvim_win_get_buf(' .. C .. '.win) == ' .. C .. '.buf'
         ),
         true
     )
 
     return child.api.nvim_buf_get_lines(
-        child.lua_get(C .. '.summary_buf'),
+        child.lua_get(C .. '.buf'),
         0,
         -1,
         false
@@ -117,24 +113,35 @@ local function shown_file(base, head, path)
     )
 end
 
---- The drawer's lines, trimmed.
+--- The lines of the page the panel shows, without trailing blanks, up to
+--- the last non-blank line before the hints.
 ---@return string[]
-local function rows()
-    return vim.tbl_map(
-        vim.trim,
-        child.api.nvim_buf_get_lines(child.lua_get(C .. '.buf'), 0, -1, false)
+local function page()
+    local lines = child.lua_get(
+        'vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf('
+            .. C
+            .. '.panel.win), 0, -1, false)'
     )
+    local result = {}
+
+    for _, line in ipairs(lines) do
+        table.insert(result, (line:gsub('%s+$', '')))
+    end
+
+    while #result > 0 and result[#result] ~= '' do
+        table.remove(result)
+    end
+
+    while #result > 0 and result[#result] == '' do
+        table.remove(result)
+    end
+
+    return result
 end
 
---- The drawer's header without its highlight groups.
----@return string
-local function header()
-    return (
-        child
-            .lua_get('vim.wo[' .. C .. '.win].winbar')
-            :gsub('%%#[%w]+#', '')
-            :gsub('%%%*', '')
-    )
+---@return integer
+local function panel_win()
+    return child.lua_get(C .. '.panel.win')
 end
 
 local function empty_tree()
@@ -145,23 +152,25 @@ end
 
 T['commits'] = new_set()
 
-T['commits'][':Iter commits lists the commits newest first'] = function()
+T['commits'][':Iter commits opens a tab with the list and the summary'] = function()
     open_commits()
 
-    eq(
-        vim.tbl_map(function(line)
-            return line:sub(10)
-        end, rows()),
-        {
-            '2026-01-01 00:00  Iter Test  rename b  Move it to c.',
-            '2026-01-01 00:00  Iter Test  add b',
-            '2026-01-01 00:00  Iter Test  edit a',
-            '2026-01-01 00:00  Iter Test  initial',
-        }
-    )
-    eq(child.api.nvim_get_current_win(), child.lua_get(C .. '.win'))
+    eq(#child.api.nvim_list_tabpages(), 2)
+    eq(child.lua_get(C .. '.tab == vim.api.nvim_get_current_tabpage()'), true)
+    eq(child.t.iter_label, 'iter commits')
+    eq(#child.api.nvim_tabpage_list_wins(0), 2)
+    eq(child.api.nvim_get_current_win(), panel_win())
+    eq(page(), {
+        ' Commits main · last 4',
+        '',
+        '  ' .. short('HEAD') .. ' rename b',
+        '  ' .. short('HEAD~1') .. ' add b',
+        '  ' .. short('HEAD~2') .. ' edit a',
+        '  ' .. short('HEAD~3') .. ' initial',
+    })
+    eq(child.api.nvim_win_get_cursor(panel_win()), { 3, 0 })
     summary(sha('HEAD~1'), sha('HEAD'))
-    helpers.expect_screenshot(child, 'commits-drawer')
+    helpers.expect_screenshot(child, 'commits-list')
 end
 
 T['commits']['the summary shows the message and the files of the commit'] = function()
@@ -190,30 +199,119 @@ T['commits']['the summary shows the message and the files of the commit'] = func
     })
 end
 
-T['commits']['the root commit sums up its files as added'] = function()
+T['commits']['the cursor stays on the commits'] = function()
     open_commits()
+    child.type_keys('gg')
+
+    eq(child.api.nvim_win_get_cursor(panel_win()), { 3, 0 })
+
     child.type_keys('G')
+
+    eq(child.api.nvim_win_get_cursor(panel_win()), { 6, 0 })
 
     local lines = summary(empty_tree(), sha('HEAD~3'))
 
     eq(lines[#lines], ' +3 −0  a.txt')
 end
 
-T['commits']['q closes and gives the pane its buffer and options back'] = function()
+T['commits']['q closes the tab and goes back to the tab it came from'] = function()
     child.cmd('edit a.txt')
-    child.wo.number = true
 
     local buf = child.api.nvim_get_current_buf()
 
     open_commits()
-
-    eq(child.wo.number, false)
-
     child.type_keys('q')
 
     eq(child.lua_get(C), vim.NIL)
+    eq(#child.api.nvim_list_tabpages(), 1)
     eq(child.api.nvim_get_current_buf(), buf)
-    eq(child.wo.number, true)
+end
+
+T['commits']['closing the main window closes the tab'] = function()
+    open_commits()
+    child.lua('vim.api.nvim_win_close(' .. C .. '.win, true)')
+    helpers.wait_until(child, C .. ' == nil')
+
+    eq(#child.api.nvim_list_tabpages(), 1)
+end
+
+T['commits']['closing the list window closes the tab'] = function()
+    open_commits()
+    child.cmd('close')
+    helpers.wait_until(child, C .. ' == nil')
+
+    eq(#child.api.nvim_list_tabpages(), 1)
+end
+
+T['commits'][':edit of a file in the list window opens it in the tab it came from'] = function()
+    local origin = child.api.nvim_get_current_tabpage()
+
+    open_commits()
+    child.cmd('edit a.txt')
+    helpers.wait_until(
+        child,
+        'vim.api.nvim_get_current_tabpage() == ' .. origin
+    )
+
+    eq(vim.fs.basename(child.api.nvim_buf_get_name(0)), 'a.txt')
+    eq(child.lua_get(C .. ':is_open()'), true)
+    eq(
+        child.lua_get(
+            'vim.api.nvim_win_get_buf('
+                .. C
+                .. '.panel.win) == '
+                .. C
+                .. '.list.buf'
+        ),
+        true
+    )
+end
+
+T['commits'][':edit of a file in the main window opens it in the tab it came from'] = function()
+    local origin = child.api.nvim_get_current_tabpage()
+
+    open_commits()
+    child.lua('vim.api.nvim_set_current_win(' .. C .. '.win)')
+    child.cmd('edit a.txt')
+    helpers.wait_until(
+        child,
+        'vim.api.nvim_get_current_tabpage() == ' .. origin
+    )
+
+    eq(vim.fs.basename(child.api.nvim_buf_get_name(0)), 'a.txt')
+    summary(sha('HEAD~1'), sha('HEAD'))
+
+    child.cmd('Iter commits')
+    child.type_keys('<CR>')
+    shown_file(sha('HEAD~1'), sha('HEAD'), 'c.txt')
+    child.lua('vim.api.nvim_set_current_win(' .. C .. '.win)')
+    child.cmd('edit a.txt')
+    helpers.wait_until(
+        child,
+        'vim.api.nvim_get_current_tabpage() == ' .. origin
+    )
+
+    eq(child.lua_get(C .. '.view:is_shown()'), true)
+    eq(
+        child.lua_get(
+            'vim.api.nvim_win_get_buf('
+                .. C
+                .. '.panel.win) == '
+                .. C
+                .. '.files.buf'
+        ),
+        true
+    )
+end
+
+T['commits'][':Iter commits switches to the open tab'] = function()
+    open_commits()
+    child.cmd('tabprevious')
+    child.cmd('Iter commits')
+
+    eq(child.lua_get(C .. '.tab == vim.api.nvim_get_current_tabpage()'), true)
+    eq(child.api.nvim_get_current_win(), panel_win())
+    eq(#child.api.nvim_list_tabpages(), 2)
 end
 
 T['commits']['? lists the keys'] = function()
@@ -226,6 +324,7 @@ T['commits']['? lists the keys'] = function()
     for _, desc in ipairs({
         "Open the commit's files, the selection's, or go to the diff",
         'Review from the commit, or the oldest selected one',
+        "Close the directory, or the file's directory",
         'Back to the commits, or close',
     }) do
         eq({ desc, text:find(desc, 1, true) ~= nil }, { desc, true })
@@ -251,18 +350,24 @@ T['range']['V sums up the selected commits as one change'] = function()
         ' +1 −1  a.txt',
         ' +1 −0  b.txt',
     })
-    eq(header():find('2 selected', 1, true) ~= nil, true)
+    eq(
+        page()[2],
+        ' 2 selected · ' .. short('HEAD~2') .. '..' .. short('HEAD~1')
+    )
+    eq(child.fn.mode(), 'V')
+    eq(child.fn.line('v'), 4)
     helpers.expect_screenshot(child, 'commits-range')
 
     -- Visual mode ends with the cursor on the last row it moved to.
     child.type_keys('<Esc>')
 
     summary(sha('HEAD~3'), sha('HEAD~2'))
+    eq(page()[2], '')
 end
 
 T['files'] = new_set()
 
-T['files']['<CR> lists the files of the commit and shows the first'] = function()
+T['files']["<CR> shows the commit's files as a tree with line counts"] = function()
     open_commits()
     child.type_keys('jj')
     summary(sha('HEAD~3'), sha('HEAD~2'))
@@ -274,9 +379,16 @@ T['files']['<CR> lists the files of the commit and shows the first'] = function(
         old = { 'a1', 'a2', 'a3' },
         new = { 'a1', 'a2 new', 'a3' },
     })
-    eq(rows(), { 'M a.txt' })
-    eq(header(), ' ' .. short('HEAD~2') .. ' edit a · 1 file')
-    eq(child.api.nvim_get_current_win(), child.lua_get(C .. '.win'))
+    eq(page(), {
+        ' Commits ‹ ' .. short('HEAD~2'),
+        ' edit a',
+        ' 1 file · +1 −1',
+        '',
+        '  M a.txt                      ±2',
+    })
+    eq(child.api.nvim_get_current_win(), panel_win())
+    eq(child.lua_get('vim.wo[' .. C .. '.win].linebreak'), false)
+    eq(child.lua_get('vim.wo[' .. C .. '.win].wrap'), false)
     helpers.expect_screenshot(child, 'commits-files')
 end
 
@@ -288,15 +400,14 @@ T['files']['<CR> on a selection lists the files of its commits'] = function()
 
     eq(shown_file(base, head, 'a.txt').code, 'M')
     eq(child.fn.mode(), 'n')
-    eq(rows(), { 'M a.txt', 'A b.txt' })
-    eq(
-        header(),
-        ' 2 commits '
-            .. short('HEAD~2')
-            .. '..'
-            .. short('HEAD~1')
-            .. ' · 2 files'
-    )
+    eq(page(), {
+        ' Commits ‹ ' .. short('HEAD~2') .. '..' .. short('HEAD~1'),
+        ' 2 commits',
+        ' 2 files · +2 −1',
+        '',
+        '  M a.txt                      ±2',
+        '  A b.txt                      +1',
+    })
 
     child.type_keys('j')
 
@@ -314,7 +425,7 @@ T['files']['<CR> goes to the diff, <C-j> back, and it never stages'] = function(
     shown_file(sha('HEAD~1'), sha('HEAD'), 'c.txt')
     child.type_keys('<CR>')
 
-    eq(child.api.nvim_get_current_win(), child.lua_get(C .. '.view.win'))
+    eq(child.api.nvim_get_current_win(), child.lua_get(C .. '.win'))
 
     local maps = child.lua_get([[vim.tbl_map(function(m)
         return m.lhs
@@ -325,7 +436,7 @@ T['files']['<CR> goes to the diff, <C-j> back, and it never stages'] = function(
 
     child.type_keys('<C-j>')
 
-    eq(child.api.nvim_get_current_win(), child.lua_get(C .. '.win'))
+    eq(child.api.nvim_get_current_win(), panel_win())
 end
 
 T['files']['q goes back to the commit it opened, q again closes'] = function()
@@ -334,8 +445,9 @@ T['files']['q goes back to the commit it opened, q again closes'] = function()
     shown_file(sha('HEAD~2'), sha('HEAD~1'), 'b.txt')
     child.type_keys('q')
 
-    eq(child.lua_get(C .. '.level'), 'commits')
-    eq(child.api.nvim_win_get_cursor(child.lua_get(C .. '.win')), { 2, 0 })
+    eq(child.lua_get(C .. '.files'), vim.NIL)
+    eq(child.api.nvim_win_get_cursor(panel_win()), { 4, 0 })
+    eq(page()[1], ' Commits main · last 4')
     summary(sha('HEAD~2'), sha('HEAD~1'))
 
     child.type_keys('q')
@@ -343,21 +455,66 @@ T['files']['q goes back to the commit it opened, q again closes'] = function()
     eq(child.lua_get(C), vim.NIL)
 end
 
-T['files']['in the split layout the drawer covers both sides'] = function()
+T['files']['a long subject is cut by display cells'] = function()
+    helpers.write_file(vim.fs.joinpath(repo, 'a.txt'), { 'a1' })
+    helpers.git(repo, { 'commit', '--quiet', '-am', string.rep('漢字', 12) })
+
+    open_commits()
+    child.type_keys('<CR>')
+    shown_file(sha('HEAD~1'), sha('HEAD'), 'a.txt')
+
+    local subject = page()[2]
+
+    eq(vim.fn.strdisplaywidth(subject) <= 34, true)
+    eq(vim.endswith(subject, '…'), true)
+end
+
+T['files']['h and l close and open a directory'] = function()
+    helpers.write_file(vim.fs.joinpath(repo, 'd', 'e.txt'), { 'e1' })
+    helpers.write_file(vim.fs.joinpath(repo, 'd', 'f.txt'), { 'f1', 'f2' })
+    helpers.write_file(vim.fs.joinpath(repo, 'a.txt'), { 'a1' })
+    helpers.git(repo, { 'add', '--all' })
+    helpers.git(repo, { 'commit', '--quiet', '-m', 'add d' })
+
+    open_commits()
+    child.type_keys('<CR>')
+    shown_file(sha('HEAD~1'), sha('HEAD'), 'd/e.txt')
+
+    local rows = {
+        '  ▾ d/',
+        '    A e.txt                    +1',
+        '    A f.txt                    +2',
+        '  M a.txt                      −2',
+    }
+
+    eq(vim.list_slice(page(), 5), rows)
+
+    child.type_keys('h')
+
+    eq(vim.list_slice(page(), 5), {
+        '  ▸ d/',
+        '  M a.txt                      −2',
+    })
+
+    child.type_keys('l')
+
+    eq(vim.list_slice(page(), 5)[2], '    A e.txt                    +1')
+
+    child.type_keys('h', '<CR>')
+
+    eq(#page(), 8)
+end
+
+T['files']['in the split layout the tree stays at the left edge'] = function()
     open_commits()
     child.type_keys('<CR>')
     shown_file(sha('HEAD~1'), sha('HEAD'), 'c.txt')
     child.type_keys('|')
     helpers.wait_until(child, C .. '.view.old ~= nil')
-    helpers.wait_until(
-        child,
-        'vim.api.nvim_win_get_position(' .. C .. '.win)[2] == 0'
-    )
 
-    eq(
-        child.lua_get('vim.api.nvim_win_get_width(' .. C .. '.win)'),
-        child.o.columns
-    )
+    eq(child.api.nvim_win_get_position(panel_win())[2], 0)
+    eq(child.api.nvim_win_get_width(panel_win()), 34)
+    eq(#child.api.nvim_tabpage_list_wins(0), 3)
 end
 
 T['review'] = new_set()
@@ -397,6 +554,7 @@ T['review']['r reviews from the commit up to the worktree'] = function()
 
     eq(reviewed_base(), { kind = 'commit', sha = add })
     eq(child.lua_get(C), vim.NIL)
+    eq(#child.api.nvim_list_tabpages(), 2)
     eq(file_columns(), {
         { title = 'From ' .. add:sub(1, 7), items = { 'A c.txt' } },
     })

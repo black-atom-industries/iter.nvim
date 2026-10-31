@@ -1,7 +1,7 @@
 ---@class IterModule
 ---@field drawer IterDrawer? the open status drawer
 ---@field current_review IterReview? the open review tab
----@field commits_drawer IterCommits? the open commits drawer
+---@field current_commits IterCommits? the open commits tab
 ---@field did_setup boolean
 ---@field config IterConfig
 local M = {
@@ -77,7 +77,7 @@ function M.status()
     })
 end
 
---- Open the commits drawer, or focus it when it is open. An open status
+--- Open the commits tab, or switch to it when it is open. An open status
 --- drawer closes first.
 function M.commits()
     log.info('commits command called')
@@ -87,8 +87,8 @@ function M.commits()
         return
     end
 
-    if M.commits_drawer ~= nil and M.commits_drawer:is_open() then
-        M.commits_drawer:focus()
+    if M.current_commits ~= nil and M.current_commits:is_open() then
+        M.current_commits:focus()
         return
     end
 
@@ -96,12 +96,11 @@ function M.commits()
         M.drawer:close()
     end
 
-    M.commits_drawer = require('iter.ui.commits').open({
-        pane = target_pane(),
+    M.current_commits = require('iter.ui.commits').open({
         config = M.config,
         on_close = function(commits)
-            if M.commits_drawer == commits then
-                M.commits_drawer = nil
+            if M.current_commits == commits then
+                M.current_commits = nil
             end
         end,
     })

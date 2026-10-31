@@ -47,14 +47,17 @@ the review straight to an agent pane.
   resolved sha plus the untracked files of the status read the poll already made), one diff per file, without
   staging icons. Stage, unstage, discard and ignore refuse there, in the tree and in the diff. Working changes lists
   each path once, its staging state as an icon.
-- The commits drawer (`iter.ui.commits`) has two levels. The commits level lists the last 100 commits; the pane shows
-  a summary of the commit under the cursor or of a visual selection, read from two git calls (`git.messages`,
-  `git.stats`) and drawn by `layout.commit_summary` in a buffer of the drawer's, so moving through the list never reads
-  file contents. `<CR>` opens the files level: the files of the commit, or of the selection from the oldest's first
-  parent to the newest, as changes of side `commit` (`git.commit_changes`), the pane showing the selected file alone
-  with both versions from commits (`git.file_diff`). The diff loads no annotations or reviewed marks and has no
-  staging. `q` goes back a level. `r` opens the review with a `commit` base on the oldest selected or opened commit,
-  so the review's new side stays the worktree.
+- The commits tab (`iter.ui.commits`) is a tab of its own (`iter.ui.tab`, shared with the review) with the panel at
+  its left edge and a main window beside it; it has no annotations window. The panel shows two pages. The list shows
+  the last 100 commits as sha and subject; the main window shows a summary of the commit under the cursor or of a
+  visual selection, read from two git calls (`git.messages`, `git.stats`) and drawn by `layout.commit_summary`, so
+  moving through the list never reads file contents. `<CR>` shows the files page in the list's place: the files of
+  the commit, or of the selection from the oldest's first parent to the newest, as changes of side `commit`
+  (`git.commit_changes`) in a tree (`iter.ui.review_tree`) with each file's line count (`layout.line_count`), the
+  main window showing the selected file alone with both versions from commits (`git.file_diff`). The diff loads no
+  annotations or reviewed marks and has no staging. `q` goes back to the list, and there closes the tab. A file opened in either window with `:edit` opens in the tab the commits came from and the page, summary or diff comes back. `r` opens
+  the review with a `commit` base on the oldest selected or opened commit, so the review's new side stays the
+  worktree.
 - Diff flow: git's unified diff → `iter.diff.parser` (hunks) → `iter.diff.model` (rows: header, hunk, context, del,
   add, gap, each with old and new line numbers) → `iter.diff.view` (buffer lines and extmarks). Hunks always come from
   git's diff, so staging applies exactly what git produced. The full old and new file contents are fetched for syntax
@@ -154,11 +157,11 @@ the review straight to an agent pane.
   buffer back. Each of iter's buffers is registered with the windows it belongs in and a redraw: `:edit` in one of
   them redraws it, and one shown in another window goes back to that window's previous buffer and routes too.
   iter's buffers stay unlisted, and a window is never handed one of them back. Addresses route only while the open
-  drawer or review is of the current directory's repository. `util.name_buf` wipes another buffer of the new name
-  unless it is a loaded buffer of iter's own (then the name stays with it), and wipes the buffer of the old name that
-  `nvim_buf_set_name` leaves behind. `SessionLoadPost` wipes `iter://` buffers that aren't iter's own.
-- The review tab carries its label in the tab variable `iter_label`; `iter.tabline` renders it for users who set
-  'tabline' to it.
+  drawer, review or commits tab is of the current directory's repository. `util.name_buf` wipes another buffer of the
+  new name unless it is a loaded buffer of iter's own (then the name stays with it), and wipes the buffer of the old
+  name that `nvim_buf_set_name` leaves behind. `SessionLoadPost` wipes `iter://` buffers that aren't iter's own.
+- iter's tabs, the review and the commits, carry their label in the tab variable `iter_label`; `iter.tabline` renders
+  it for users who set 'tabline' to it.
 - The ahead and behind counts with the upstream's name, and the Recent commits section, show only in the status
   drawer. They count against the upstream as last fetched; iter never fetches. A poll reads HEAD and the upstream with
   one `git rev-parse`, and reads the counts (`rev-list --left-right`) and the commits (`log`) again only when either

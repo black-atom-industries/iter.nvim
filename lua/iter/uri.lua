@@ -116,14 +116,14 @@ function M.parse(name)
     return nil
 end
 
---- True, with a warning, when the open drawer or review of `kind` belongs
---- to another repository than the current directory's.
+--- True, with a warning, when the open drawer, review or commits tab of
+--- `kind` belongs to another repository than the current directory's.
 ---@param kind 'status'|'review'|'commits'
 ---@return boolean
 local function elsewhere(kind)
     local iter = require('iter')
     local review = iter.current_review
-    local commits = iter.commits_drawer
+    local commits = iter.current_commits
     local open_root = kind == 'review'
             and review ~= nil
             and review:is_open()
@@ -140,7 +140,9 @@ local function elsewhere(kind)
     util.warn(
         string.format(
             'The open %s is of %s, not of %s',
-            kind == 'review' and 'review' or 'drawer',
+            kind == 'commits' and 'commits tab'
+                or kind == 'status' and 'drawer'
+                or 'review',
             open_root,
             root
         )

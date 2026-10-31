@@ -1,0 +1,63 @@
+--|---------|---------|---------|---------|---------|---------|---------|---------|---------|---------|
+01| [No Name]  2 i//commits                                                                           X
+02| Commits main · last 4            │ f4ff7b7  2026-01-01 00:00  Iter Test                            
+03|                                  │                                                                 
+04| ▸f4ff7b7 rename b                │ rename b                                                        
+05|  948b1fb add b                   │                                                                 
+06|  a74772e edit a                  │ Move it to c.                                                   
+07|  979be05 initial                 │                                                                 
+08|                                  │ 1 file  +0 −0                                                   
+09|                                  │ +0 −0  b.txt → c.txt                                            
+10|                                  │~                                                                
+11|                                  │~                                                                
+12|                                  │~                                                                
+13|                                  │~                                                                
+14|                                  │~                                                                
+15|                                  │~                                                                
+16|                                  │~                                                                
+17|                                  │~                                                                
+18|                                  │~                                                                
+19|                                  │~                                                                
+20|                                  │~                                                                
+21|                                  │~                                                                
+22|                                  │~                                                                
+23|                                  │~                                                                
+24|                                  │~                                                                
+25|                                  │~                                                                
+26|                                  │~                                                                
+27|                                  │~                                                                
+28| <CR> files  V range  r review    │~                                                                
+29| q close  ? help                  │~                                                                
+30|                                                                                                    
+
+--|---------|---------|---------|---------|---------|---------|---------|---------|---------|---------|
+01|0000000000012111111111111000000000000000000000000000000000000000000000000000000000000000000000000000
+02|333333334555566666666644444444444447888888877999999999999999977:::::::::7777777777777777777777777777
+03|4444444444444444444444444444444444477777777777777777777777777777777777777777777777777777777777777777
+04|;;<<<<<<<=========================422222222277777777777777777777777777777777777777777777777777777777
+05|44>>>>>>>4444444444444444444444444477777777777777777777777777777777777777777777777777777777777777777
+06|44>>>>>>>4444444444444444444444444477777777777777777777777777777777777777777777777777777777777777777
+07|44>>>>>>>4444444444444444444444444477777777777777777777777777777777777777777777777777777777777777777
+08|44444444444444444444444444444444444???????77@@7AA777777777777777777777777777777777777777777777777777
+09|444444444444444444444444444444444447@@7AA77777777777777777777777777777777777777777777777777777777777
+10|44444444444444444444444444444444444BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+11|44444444444444444444444444444444444BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+12|44444444444444444444444444444444444BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+13|44444444444444444444444444444444444BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14|44444444444444444444444444444444444BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+15|44444444444444444444444444444444444BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+16|44444444444444444444444444444444444BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+17|44444444444444444444444444444444444BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+18|44444444444444444444444444444444444BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+19|44444444444444444444444444444444444BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+20|44444444444444444444444444444444444BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+21|44444444444444444444444444444444444BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+22|44444444444444444444444444444444444BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+23|44444444444444444444444444444444444BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+24|44444444444444444444444444444444444BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+25|44444444444444444444444444444444444BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+26|44444444444444444444444444444444444BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+27|44444444444444444444444444444444444BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+28|4CCCC66666666C66666666C666666644444BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+29|4C66666666C666664444444444444444444BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+30|DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD

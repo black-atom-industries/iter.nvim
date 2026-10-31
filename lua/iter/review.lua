@@ -19,6 +19,7 @@ local uri = require('iter.uri')
 local util = require('iter.util')
 local reviewed = require('iter.reviewed')
 local sidebar = require('iter.ui.sidebar')
+local tab = require('iter.ui.tab')
 local watch = require('iter.watch')
 
 ---@class IterReviewOpenOptions
@@ -28,12 +29,8 @@ local watch = require('iter.watch')
 ---@field on_annotations? fun() after an annotation of the review is saved or deleted
 ---@field on_close? fun(review: IterReview)
 
----@class IterReview
----@field tab integer
----@field origin_tab integer tab the review was opened from; `gf` opens files there
----@field origin_win? integer normal window of that tab
+---@class IterReview: IterTab
 ---@field diff_win integer
----@field buf integer empty buffer of the diff window without a diff
 ---@field panel IterPanel the window at the tab's left edge
 ---@field tree IterReviewTree the file tree page of the panel
 ---@field picker? IterPickerPage the base list page, while the panel shows it
@@ -76,21 +73,6 @@ local BASE_PREVIEW_DELAY_MS = 150
 -- Commits since a branch the base summary lists at most.
 local BASE_COMMITS = 100
 
--- Window options of the diff window while it shows a base summary.
-local SUMMARY_WINOPTS = {
-    number = false,
-    relativenumber = false,
-    signcolumn = 'no',
-    foldcolumn = '0',
-    statuscolumn = '',
-    list = false,
-    spell = false,
-    cursorline = false,
-    wrap = true,
-    linebreak = true,
-    breakindent = true,
-}
-
 -- Glyph and group per staging state in a tree row of working changes.
 local STAGE_ICONS = {
     staged = { '●', 'IterStage' },
@@ -103,34 +85,6 @@ local REVIEWED_MARKS = {
     reviewed = { '✓', 'IterReviewed' },
     changed = { '↻', 'IterReviewedChanged' },
 }
-
---- A normal window of `tab`: `preferred` when it is one there, else the
---- tab's current window, else its first normal one.
----@param tab integer
----@param preferred? integer
----@return integer?
-local function normal_win(tab, preferred)
-    if
-        util.is_normal_win(preferred)
-        and vim.api.nvim_win_get_tabpage(preferred --[[@as integer]]) == tab
-    then
-        return preferred
-    end
-
-    local current = vim.api.nvim_tabpage_get_win(tab)
-
-    if util.is_normal_win(current) then
-        return current
-    end
-
-    for _, win in ipairs(vim.api.nvim_tabpage_list_wins(tab)) do
-        if util.is_normal_win(win) then
-            return win
-        end
-    end
-
-    return nil
-end
 
 --- Remember `spec` as the base of the checked-out branch, nil for working
 --- changes. A detached HEAD remembers nothing: every detached checkout
@@ -173,23 +127,14 @@ function Review.open(opts)
 
     require('iter.highlight').setup()
 
-    local origin_tab = vim.api.nvim_get_current_tabpage()
-    local origin_win = vim.api.nvim_get_current_win()
-    local buf = vim.api.nvim_create_buf(false, true)
-    vim.bo[buf].bufhidden = 'hide'
-
-    vim.cmd('tab sbuffer ' .. buf)
-    vim.t.radar_disabled = true
-    vim.t.iter_label = 'iter review'
-
-    local diff_win = vim.api.nvim_get_current_win()
+    local opened, diff_win = tab.open('iter review')
 
     local self = setmetatable({
-        tab = vim.api.nvim_get_current_tabpage(),
-        origin_tab = origin_tab,
-        origin_win = normal_win(origin_tab, origin_win),
+        tab = opened.tab,
+        origin_tab = opened.origin_tab,
+        origin_win = opened.origin_win,
         diff_win = diff_win,
-        buf = buf,
+        buf = opened.buf,
         annotations = {},
         records = {},
         reviewed = {},
@@ -230,6 +175,7 @@ function Review.open(opts)
     })
     self.view = self.preview.view
     self.tree = review_tree.new({
+        view = 'tree',
         keys = opts.config.keys.tree,
         handlers = self:tree_handlers(),
         header = function(width)
@@ -250,8 +196,7 @@ function Review.open(opts)
         self.closed = true
         self.preview:close()
         self.tree:close()
-        vim.cmd.tabclose({ bang = true })
-        vim.api.nvim_buf_delete(buf, { force = true })
+        tab.close(self)
         return nil
     end
 
@@ -272,12 +217,6 @@ function Review.open(opts)
             end
         end,
     })
-
-    -- New windows copy the jumplist of the window they open from, so a jump
-    -- back would put the origin's files into the review's windows.
-    vim.api.nvim_win_call(diff_win, function()
-        vim.cmd.clearjumps()
-    end)
 
     self.quiet = true
     self.panel:show(self.tree)
@@ -1370,34 +1309,11 @@ end
 --- directory and closes it.
 ---@param action 'toggle'|'collapse'|'expand'
 function Review:fold(action)
-    local node = self.tree:node()
+    local dir = self.tree:fold(action)
 
-    if node == nil then
-        return
+    if dir ~= nil then
+        self:select_path(dir.path)
     end
-
-    if node.kind == 'file' then
-        local parent = action == 'collapse' and self.tree:parent(node)
-
-        if not parent then
-            return
-        end
-
-        node = parent
-    end
-
-    ---@cast node IterTreeDir
-    local closed = false
-
-    for _, span in ipairs(node.spans) do
-        closed = closed or self.tree.collapsed[span] == true
-    end
-
-    if action == 'toggle' or (action == 'collapse') ~= closed then
-        self.tree:toggle(node)
-    end
-
-    self:select_path(node.path)
 end
 
 ---@return table<string, fun()>
@@ -1897,25 +1813,10 @@ function Review:render_summary()
 
     if vim.api.nvim_win_get_buf(self.diff_win) ~= buf then
         self.view:hide()
-        self.summary_winopts = self.summary_winopts or {}
-
-        for name in pairs(SUMMARY_WINOPTS) do
-            self.summary_winopts[name] = vim.api.nvim_get_option_value(
-                name,
-                { scope = 'local', win = self.diff_win }
-            )
-        end
-
-        vim.api.nvim_win_set_buf(self.diff_win, buf)
     end
 
-    for name, value in pairs(SUMMARY_WINOPTS) do
-        vim.api.nvim_set_option_value(
-            name,
-            value,
-            { scope = 'local', win = self.diff_win }
-        )
-    end
+    self.summary_winopts =
+        tab.show_summary(self.diff_win, buf, self.summary_winopts)
 end
 
 --- Give the diff window its own buffer and options back from the summary,
@@ -1934,14 +1835,7 @@ function Review:hide_summary()
         and vim.api.nvim_win_get_buf(self.diff_win) == buf
     then
         vim.api.nvim_win_set_buf(self.diff_win, self.buf)
-
-        for name, value in pairs(self.summary_winopts or {}) do
-            vim.api.nvim_set_option_value(
-                name,
-                value,
-                { scope = 'local', win = self.diff_win }
-            )
-        end
+        tab.hide_summary(self.diff_win, self.summary_winopts)
     end
 
     self.summary_winopts = nil
@@ -2968,18 +2862,7 @@ function Review:close()
         open.mode = nil
     end
 
-    local current = vim.api.nvim_get_current_tabpage() == self.tab
-
-    if vim.api.nvim_tabpage_is_valid(self.tab) then
-        if #vim.api.nvim_list_tabpages() == 1 then
-            vim.cmd.tabnew()
-        end
-
-        vim.cmd.tabclose({
-            vim.api.nvim_tabpage_get_number(self.tab),
-            bang = true,
-        })
-    end
+    tab.close(self)
 
     -- With its windows gone, the view only wipes its buffer.
     self.preview:close()
@@ -2987,14 +2870,6 @@ function Review:close()
 
     for _, page in ipairs({ self.tree, self.picker }) do
         page:close()
-    end
-
-    if vim.api.nvim_buf_is_valid(self.buf) then
-        vim.api.nvim_buf_delete(self.buf, { force = true })
-    end
-
-    if current and vim.api.nvim_tabpage_is_valid(self.origin_tab) then
-        vim.api.nvim_set_current_tabpage(self.origin_tab)
     end
 
     if self.on_close ~= nil then
@@ -3099,26 +2974,7 @@ end
 ---@param path string
 ---@param line integer
 function Review:open_file(path, line)
-    if not vim.api.nvim_tabpage_is_valid(self.origin_tab) then
-        vim.cmd.tabnew({ range = { 0 } })
-        self.origin_tab = vim.api.nvim_get_current_tabpage()
-    end
-
-    local win = normal_win(self.origin_tab, self.origin_win)
-
-    if win == nil then
-        return
-    end
-
-    self.origin_win = win
-
-    if not util.can_leave(vim.api.nvim_win_get_buf(win), path) then
-        return
-    end
-
-    vim.api.nvim_set_current_tabpage(self.origin_tab)
-    vim.api.nvim_set_current_win(win)
-    util.edit_at(path, line)
+    tab.open_file(self, path, line)
 end
 
 ---@param annotation table
