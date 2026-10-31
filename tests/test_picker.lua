@@ -78,14 +78,14 @@ T['page()']['lays out the title, the items under their sections and the hints'] 
         ' Base of the review',
         ' / search',
         '',
-        '  one                      parent',
+        '   one                     parent',
         '',
         ' Branches',
-        '  two',
+        '   two',
         '',
         ' Commits',
     })
-    eq(shown[10], '  abc ' .. ('x'):rep(28))
+    eq(shown[10], '   abc ' .. ('x'):rep(27))
     eq(vim.list_slice(shown, #shown - 1), {
         ' <CR> pick  / search',
         ' q back to the tree',

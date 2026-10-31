@@ -9,13 +9,13 @@ local keymap = require('iter.keymap')
 local layout = require('iter.ui.layout')
 local model = require('iter.diff.model')
 local panel = require('iter.ui.panel')
+local Preview = require('iter.ui.preview')
 local render = require('iter.ui.render')
 local review_tree = require('iter.ui.review_tree')
 local tab = require('iter.ui.tab')
 local tree = require('iter.ui.tree')
 local uri = require('iter.uri')
 local util = require('iter.util')
-local View = require('iter.diff.view')
 
 local M = {}
 
@@ -59,6 +59,7 @@ local selection_ns = vim.api.nvim_create_namespace('iter.commits.selection')
 ---@field list IterPanelPage the commit list
 ---@field files? IterReviewTree the files of `opened`, while the panel shows them
 ---@field opened? IterCommitsOpened
+---@field diff IterPreview owns `view`; its layout and wrap hold for the session, as in the review
 ---@field view IterDiffView diff of the selected file in the main window
 ---@field summary_winopts? table<string, any> the main window's options from before the summary, while it shows
 ---@field handlers table<string, fun()>
@@ -134,23 +135,30 @@ function M.open(opts)
         end,
     })
 
-    local diff = config.options.diff
-    local auto = diff.layout == 'auto'
-            and (vim.api.nvim_win_get_width(self.win) >= diff.split_breakpoint and 'split' or 'unified')
-        or nil
-
-    self.view = View.new({
+    self.diff = Preview.new({
         win = self.win,
-        keys = config.keys.diff,
-        expand_step = diff.expand_step,
-        syntax_max_lines = diff.syntax_max_lines,
-        word_diff = diff.word_diff,
-        icon = config.options.icons.annotation,
+        config = config,
         handlers = self:view_handlers(),
         bufhidden = 'hide',
-        layout = auto or diff.layout --[[@as IterDocLayout]],
-        wrap = diff.wrap,
+        source = {
+            changes = function()
+                return {
+                    root = root,
+                    branch = self.branch,
+                    unstaged = {},
+                    staged = {},
+                }
+            end,
+            files = function()
+                return {}
+            end,
+            shown = function() end,
+        },
+        on_layout = function()
+            self.panel:render()
+        end,
     })
+    self.view = self.diff.view
     self.handlers = self:make_handlers()
     self.list = self:list_page()
     self.panel = panel.open({
@@ -242,8 +250,8 @@ function Commits:render_list(width, height)
         table.insert(
             lines,
             render.chunks_line({
-                { '  ' },
-                unpack(layout.commit_short(commit, width - 3)),
+                { '   ' },
+                unpack(layout.commit_short(commit, width - 4)),
             })
         )
     end
@@ -651,24 +659,18 @@ function Commits:view_handlers()
             self.view:jump_hunk(-1)
         end,
         split = function()
-            self:set_layout('split')
+            self.diff:set_layout('split')
         end,
         unified = function()
-            self:set_layout('unified')
+            self.diff:set_layout('unified')
         end,
         wrap = function()
-            self.view:set_wrap(not self.view.wrap)
+            self.diff:toggle_wrap()
         end,
         focus_drawer = function()
             self.panel:focus()
         end,
     }
-end
-
----@param name IterDocLayout
-function Commits:set_layout(name)
-    self.view:set_layout(name)
-    self.panel:render()
 end
 
 ---@return table<string, fun()>
@@ -798,6 +800,20 @@ function Commits:attach()
             vim.schedule(function()
                 self:close()
             end)
+        end,
+    })
+    vim.api.nvim_create_autocmd({ 'WinResized', 'VimResized' }, {
+        group = self.group,
+        callback = function(args)
+            if
+                args.event == 'WinResized'
+                and not tab.has_window(self, vim.v.event.windows)
+            then
+                return
+            end
+
+            self.diff:resized()
+            self.view:even_widths()
         end,
     })
     vim.api.nvim_create_autocmd('BufWipeout', {

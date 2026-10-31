@@ -6,7 +6,7 @@ local M = {}
 --- `rule` is false, the rule above the header.
 ---@param rule? boolean
 ---@return integer
-function M.chrome_rows(rule)
+local function chrome_rows(rule)
     return rule == false and 2 or 3
 end
 
@@ -100,7 +100,7 @@ end
 local function resolve_height(opts)
     local pane_height = text_height(opts.pane)
     local strip = strip_of(opts)
-    local reserved = (opts.chrome and M.chrome_rows(opts.rule) or 0)
+    local reserved = (opts.chrome and chrome_rows(opts.rule) or 0)
         + (strip and strip.lines or 0)
     local height = opts.height
 

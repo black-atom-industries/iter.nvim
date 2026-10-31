@@ -96,6 +96,21 @@ T['open_file']['opens a new tab when the one it came from is gone'] = function()
     vim.fn.delete(path)
 end
 
+T['has_window'] = new_set()
+
+T['has_window']['tells a window of the tab from one of another tab'] = function()
+    local origin_win = vim.api.nvim_get_current_win()
+    local t, win = tab.open('iter test')
+
+    opened = t
+
+    eq(tab.has_window(t, { win }), true)
+    eq(tab.has_window(t, { origin_win, win }), true)
+    eq(tab.has_window(t, { origin_win }), false)
+    eq(tab.has_window(t, { 99999 }), false)
+    eq(tab.has_window(t, {}), false)
+end
+
 T['show_summary'] = new_set()
 
 T['show_summary']['saves the options once and hide_summary gives them back'] = function()

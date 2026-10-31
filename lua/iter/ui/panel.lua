@@ -7,7 +7,7 @@ local util = require('iter.util')
 local M = {}
 
 ---@class IterPanelPage
----@field buf integer the page's own buffer, its lines starting with a 2-cell gutter the panel draws `▸` over; it must survive being hidden ('bufhidden' not 'wipe' or 'delete'), since another page takes the window
+---@field buf integer the page's own buffer, its lines starting with a 3-cell gutter whose second cell the panel draws `▸` in; it must survive being hidden ('bufhidden' not 'wipe' or 'delete'), since another page takes the window
 ---@field render fun(self, width: integer, height: integer) writes the page's lines and its line → item map
 ---@field on_cursor? fun(self, lnum: integer, prev: integer) after the cursor moved to another line, and once when the page is shown, with the panel's window current; may move the cursor to an item line
 
@@ -17,6 +17,7 @@ local M = {}
 
 ---@class IterPanel
 ---@field win integer
+---@field columns integer the width it keeps
 ---@field page? IterPanelPage the page the window shows
 ---@field on_close? fun()
 ---@field group integer
@@ -145,6 +146,13 @@ local function top(self)
     end
 end
 
+--- Give the window back its width, which a split beside it takes from it.
+function Panel:restore_width()
+    if self:is_open() and self:width() ~= self.columns then
+        vim.api.nvim_win_set_width(self.win, self.columns)
+    end
+end
+
 --- Render the shown page for the window's size. A cursor the new lines
 --- moved, or left past their end, reaches `on_cursor` as a move.
 function Panel:render()
@@ -261,6 +269,7 @@ function M.open(opts)
 
     local self = setmetatable({
         win = win,
+        columns = opts.width,
         on_close = opts.on_close,
         group = vim.api.nvim_create_augroup(
             'iter.panel.' .. win,

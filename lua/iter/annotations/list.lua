@@ -1,8 +1,8 @@
 --- Queries over the stored annotations: the lines of the version an
 --- annotation follows, where its text sits there and whether it is outdated,
 --- and the annotations in review order, grouped by file. The export, the
---- review drawer's Annotations column and the annotation marks of diff views
---- and buffers all decide outdated through `line_of`.
+--- annotation sidebar and the annotation marks of diff views and buffers all
+--- decide outdated through `line_of`.
 
 local anchor = require('iter.annotations.anchor')
 

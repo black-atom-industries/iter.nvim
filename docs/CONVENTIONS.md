@@ -150,7 +150,8 @@ the review straight to an agent pane.
   render lines, side by side at `drawer.breakpoint` and wider, stacked below it; `h` and `l` step between the
   columns. The drawer and the review share the diff preview (`iter.ui.preview`: the view, the file it shows, all-files
   mode, and the diff layout and wrap chosen last, held for the session) and the file actions
-  (`iter.ui.file_actions`: stage, unstage, discard and ignore on files of the changes).
+  (`iter.ui.file_actions`: stage, unstage, discard and ignore on files of the changes). The commits tab's diff is a
+  preview too, for its layout and wrap; it shows its files itself.
 - Reviewed marks, annotation counts and the annotations window show only in the review.
 - iter's buffers carry `iter://` addresses as names, without buffer numbers (`iter.uri`): `BufReadCmd` on
   `iter://*` routes a buffer `:edit` made to what its name addresses and wipes it, after giving its window the previous

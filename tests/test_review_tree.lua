@@ -80,9 +80,9 @@ T['render']['the header, a blank line, the rows, then the hints on the last line
     eq(lines(), {
         ' Title',
         '',
-        '  ▾ lua/',
-        '    M x.lua',
-        '  M a.txt',
+        '   ▾ lua/',
+        '     M x.lua',
+        '   M a.txt',
         '',
         '',
         '',
@@ -98,7 +98,7 @@ T['render']['hints follow the rows when the page fits exactly'] = function()
 
     p:render(30, 4)
 
-    eq(lines(), { ' Title', '', '  M a.txt', ' ? help' })
+    eq(lines(), { ' Title', '', '   M a.txt', ' ? help' })
 end
 
 T['render']['a blank line keeps the hints apart when the rows overflow'] = function()
@@ -109,9 +109,9 @@ T['render']['a blank line keeps the hints apart when the rows overflow'] = funct
     eq(lines(), {
         ' Title',
         '',
-        '  M a.txt',
-        '  M b.txt',
-        '  M c.txt',
+        '   M a.txt',
+        '   M b.txt',
+        '   M c.txt',
         '',
         ' ? help',
     })
@@ -172,7 +172,7 @@ T['rows']['toggle closes a compacted directory, open_to opens it'] = function()
     eq(dir.name, 'lua/iter/')
     p:toggle(dir)
     p:render(30, 9)
-    eq(lines()[3], '  ▸ lua/iter/')
+    eq(lines()[3], '   ▸ lua/iter/')
     eq(p:line_of('lua/iter/x.lua'), nil)
 
     p:open_to('lua/iter/x.lua')
@@ -182,7 +182,7 @@ T['rows']['toggle closes a compacted directory, open_to opens it'] = function()
     p:toggle(dir)
     p:toggle(dir)
     p:render(30, 9)
-    eq(lines()[3], '  ▾ lua/iter/')
+    eq(lines()[3], '   ▾ lua/iter/')
 end
 
 T['rows']['parent is the directory above, nil at the top'] = function()

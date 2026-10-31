@@ -18,14 +18,12 @@ end
 ---@param id string
 ---@param title string
 ---@param items any[]
----@param weight? number
 ---@return IterLayoutColumn
-local function column(id, title, items, weight)
+local function column(id, title, items)
     return {
         id = id,
         title = title,
         items = items,
-        weight = weight,
         cell = function(_, item, _, width)
             return item .. string.rep(' ', width - #item)
         end,
@@ -56,14 +54,13 @@ end
 T['widths()'] = new_set()
 
 T['widths()']['two equal columns split around the separator'] = function()
-    eq(layout.widths(80, { 1, 1 }), { 39, 40 })
-    eq(layout.widths(81, { 1, 1 }), { 40, 40 })
+    eq(layout.widths(80, 2), { 39, 40 })
+    eq(layout.widths(81, 2), { 40, 40 })
 end
 
-T['widths()']['N columns by weight, the last takes the rest'] = function()
-    eq(layout.widths(100, { 1, 1, 1 }), { 32, 32, 34 })
-    eq(layout.widths(61, { 2, 1 }), { 40, 20 })
-    eq(layout.widths(40, { 1 }), { 40 })
+T['widths()']['N columns, the last takes the rest'] = function()
+    eq(layout.widths(100, 3), { 32, 32, 34 })
+    eq(layout.widths(40, 1), { 40 })
 end
 
 T['columns()'] = new_set()
@@ -114,38 +111,6 @@ T['columns()']['takes any number of columns'] = function()
     eq(result.rows[3], { c = 'z' })
     eq(#spans(result.lines[2], 'WinSeparator'), 2)
     eq(vim.fn.strdisplaywidth(result.lines[2].text), 20)
-end
-
-T['columns()']['a title shows the count and a note, cut to the width'] = function()
-    local spec = column('a', 'Notes', { 'x', 'y' })
-    spec.count, spec.note = 1, '2 outdated'
-
-    local result = layout.columns({ spec }, 22)
-
-    eq(result.lines[1].text, ' Notes (1) · 2 outdat…')
-    eq(spans(result.lines[1], 'IterDrawerTitle'), { { 0, 10 } })
-    eq(
-        spans(result.lines[1], 'IterDrawerHint'),
-        { { 10, #result.lines[1].text } }
-    )
-end
-
-T['columns()']['an item that is not selectable has no row entry'] = function()
-    local spec = column('a', 'A', { 'head', 'x' })
-    spec.selectable = function(item)
-        return item ~= 'head'
-    end
-
-    local result = layout.columns({ spec }, 10)
-
-    eq(result.lines[2].text, 'head      ')
-    eq(result.rows, { {}, {}, { a = 'x' } })
-    eq(result.cells[2], {})
-
-    local stacked = layout.stacked({ spec }, 10)
-
-    eq(stacked.rows, { {}, {}, { a = 'x' } })
-    eq(stacked.cells[2], {})
 end
 
 T['stacked()'] = new_set()

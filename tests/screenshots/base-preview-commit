@@ -3,13 +3,13 @@
 02| Base of the review               │ from 8e93b08              1 commit · 3 files
 03| / search                         │                                             
 04|                                  │ 8e93b08  2026-01-01 00:00  Iter Test        
-05|  since main               parent │                                             
-06|  Working changes                 │ edit a                                      
+05|   since main              parent │                                             
+06|   Working changes                │ edit a                                      
 07|                                  │                                             
 08| Commits                          │ The review includes this commit and every   
-09| ▸8e93b08 edit a                  │ one after it:                               
-10|  156b40f add c                   │ 8e93b08 edit a                              
-11|  715d34d initial                 │ + working changes in 2 files                
+09| ▸ 8e93b08 edit a                 │ one after it:                               
+10|   156b40f add c                  │ 8e93b08 edit a                              
+11|   715d34d initial                │ + working changes in 2 files                
 12|                                  │                                             
 13|                                  │ +1 −1  a.txt                                
 14| <CR> pick  / search              │ +1 −1  b.txt                                
@@ -33,15 +33,15 @@
 06|44444444444444444444444444444444444222222255555555555555555555555555555555555555
 07|44444444444444444444444444444444444555555555555555555555555555555555555555555555
 08|33333333444444444444444444444444444666666666666666666666666666666666666666666666
-09|<<=======>>>>>>>>>>>>>>>>>>>>>>>>>4566666666666665555555555555555555555555555555
-10|44???????44444444444444444444444444599999995555555555555555555555555555555555555
-11|44???????44444444444444444444444444666666666666666666666666666665555555555555555
+09|<<=>>>>>>>========================4566666666666665555555555555555555555555555555
+10|444???????4444444444444444444444444599999995555555555555555555555555555555555555
+11|444???????4444444444444444444444444666666666666666666666666666665555555555555555
 12|44444444444444444444444444444444444555555555555555555555555555555555555555555555
 13|444444444444444444444444444444444445@@5AA555555555555555555555555555555555555555
 14|477778888888788888884444444444444445@@5AA555555555555555555555555555555555555555
 15|47888888888888888884444444444444444666666666666665555555555555555555555555555555
 16|BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB4CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
-17|DDDDDDDDDDDDDDD>>>>>>>>>>>>>>>>>>>4CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+17|DDDDDDDDDDDDDDD===================4CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 18|44444444444444444444444444444444444CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 19|88888888888888444444444444444444444CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 20|44444444444444444444444444444444444CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC

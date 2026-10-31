@@ -300,6 +300,73 @@ T['resize']['a sidebar the user closed stays closed across a resize'] = function
     eq(child.lua_get(S .. '.placement ~= nil'), true)
 end
 
+--- The widths of the tree and the annotations window, and whether the
+--- split panes of the diff, when there are two, have half of theirs each.
+---@return [integer, integer, boolean]
+local function widths()
+    return child.lua_get([[(function()
+        local r = ]] .. R .. [[
+
+        local old = r.view.old
+        local new = vim.api.nvim_win_get_width(r.view.win)
+
+        return {
+            vim.api.nvim_win_get_width(r.panel.win),
+            vim.api.nvim_win_get_width(]] .. S .. [[.win),
+            old == nil
+                or math.abs(vim.api.nvim_win_get_width(old.win) - new) <= 1,
+        }
+    end)()]])
+end
+
+--- Wait until the tree is `tree` cells wide and the annotations window
+--- right of the diff 40, then check the split panes are even.
+---@param tree integer
+local function wait_widths(tree)
+    helpers.wait_until(
+        child,
+        S
+            .. ' ~= nil and '
+            .. S
+            .. '.placement == nil and vim.api.nvim_win_get_width('
+            .. H.LIST_WIN
+            .. ') == '
+            .. tree
+            .. ' and vim.api.nvim_win_get_width('
+            .. S
+            .. '.win) == 40'
+    )
+    eq(widths(), { tree, 40, true })
+end
+
+T['resize']['the tree and the annotations keep their widths beside the split diff'] = new_set(
+    {
+        parametrize = { { 'split' }, { 'auto' } },
+    },
+    {
+        test = function(diff_layout)
+            setup('{ diff = { layout = ' .. vim.inspect(diff_layout) .. ' } }')
+            open_review()
+            wait_widths(34)
+
+            child.lua('vim.api.nvim_set_current_win(' .. H.LIST_WIN .. ')')
+            child.cmd('vertical resize 50')
+            wait_widths(50)
+
+            child.o.columns = 180
+            wait_widths(50)
+
+            child.o.columns = 120
+            helpers.wait_until(
+                child,
+                S .. ' ~= nil and ' .. S .. '.placement ~= nil'
+            )
+            child.o.columns = 200
+            wait_widths(34)
+        end,
+    }
+)
+
 T['config'] = new_set()
 
 T['config']['annotate.review_breakpoint sets where the sidebar moves right'] = function()

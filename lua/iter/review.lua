@@ -2283,6 +2283,42 @@ function Review:open_sidebar(id)
     end
 end
 
+--- Give the annotations right of the diff their configured width, and the
+--- tree its own with `with_tree`, taking the cells from the diff's panes, which
+--- then even out.
+---@param self IterReview
+---@param with_tree boolean
+local function fit_widths(self, with_tree)
+    local fixed = {}
+
+    for _, win in ipairs({ self.view.win, self.view.old and self.view.old.win }) do
+        if util.is_valid_win(win) then
+            fixed[win] = vim.wo[win].winfixwidth
+            vim.wo[win].winfixwidth = false
+        end
+    end
+
+    if with_tree then
+        self.panel:restore_width()
+    end
+
+    local open = sidebar.of(self.tab)
+
+    if
+        open ~= nil
+        and open.placement == nil
+        and util.is_valid_win(open.win)
+    then
+        vim.api.nvim_win_set_width(open.win, self.config.options.annotate.width)
+    end
+
+    for win, fix in pairs(fixed) do
+        vim.wo[win].winfixwidth = fix
+    end
+
+    self.view:even_widths()
+end
+
 --- Put the annotations window where the tab's width wants it, right of
 --- the diff from `annotate.review_breakpoint` tab columns, else below the
 --- tree; the selected annotation and the focus stay. A window the user
@@ -2323,6 +2359,7 @@ function Review:place_annotations()
     local current = vim.api.nvim_get_current_win()
 
     self:open_sidebar(id)
+    fit_widths(self, true)
 
     local opened = sidebar.of(self.tab)
 
@@ -2644,7 +2681,14 @@ function Review:attach()
     })
     vim.api.nvim_create_autocmd({ 'WinResized', 'VimResized' }, {
         group = self.group,
-        callback = function()
+        callback = function(args)
+            if
+                args.event == 'WinResized'
+                and not tab.has_window(self, vim.v.event.windows)
+            then
+                return
+            end
+
             self:resized()
         end,
     })
@@ -2712,7 +2756,7 @@ function Review:resized()
 
     self.preview:resized()
     self:render()
-    self.view:even_widths()
+    fit_widths(self, false)
     self.view:rewrap()
 
     if
