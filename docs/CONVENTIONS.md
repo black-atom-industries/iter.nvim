@@ -38,7 +38,11 @@ the review straight to an agent pane.
   branch there is no parent: the base list presets working changes and offers the merge base with the upstream after it.
 - The base list (`iter.ui.picker`) is a page of the panel that takes the tree's place. Its header, section titles and
   hints are buffer lines; a table maps the lines of its items to their index, and the cursor snaps to the nearest
-  item line. It stays until `<CR>` or `q`.
+  item line. It stays until `<CR>` or `q`. While it shows, the diff window shows a summary of the base under the
+  cursor in the view's place (`layout.base_summary`), read from git calls on that base alone (`git.resolve_base` or
+  `git.parent_of`, `git.messages_since` or `git.messages`, `git.stats` against the worktree), never file contents,
+  once per item until a refresh. A refresh and the annotations window leave the summary in
+  place; `<CR>` or `q` gives the window the view back with its options.
 - Against a base the review's tree lists the changes from `git.base_changes` (`git diff -M --name-status` against the
   resolved sha plus the untracked files of the status read the poll already made), one diff per file, without
   staging icons. Stage, unstage, discard and ignore refuse there, in the tree and in the diff. Working changes lists
@@ -130,7 +134,7 @@ the review straight to an agent pane.
 - The review tab is three splits: the panel (`iter.ui.panel`), a full-height window at the tab's left edge,
   `review.tree_width` wide with `winfixwidth`, that shows one page at a time and draws `▸` on the cursor line; the diff
   window; and the annotation sidebar. The panel's pages own their buffers: the tree (`iter.ui.review_tree`, named
-  `iter://review`) and the base list. Closing the panel or the diff window closes the review; a file opened in the
+  `iter://review`) and the base list (`iter://review#base`). Closing the panel or the diff window closes the review; a file opened in the
   panel or the diff with `:edit` opens in the tab the review came from and the page or the diff comes back.
 - The review's tree comes from `iter.ui.tree`, pure functions from the changes to a directory tree, its visible rows and
   render lines: directories first, a chain of single directories on one row, a path's changes on one row. A closed

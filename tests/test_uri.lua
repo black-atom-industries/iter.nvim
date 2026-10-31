@@ -40,6 +40,11 @@ T['parse()'] = function()
         uri.parse('iter://review#annotations'),
         { kind = 'review', view = 'annotations' }
     )
+    eq(uri.parse('iter://review#base'), { kind = 'review', view = 'base' })
+    eq(
+        uri.parse('iter://review#base#preview'),
+        { kind = 'review', view = 'base' }
+    )
     eq(uri.parse('iter://review/all'), { kind = 'review', path = 'all' })
     eq(uri.parse('iter://nope'), nil)
     eq(uri.parse('/tmp/a.txt'), nil)

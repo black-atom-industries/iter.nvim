@@ -585,7 +585,7 @@ end
 
 --- A commit as a row of a list in the left window: the short sha and the
 --- subject, cut with `…` to fit `width` cells.
----@param commit GitCommit
+---@param commit { sha: string, subject: string }
 ---@param width integer
 ---@return [string, string?][]
 function M.commit_short(commit, width)
@@ -614,49 +614,52 @@ function M.author_width(commits)
     return math.min(width, AUTHOR_WIDTH)
 end
 
---- The summary of commits the commits drawer shows above it: per commit,
---- newest first, its short sha, date and time and author, then its whole
---- message under it; after them a line with the number of files and the
---- lines added and deleted, then a row per file with its counts.
----@param messages GitMessage[]
----@param stats GitStat[]
+--- A commit's short sha, date and time and author, a blank line, then its
+--- whole message, the subject as a title, and a blank line after it.
+---@param message GitMessage
 ---@return IterRenderLine[]
-function M.commit_summary(messages, stats)
-    local lines = {}
+local function message_lines(message)
+    local lines = {
+        render.chunks_line({
+            { ' ' },
+            { message.sha, 'IterCommitSha' },
+            { '  ' },
+            {
+                os.date('%Y-%m-%d %H:%M', message.time) --[[@as string]],
+                'IterCommitDate',
+            },
+            { '  ' },
+            { message.author, 'IterCommitAuthor' },
+        }),
+        render.line(''),
+    }
 
-    for _, message in ipairs(messages) do
-        table.insert(
-            lines,
-            render.chunks_line({
-                { ' ' },
-                { message.sha, 'IterCommitSha' },
-                { '  ' },
-                {
-                    os.date('%Y-%m-%d %H:%M', message.time) --[[@as string]],
-                    'IterCommitDate',
-                },
-                { '  ' },
-                { message.author, 'IterCommitAuthor' },
-            })
-        )
-        table.insert(lines, render.line(''))
+    for index, text in ipairs(message.message) do
+        local line = render.line(text == '' and '' or (' ' .. text))
 
-        for index, text in ipairs(message.message) do
-            local line = render.line(text == '' and '' or (' ' .. text))
-
-            if index == 1 then
-                render.add_highlight(line, 'IterDrawerTitle', 0, #line.text)
-            end
-
-            table.insert(lines, line)
+        if index == 1 then
+            render.add_highlight(line, 'IterDrawerTitle', 0, #line.text)
         end
 
-        table.insert(lines, render.line(''))
+        table.insert(lines, line)
     end
 
+    table.insert(lines, render.line(''))
+
+    return lines
+end
+
+--- A row per file of `stats` with the lines it adds and deletes, the
+--- counts aligned, and the totals.
+---@param stats GitStat[]
+---@return IterRenderLine[] rows
+---@return integer added
+---@return integer deleted
+local function stat_rows(stats)
     local added, deleted = 0, 0
     local counts = {}
     local count_width = 0
+    local rows = {}
 
     for index, stat in ipairs(stats) do
         local count = stat.added == nil and { 'bin', '' }
@@ -670,6 +673,45 @@ function M.commit_summary(messages, stats)
             vim.fn.strdisplaywidth(count[1] .. ' ' .. count[2])
         )
     end
+
+    for index, stat in ipairs(stats) do
+        local count = counts[index]
+        local gap = count_width
+            - vim.fn.strdisplaywidth(count[1] .. ' ' .. count[2])
+        local path = stat.orig_path ~= nil
+                and (stat.orig_path .. ARROW .. stat.path)
+            or stat.path
+
+        table.insert(
+            rows,
+            render.chunks_line({
+                { ' ' .. string.rep(' ', gap) },
+                { count[1], stat.added and 'IterStage' or 'IterDrawerHint' },
+                { ' ' },
+                { count[2], 'IterUnstage' },
+                { '  ' .. path },
+            })
+        )
+    end
+
+    return rows, added, deleted
+end
+
+--- The summary of commits the commits drawer shows above it: per commit,
+--- newest first, its short sha, date and time and author, then its whole
+--- message under it; after them a line with the number of files and the
+--- lines added and deleted, then a row per file with its counts.
+---@param messages GitMessage[]
+---@param stats GitStat[]
+---@return IterRenderLine[]
+function M.commit_summary(messages, stats)
+    local lines = {}
+
+    for _, message in ipairs(messages) do
+        vim.list_extend(lines, message_lines(message))
+    end
+
+    local rows, added, deleted = stat_rows(stats)
 
     table.insert(
         lines,
@@ -689,23 +731,145 @@ function M.commit_summary(messages, stats)
         })
     )
 
-    for index, stat in ipairs(stats) do
-        local count = counts[index]
-        local gap = count_width
-            - vim.fn.strdisplaywidth(count[1] .. ' ' .. count[2])
-        local path = stat.orig_path ~= nil
-                and (stat.orig_path .. ARROW .. stat.path)
-            or stat.path
+    return vim.list_extend(lines, rows)
+end
 
+---@class IterBaseSummary what a base of the review brings in
+---@field kind 'branch'|'commit'|'working'
+---@field label string the branch, the commit's short sha, or `Working changes`
+---@field sha? string the branch's merge base with HEAD
+---@field head? string HEAD's branch, nil when detached
+---@field commit? GitMessage the picked commit
+---@field commits GitMessage[] the commits the review covers, newest first
+---@field more integer the commits past `commits`
+---@field working integer the paths with working changes, untracked ones included
+---@field untracked integer
+---@field stats GitStat[] the tracked files from the base to the worktree
+
+---@param count integer
+---@param noun string
+---@return string
+local function counted(count, noun)
+    return string.format('%d %s%s', count, noun, count == 1 and '' or 's')
+end
+
+---@param text string
+---@return IterRenderLine
+local function hint_line(text)
+    return render.chunks_line({ { ' ' .. text, 'IterDrawerHint' } })
+end
+
+--- What the review brings in against a base, for the window beside the base
+--- list, `width` cells wide: the base and the count of commits and files at
+--- the right edge, then for a branch the commits since HEAD left it, for a
+--- commit its message and the commits from it on, then the working
+--- changes, and the lines each tracked file adds and deletes. A branch
+--- without working changes ends saying that a pull request shows the same.
+---@param summary IterBaseSummary
+---@param width integer
+---@return IterRenderLine[]
+function M.base_summary(summary, width)
+    local title = summary.label
+    local files = #summary.stats + summary.untracked
+    local count = counted(files, 'file')
+
+    if summary.kind == 'branch' then
+        title = string.format(
+            'since %s (%s)',
+            summary.label,
+            (summary.sha or ''):sub(1, 7)
+        )
+    elseif summary.kind == 'commit' then
+        title = 'from ' .. summary.label
+    else
+        count = counted(summary.working, 'file')
+    end
+
+    if summary.kind ~= 'working' then
+        count = counted(#summary.commits + summary.more, 'commit')
+            .. ' · '
+            .. count
+    end
+
+    local gap = math.max(
+        2,
+        width
+            - vim.fn.strdisplaywidth(title)
+            - vim.fn.strdisplaywidth(count)
+            - 1
+    )
+    local lines = {
+        render.chunks_line({
+            { ' ' .. title, 'IterDrawerTitle' },
+            { string.rep(' ', gap) },
+            { count, 'IterDrawerHint' },
+        }),
+    }
+
+    if summary.kind == 'branch' then
         table.insert(
             lines,
-            render.chunks_line({
-                { ' ' .. string.rep(' ', gap) },
-                { count[1], stat.added and 'IterStage' or 'IterDrawerHint' },
-                { ' ' },
-                { count[2], 'IterUnstage' },
-                { '  ' .. path },
-            })
+            hint_line(
+                string.format(
+                    'Committed %ssince it left %s',
+                    summary.head and ('on ' .. summary.head .. ' ') or '',
+                    summary.label
+                )
+            )
+        )
+    end
+
+    table.insert(lines, render.line(''))
+
+    if summary.kind == 'commit' and summary.commit ~= nil then
+        vim.list_extend(lines, message_lines(summary.commit))
+        table.insert(
+            lines,
+            hint_line('The review includes this commit and every one after it:')
+        )
+    end
+
+    if summary.kind ~= 'working' then
+        for _, message in ipairs(summary.commits) do
+            local chunks = M.commit_short({
+                sha = message.sha,
+                subject = message.message[1] or '',
+            }, width - 1)
+
+            table.insert(chunks, 1, { ' ' })
+            table.insert(lines, render.chunks_line(chunks))
+        end
+
+        if summary.more > 0 then
+            table.insert(lines, hint_line('… ' .. summary.more .. ' more'))
+        end
+
+        if summary.working > 0 then
+            table.insert(
+                lines,
+                hint_line(
+                    '+ working changes in ' .. counted(summary.working, 'file')
+                )
+            )
+        end
+
+        table.insert(lines, render.line(''))
+    end
+
+    vim.list_extend(lines, (stat_rows(summary.stats)))
+
+    if summary.untracked > 0 then
+        table.insert(
+            lines,
+            hint_line('+ ' .. summary.untracked .. ' untracked')
+        )
+    end
+
+    if summary.kind == 'branch' and summary.working == 0 then
+        table.insert(lines, render.line(''))
+        table.insert(
+            lines,
+            hint_line('What a pull request into ' .. summary.label .. ' shows.')
         )
     end
 

@@ -433,6 +433,63 @@ T['refusals']['hunk and line staging in the diff warn and change nothing'] = fun
     eq(index_state(), before)
 end
 
+--- Wait until the diff window shows the base summary whose first line
+--- starts with `title`, and return its lines without trailing blanks.
+---@param title string
+---@return string[]
+local function summary_lines(title)
+    helpers.wait_until(
+        child,
+        string.format(
+            '%s.summary_buf ~= nil and vim.api.nvim_win_get_buf(%s.diff_win) == %s.summary_buf and vim.startswith(vim.api.nvim_buf_get_lines(%s.summary_buf, 0, 1, false)[1], %q)',
+            R,
+            R,
+            R,
+            R,
+            ' ' .. title
+        )
+    )
+
+    return vim.tbl_map(
+        function(line)
+            return (line:gsub('%s+$', ''))
+        end,
+        child.lua_get(
+            'vim.api.nvim_buf_get_lines(' .. R .. '.summary_buf, 0, -1, false)'
+        )
+    )
+end
+
+--- Put the base list's cursor on the item that starts with `label`.
+---@param label string
+local function move_to(label)
+    for index, item in ipairs(picker_items()) do
+        if vim.startswith(item, label) then
+            child.lua(
+                R
+                    .. '.panel:set_cursor('
+                    .. R
+                    .. '.picker:line_of('
+                    .. index
+                    .. '))'
+            )
+            return
+        end
+    end
+
+    error('no picker item ' .. label)
+end
+
+-- The diff window's options the base summary changes.
+local WINOPTS = [[(function()
+    local win = require('iter').current_review.diff_win
+    local out = {}
+    for _, name in ipairs({ 'number', 'wrap', 'linebreak', 'breakindent', 'cursorline', 'list', 'spell', 'signcolumn', 'statuscolumn' }) do
+        out[name] = vim.api.nvim_get_option_value(name, { scope = 'local', win = win })
+    end
+    return out
+end)()]]
+
 T['picker'] = new_set()
 
 T['picker']['b offers the parent first, working changes, branches and commits'] = function()
@@ -527,6 +584,7 @@ T['picker']['b shows the list in the tree window, q goes back without a change']
         ),
         true
     )
+    summary_lines('since main')
     helpers.expect_screenshot(child, 'base-picker')
 
     child.type_keys('q')
@@ -588,7 +646,7 @@ T['picker']['the list stays when another window takes the focus'] = function()
     )
 end
 
-T['picker']['a refresh keeps the picker open and focused'] = function()
+T['picker']['a refresh keeps the picker open and focused, the summary read again'] = function()
     setup([[{ refresh = { poll_ms = 100 } }]])
     H.open(child)
     child.type_keys('b')
@@ -606,6 +664,9 @@ T['picker']['a refresh keeps the picker open and focused'] = function()
 
     eq(child.lua_get(R .. '.panel.page == ' .. R .. '.picker'), true)
     eq(child.api.nvim_get_current_win(), win)
+    local lines = summary_lines('since main')
+
+    eq(lines[#lines], ' + 2 untracked')
 end
 
 T['picker']['a picked branch shows and is remembered for the branch'] = function()
@@ -660,6 +721,202 @@ T['picker']['on a detached HEAD a pick applies to the open review only'] = funct
     child.cmd('Iter review feat~1')
     helpers.wait_until(child, R .. '.changes.since.label == "feat~1"')
     eq(stored_base(), vim.NIL)
+end
+
+T['picker']['the diff window previews the base under the cursor'] = function()
+    H.open(child)
+    child.type_keys('b')
+
+    local merge = rev({ 'merge-base', 'HEAD', 'main' }):sub(1, 7)
+    local edit = rev({ 'rev-parse', '--short', 'feat' })
+    local add = rev({ 'rev-parse', '--short', 'feat~1' })
+    local lines = summary_lines('since main')
+
+    eq(
+        lines[1]:gsub('%s+', ' '),
+        ' since main (' .. merge .. ') 2 commits · 4 files'
+    )
+    eq(vim.list_slice(lines, 2, #lines), {
+        ' Committed on feat since it left main',
+        '',
+        ' ' .. edit .. ' edit a',
+        ' ' .. add .. ' add c',
+        ' + working changes in 2 files',
+        '',
+        ' +1 −1  a.txt',
+        ' +1 −1  b.txt',
+        ' +2 −0  c.txt',
+        ' + 1 untracked',
+    })
+    eq(
+        child.lua_get('vim.api.nvim_buf_get_name(' .. R .. '.summary_buf)'),
+        'iter://review#base#preview'
+    )
+    eq(
+        child.lua_get('vim.api.nvim_buf_get_name(' .. R .. '.picker.buf)'),
+        'iter://review#base'
+    )
+
+    move_to('Working changes')
+
+    local working = summary_lines('Working changes')
+
+    working[1] = working[1]:gsub('%s+', ' ')
+    eq(working, {
+        ' Working changes 2 files',
+        '',
+        ' +1 −1  b.txt',
+        ' + 1 untracked',
+    })
+
+    move_to(edit)
+
+    local preview = summary_lines('from ' .. edit)
+
+    eq(preview[#preview - 1], ' +1 −1  b.txt')
+    helpers.expect_screenshot(child, 'base-preview-commit')
+end
+
+T['picker']['q and <CR> give the diff window its diff and options back'] = function()
+    H.open(child)
+    H.wait_diff(child, 'unstaged b.txt')
+
+    local before = child.lua_get(WINOPTS)
+
+    child.type_keys('b')
+    summary_lines('since main')
+    eq(child.lua_get(WINOPTS .. '.wrap'), true)
+    eq(child.lua_get(WINOPTS .. '.number'), false)
+    eq(
+        child.lua_get('require("iter.ui.sidebar").of(' .. R .. '.tab) ~= nil'),
+        true
+    )
+
+    child.type_keys('q')
+
+    eq(child.lua_get(R .. '.summary_buf'), vim.NIL)
+    eq(child.lua_get(R .. '.view:is_shown()'), true)
+    eq(child.lua_get(WINOPTS), before)
+
+    child.type_keys('b')
+    summary_lines('since main')
+    child.type_keys('<CR>')
+    helpers.wait_until(child, R .. '.changes.since ~= nil')
+
+    eq(child.lua_get(R .. '.view:is_shown()'), true)
+    eq(child.lua_get(WINOPTS), before)
+    eq(
+        child.lua_get('require("iter.ui.sidebar").of(' .. R .. '.tab) ~= nil'),
+        true
+    )
+end
+
+T['picker'][':edit of a file in the diff window keeps the summary'] = function()
+    local origin = child.api.nvim_get_current_tabpage()
+    H.open(child)
+    child.type_keys('b')
+    summary_lines('since main')
+    child.lua('vim.api.nvim_set_current_win(' .. R .. '.diff_win)')
+    child.cmd('edit d.txt')
+    child.lua('vim.wait(100)')
+
+    eq(child.api.nvim_get_current_tabpage(), origin)
+    eq(vim.fs.basename(child.api.nvim_buf_get_name(0)), 'd.txt')
+    eq(
+        child.lua_get(
+            'vim.api.nvim_win_get_buf('
+                .. R
+                .. '.diff_win) == '
+                .. R
+                .. '.summary_buf'
+        ),
+        true
+    )
+end
+
+T['picker'][':edit iter://review#base opens the base list'] = function()
+    child.cmd('edit ' .. vim.fn.fnameescape('iter://review#base'))
+    picker_items()
+    summary_lines('since main')
+
+    eq(child.api.nvim_get_current_win(), child.lua_get(H.LIST_WIN))
+
+    child.cmd('edit')
+    child.cmd('edit ' .. vim.fn.fnameescape('iter://review#base'))
+
+    eq(#picker_items(), 5)
+    eq(child.api.nvim_get_current_win(), child.lua_get(H.LIST_WIN))
+    eq(child.lua_get('_G.notes'), {})
+end
+
+T['picker']['a resize keeps the summary and fits it to the new width'] = function()
+    setup([[{ diff = { layout = 'auto' } }]])
+    H.open(child)
+    child.type_keys('b')
+    summary_lines('since main')
+    child.o.columns = 200
+    -- The annotations window moves on a scheduled callback and WinResized
+    -- follows the next redraw, which `vim.wait` doesn't make.
+    child.lua('vim.wait(100)')
+    helpers.wait_until(
+        child,
+        'vim.fn.strdisplaywidth(vim.api.nvim_buf_get_lines('
+            .. R
+            .. '.summary_buf, 0, 1, false)[1]) == vim.api.nvim_win_get_width('
+            .. R
+            .. '.diff_win)'
+    )
+
+    eq(
+        child.lua_get(
+            'vim.api.nvim_win_get_buf('
+                .. R
+                .. '.diff_win) == '
+                .. R
+                .. '.summary_buf'
+        ),
+        true
+    )
+    eq(
+        child.lua_get('vim.api.nvim_win_get_width(' .. R .. '.diff_win)') > 80,
+        true
+    )
+end
+
+T['picker']['a base that cannot be read shows a line saying so'] = function()
+    helpers.git(repo, { 'branch', 'other', 'main' })
+    H.open(child)
+    child.type_keys('b')
+    summary_lines('since main')
+    helpers.git(repo, { 'branch', '--quiet', '-D', 'other' })
+    move_to('other')
+
+    eq(summary_lines('Cannot read this base'), { ' Cannot read this base' })
+    eq(#child.lua_get('_G.notes'), 1)
+end
+
+T['picker']['before the first commit Working changes lists the files as additions'] = function()
+    child.stop()
+    helpers.cleanup(repo)
+    repo = vim.fn.resolve(vim.fn.tempname())
+    vim.fn.mkdir(repo, 'p')
+    helpers.git(repo, { 'init', '--quiet', '-b', 'main' })
+    helpers.write_file(vim.fs.joinpath(repo, 'a.txt'), { 'a1', 'a2' })
+    helpers.git(repo, { 'add', 'a.txt' })
+    helpers.write_file(vim.fs.joinpath(repo, 'b.txt'), { 'b' })
+    helpers.start_child(child, repo)
+    stub_ui()
+    H.open(child)
+    child.type_keys('b')
+
+    local lines = summary_lines('Working changes')
+
+    eq(vim.list_slice(lines, 2, #lines), {
+        '',
+        ' +2 −0  a.txt',
+        ' + 1 untracked',
+    })
+    eq(child.lua_get('_G.notes'), {})
 end
 
 T['picker']['? lists b'] = function()
@@ -939,6 +1196,31 @@ local function deleted_mark()
             field = mark.span and mark.span.field or vim.NIL,
         }
     end)()]])
+end
+
+T['annotations']['while the base list shows, the annotations window leaves the diff window alone'] = function()
+    annotate_deleted('note')
+    child.lua(R .. ':focus_tree()')
+    child.type_keys('b')
+    summary_lines('since main')
+    child.lua(R .. ':focus_annotations()')
+
+    local win = child.api.nvim_get_current_win()
+
+    child.type_keys('gg', 'G', '<CR>')
+    child.lua('vim.wait(100)')
+
+    eq(child.api.nvim_get_current_win(), win)
+    eq(
+        child.lua_get(
+            'vim.api.nvim_win_get_buf('
+                .. R
+                .. '.diff_win) == '
+                .. R
+                .. '.summary_buf'
+        ),
+        true
+    )
 end
 
 T['annotations']['a deleted line since main keeps the merge-base and sits on its del row'] = function()
