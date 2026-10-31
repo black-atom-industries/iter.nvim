@@ -29,19 +29,17 @@ Type ":Iter review"
 Sleep 400ms
 Enter
 Sleep 1.5s
-Enter
-Sleep 1s
-Type "m"
+Type "="
 Sleep 2.5s
 Type "r"
 Sleep 2.5s
 Type "r"
 Sleep 2.5s
+Ctrl+U
+Sleep 3s
 Type "|"
-Sleep 2.5s
-Type "]c"
-Sleep 1.5s
+Sleep 3s
 Type "-"
 Sleep 2s
-Type "m"
+Type "="
 Sleep 2.5s

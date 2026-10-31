@@ -31,6 +31,10 @@ Enter
 Sleep 1.5s
 Type "j"
 Sleep 1.2s
+Type "j"
+Sleep 1.2s
+Type "k"
+Sleep 1.2s
 Type "k"
 Sleep 1s
 Enter
@@ -49,9 +53,11 @@ Type "r"
 Sleep 1.5s
 Ctrl+J
 Sleep 1s
-Type "l"
+Type "b"
 Sleep 2s
-Type "h"
-Sleep 600ms
 Type "j"
+Sleep 1.5s
+Type "j"
+Sleep 1.5s
+Type "q"
 Sleep 1.5s

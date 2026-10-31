@@ -17,7 +17,7 @@ loop:
 
 iter does not commit, push or pull, and it does not talk to a host. Keep a Git plugin such as [mini.git](https://github.com/nvim-mini/mini-git) for that.
 
-![The review tab: moving through the files, a annotates a line, r marks the file reviewed and moves on, the annotations list the annotation](docs/assets/review.webp)
+![The review tab: moving through the file tree previews each diff, a annotates a line, r marks the file reviewed and moves on, b lists the bases and previews each one](docs/assets/review.webp)
 
 ## Contents
 
@@ -107,7 +107,7 @@ staging icons. Staging does not apply there. Reviewed marks belong to the base t
 annotations are shared, and the copied prompt names the base. iter remembers the
 base per branch.
 
-![All files: m shows every file, r collapses each reviewed file and moves to the next, | shows the diff side by side, - and m switch back](docs/assets/layouts.webp)
+![All files: = shows every file, r collapses each reviewed file to its header and moves to the next, | shows the diff side by side, - and = switch back](docs/assets/layouts.webp)
 
 ### Annotate
 
@@ -145,7 +145,7 @@ the text you are reading (see [Annotation sidebar](#annotation-sidebar)).
 
 - Annotations and reviewed marks are saved per repository and branch, reviewed
   marks per base. Linked worktrees share them.
-- Drawers and the review refresh on their own when the index, HEAD or the
+- The status drawer and the review refresh on their own when the index, HEAD or the
   files change.
 
 ## Install
@@ -703,7 +703,7 @@ require('iter').setup({
         review_breakpoint = 160, -- tab columns from which the review's annotations sit right of the diff, below that under the tree; 0 = always right
     },
     refresh = {
-        poll_ms = 2000,   -- poll interval while a drawer, the review or the sidebar is open
+        poll_ms = 2000,   -- poll interval while the status drawer, the review or the sidebar is open
     },
     confirm = {
         discard = true,   -- ask before discarding changes
@@ -859,10 +859,10 @@ vim.o.tabline = "%!v:lua.require'iter'.tabline()"
 
 iter fires `User` autocmds with the repository root and the paths in `data`:
 
-| Pattern       | When                                                            | `data`                                                                               |
-| ------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `IterRefresh` | A drawer or review read the status, after an action or a change | `root`, `paths`: every changed path, a file on both sides once                       |
-| `IterStage`   | A stage, unstage or discard of files, hunks or lines succeeded  | `root`, `paths`: the paths acted on, `action`: `'stage'`, `'unstage'` or `'discard'` |
+| Pattern       | When                                                                         | `data`                                                                               |
+| ------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `IterRefresh` | The status drawer or the review read the status, after an action or a change | `root`, `paths`: every changed path, a file on both sides once                       |
+| `IterStage`   | A stage, unstage or discard of files, hunks or lines succeeded               | `root`, `paths`: the paths acted on, `action`: `'stage'`, `'unstage'` or `'discard'` |
 
 ```lua
 vim.api.nvim_create_autocmd('User', {
