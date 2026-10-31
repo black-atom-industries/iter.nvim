@@ -15,6 +15,7 @@ T['resolve()'] = new_set()
 T['resolve()']['returns the defaults without options'] = function()
     local resolved = config.resolve()
 
+    eq(resolved.options.status, { style = 'drawer' })
     eq(resolved.options.drawer, {
         height = 0.3,
         zindex = 40,
@@ -43,6 +44,8 @@ T['resolve()']['returns the defaults without options'] = function()
     eq(resolved.options.icons, { annotation = '󰆉' })
     eq(resolved.debug, false)
     eq(resolved.keys.drawer.stage, { 's' })
+    eq(resolved.keys.drawer.collapse, { 'h' })
+    eq(resolved.keys.drawer.expand, { 'l' })
     eq(resolved.keys.diff.next_hunk, { ']c' })
     eq(resolved.keys.diff.yank, { 'y' })
     eq(resolved.keys.diff.yank_all, { 'Y' })
@@ -143,8 +146,8 @@ end
 
 T['resolve() errors']['on an unknown option'] = function()
     expect_error(function()
-        config.resolve({ status = { height = 0.5 } })
-    end, 'opts%.status is not an option')
+        config.resolve({ float = { height = 0.5 } })
+    end, 'opts%.float is not an option')
 
     expect_error(function()
         config.resolve({ drawer = { width = 10 } })
@@ -197,6 +200,26 @@ T['resolve() errors']['on a negative or fractional annotate.review_breakpoint'] 
     expect_error(function()
         config.resolve({ annotate = { review_breakpoint = 160.5 } })
     end, 'opts%.annotate%.review_breakpoint: expected integer')
+end
+
+T['resolve()']['takes either status style'] = function()
+    eq(
+        config.resolve({ status = { style = 'sidebar' } }).options.status.style,
+        'sidebar'
+    )
+    eq(
+        config.resolve({ status = { style = 'drawer' } }).options.status.style,
+        'drawer'
+    )
+end
+
+T['resolve() errors']['on an unknown status.style'] = function()
+    expect_error(function()
+        config.resolve({ status = { style = 'float' } })
+    end, "opts%.status%.style must be 'sidebar' or 'drawer'")
+    expect_error(function()
+        config.resolve({ status = { style = 1 } })
+    end, 'opts%.status%.style: expected string')
 end
 
 T['resolve() errors']['on a review.tree_width below 10 or fractional'] = function()

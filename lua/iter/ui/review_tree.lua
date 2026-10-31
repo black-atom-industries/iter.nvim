@@ -180,6 +180,13 @@ function Tree:on_cursor(lnum, prev)
     end
 end
 
+--- Whether line `lnum` holds a row or a footer item.
+---@param lnum integer
+---@return boolean
+function Tree:has_item(lnum)
+    return self.items[lnum] ~= nil or self.extras[lnum] ~= nil
+end
+
 --- The footer item under the cursor.
 ---@return any
 function Tree:extra()

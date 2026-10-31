@@ -1266,15 +1266,7 @@ function Review:stage_row(kind)
         return
     end
 
-    local items = {}
-
-    for _, file in ipairs(tree.files(node)) do
-        for _, item in ipairs(file.items) do
-            if kind == 'unstage' or item.side ~= 'staged' then
-                table.insert(items, item)
-            end
-        end
-    end
+    local items = file_actions.below(tree.files(node), kind)
 
     if kind == 'stage' and #items == 0 and ctx.changes.base == nil then
         util.warn('Nothing to stage')
@@ -1423,32 +1415,12 @@ function Review:tree_handlers()
             self:toggle_help('tree')
         end,
         scroll_down = function()
-            self:scroll('<C-d>')
+            self.preview:scroll('<C-d>')
         end,
         scroll_up = function()
-            self:scroll('<C-u>')
+            self.preview:scroll('<C-u>')
         end,
     }
-end
-
---- Scroll the diff by half a page, or by the count, and leave the cursor
---- and focus in the tree.
----@param keys string `<C-d>` or `<C-u>`
-function Review:scroll(keys)
-    local win = self.view.win
-
-    if not util.is_valid_win(win) or not self.view:is_shown() then
-        return
-    end
-
-    local count = vim.v.count > 0 and vim.v.count or ''
-    local cmd = 'normal! ' .. count .. vim.keycode(keys)
-
-    vim.api.nvim_win_call(win, function()
-        vim.cmd(cmd)
-    end)
-    -- Scrollbind follows only the current window.
-    self.view:sync(self.view)
 end
 
 --- Compare the review with `spec`, nil for working changes, and remember

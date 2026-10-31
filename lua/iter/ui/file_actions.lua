@@ -17,6 +17,25 @@ local M = {}
 ---@field action? 'stage'|'unstage'|'discard' nil for ignore, which fires no IterStage
 ---@field paths string[]
 
+--- The changes of `files`, the files below a directory, that `kind` acts
+--- on: every change to unstage, the changes other than staged to stage.
+---@param files IterTreeFile[]
+---@param kind 'stage'|'unstage'
+---@return IterChange[]
+function M.below(files, kind)
+    local items = {}
+
+    for _, file in ipairs(files) do
+        for _, item in ipairs(file.items) do
+            if kind == 'unstage' or item.side ~= 'staged' then
+                table.insert(items, item)
+            end
+        end
+    end
+
+    return items
+end
+
 --- Whether one of `items` is a change against a base, where `action`
 --- doesn't apply; says so when it is.
 ---@param items IterChange[]

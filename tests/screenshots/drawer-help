@@ -3,7 +3,7 @@
 02|          @@ -1 +0,0 @@                                                         
 03|  1     - gone soon                                                             
 04|~               ╭─────────────────── Keys ────────────────────╮                 
-05|~               │ <CR>   Open the file and close the drawer   │                 
+05|~               │ <CR>   Open the file and close the status   │                 
 06|~               │ S gs   Stage or unstage the file            │                 
 07|~               │ u      Unstage the file                     │                 
 08|~               │ I      Add the untracked file to .gitignore │                 

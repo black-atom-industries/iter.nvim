@@ -6,6 +6,9 @@ local M = {}
 
 M.options = {
     debug = false,
+    status = {
+        style = 'drawer',
+    },
     drawer = {
         height = 0.3,
         zindex = 40,
@@ -70,6 +73,8 @@ M.keys = {
         scroll_up = '<C-u>',
         column_left = 'h',
         column_right = 'l',
+        collapse = 'h',
+        expand = 'l',
     },
     tree = {
         open = '<CR>',

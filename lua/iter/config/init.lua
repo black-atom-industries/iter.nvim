@@ -11,6 +11,7 @@ end
 -- Option name -> type for leaves, or a nested schema for tables.
 local SCHEMA = {
     debug = 'boolean',
+    status = { style = 'string' },
     drawer = {
         height = 'number',
         zindex = 'integer',
@@ -213,6 +214,12 @@ local function validate(opts)
     options.keys = nil
 
     validate_options(options, SCHEMA, 'opts')
+
+    local style = opts.status and opts.status.style
+
+    if style ~= nil and style ~= 'sidebar' and style ~= 'drawer' then
+        error("opts.status.style must be 'sidebar' or 'drawer'", 0)
+    end
 
     local height = opts.drawer and opts.drawer.height
 

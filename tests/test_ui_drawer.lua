@@ -1245,7 +1245,7 @@ T['help']['? lists the current keys and closes on q, ? and <Esc>'] = function()
     for _, close in ipairs({ 'q', '?', '<Esc>' }) do
         child.type_keys('?')
         eq(help_lines(), {
-            ' <CR>   Open the file and close the drawer',
+            ' <CR>   Open the file and close the status',
             ' S gs   Stage or unstage the file',
             ' u      Unstage the file',
             ' I      Add the untracked file to .gitignore',

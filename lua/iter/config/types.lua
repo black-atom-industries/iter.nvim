@@ -3,6 +3,9 @@
 -- All user-facing option fields are optional: setup() deep-merges partial
 -- tables with the defaults, so the resolved config always has every field.
 
+---@class IterStatusOptions
+---@field style? 'sidebar'|'drawer' Where `:Iter` shows the status: a sidebar at the tab's left edge, or a float at the bottom of the window
+
 ---@class IterDrawerOptions
 ---@field height? number Fraction of the pane height, in (0, 1]
 ---@field zindex? integer
@@ -46,6 +49,7 @@
 ---@alias IterKeyValue string|string[]|false
 
 ---@class IterOptions
+---@field status? IterStatusOptions
 ---@field drawer? IterDrawerOptions
 ---@field diff? IterDiffOptions
 ---@field review? IterReviewOptions
@@ -58,6 +62,7 @@
 ---@field debug? boolean
 
 ---@class IterResolvedOptions
+---@field status { style: 'sidebar'|'drawer' }
 ---@field drawer { height: number, zindex: integer, breakpoint: integer, commits: integer }
 ---@field diff { expand_step: integer, syntax_max_lines: integer, word_diff: boolean, layout: IterLayoutOption, split_breakpoint: integer, wrap: boolean, args: string[] }
 ---@field review { tree_width: integer }

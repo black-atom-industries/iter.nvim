@@ -10,6 +10,7 @@ local M = {}
 ---@field buf integer the page's own buffer, its lines starting with a 3-cell gutter whose second cell the panel draws `▸` in; it must survive being hidden ('bufhidden' not 'wipe' or 'delete'), since another page takes the window
 ---@field render fun(self, width: integer, height: integer) writes the page's lines and its line → item map
 ---@field on_cursor? fun(self, lnum: integer, prev: integer) after the cursor moved to another line, and once when the page is shown, with the panel's window current; may move the cursor to an item line
+---@field has_item? fun(self, lnum: integer): boolean whether line `lnum` holds an item; the marker shows only on such a line
 
 ---@class IterPanelOpenOptions
 ---@field width integer cells
@@ -97,6 +98,10 @@ local function mark(self)
     end
 
     local lnum = vim.api.nvim_win_get_cursor(self.win)[1]
+
+    if page.has_item ~= nil and not page:has_item(lnum) then
+        return
+    end
 
     vim.api.nvim_buf_set_extmark(page.buf, namespace, lnum - 1, 0, {
         virt_text = { { ' ▸', 'IterDrawerKey' } },

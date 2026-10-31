@@ -1,5 +1,5 @@
 ---@class IterModule
----@field drawer IterDrawer? the open status drawer
+---@field drawer (IterDrawer|IterStatus)? the open status, a drawer or a sidebar
 ---@field current_review IterReview? the open review tab
 ---@field current_commits IterCommits? the open commits tab
 ---@field did_setup boolean
@@ -39,9 +39,12 @@ local function target_pane()
     return current
 end
 
-function M.status()
-    log.info('status command called')
-
+--- Open the status, or focus it when it is open; with `toggle`, close a
+--- sidebar open in the current tab instead. A sidebar open in another tab
+--- closes there and opens here. In the commits tab the sidebar opens in
+--- the tab the commits came from.
+---@param toggle boolean
+local function show_status(toggle)
     if require('iter.git').root() == '' then
         util.warn('Not inside a git repository')
         return
@@ -58,23 +61,66 @@ function M.status()
         return
     end
 
-    if M.drawer ~= nil and M.drawer:is_open() then
-        M.drawer:focus()
-        return
+    local sidebar = M.config.options.status.style == 'sidebar'
+    local commits = M.current_commits
+
+    if
+        sidebar
+        and commits ~= nil
+        and commits:is_open()
+        and vim.api.nvim_get_current_tabpage() == commits.tab
+        and vim.api.nvim_tabpage_is_valid(commits.origin_tab)
+    then
+        vim.api.nvim_set_current_tabpage(commits.origin_tab)
+        toggle = false
+    end
+
+    local open = M.drawer
+
+    if open ~= nil and open:is_open() then
+        if not sidebar or open.tab == vim.api.nvim_get_current_tabpage() then
+            if toggle and sidebar then
+                open:close()
+            else
+                open:focus()
+            end
+
+            return
+        end
+
+        local win = vim.api.nvim_get_current_win()
+
+        open:close()
+
+        if util.is_valid_win(win) then
+            vim.api.nvim_set_current_win(win)
+        end
     end
 
     local path = vim.api.nvim_buf_get_name(0)
 
-    M.drawer = require('iter.ui.drawer').open({
+    M.drawer = require(sidebar and 'iter.ui.status' or 'iter.ui.drawer').open({
         pane = target_pane(),
         config = M.config,
         path = path ~= '' and vim.fs.normalize(vim.fn.resolve(path)) or nil,
-        on_close = function(drawer)
-            if M.drawer == drawer then
+        on_close = function(status)
+            if M.drawer == status then
                 M.drawer = nil
             end
         end,
     })
+end
+
+--- Open the status. As a sidebar it closes again when it is open in the
+--- current tab; as a drawer an open one gets the focus.
+function M.status()
+    log.info('status command called')
+    show_status(true)
+end
+
+--- Open the status, or focus it when it is open.
+function M.open_status()
+    show_status(false)
 end
 
 --- Open the commits tab, or switch to it when it is open. An open status

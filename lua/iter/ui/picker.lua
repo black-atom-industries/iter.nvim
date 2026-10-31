@@ -219,6 +219,13 @@ function Page:on_cursor(lnum, prev)
     end
 end
 
+--- Whether line `lnum` holds an item.
+---@param lnum integer
+---@return boolean
+function Page:has_item(lnum)
+    return self.indexes[lnum] ~= nil
+end
+
 --- The index of the item under the cursor.
 ---@return integer?
 function Page:index()

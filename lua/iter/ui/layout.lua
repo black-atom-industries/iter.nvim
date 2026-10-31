@@ -550,6 +550,34 @@ function M.line_count(stat)
     return { '+' .. stat.added, 'IterStage' }
 end
 
+--- The lines a working file changes, for its status row: `+a −d`, a part
+--- of 0 left out unless both are, `bin` for a binary file.
+---@param stat GitStat
+---@return [string, string][]
+function M.line_counts(stat)
+    vim.validate('stat', stat, 'table')
+
+    if stat.added == nil then
+        return { { 'bin', 'IterDrawerHint' } }
+    end
+
+    local chunks = {}
+
+    if stat.added > 0 or stat.deleted == 0 then
+        table.insert(chunks, { '+' .. stat.added, 'IterStage' })
+    end
+
+    if stat.deleted > 0 then
+        if #chunks > 0 then
+            table.insert(chunks, { ' ' })
+        end
+
+        table.insert(chunks, { '−' .. stat.deleted, 'IterUnstage' })
+    end
+
+    return chunks
+end
+
 --- A commit's short sha, date and time and author, a blank line, then its
 --- whole message, the subject as a title, and a blank line after it.
 ---@param message GitMessage

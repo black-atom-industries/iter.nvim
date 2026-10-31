@@ -11,7 +11,7 @@ local M = {}
 ---@type table<IterView, { [1]: string, [2]: string, [3]: string[]? }[]>
 local ACTIONS = {
     drawer = {
-        { 'open', 'Open the file and close the drawer' },
+        { 'open', 'Open the file and close the status' },
         { 'stage', 'Stage or unstage the file' },
         { 'unstage', 'Unstage the file' },
         { 'discard', 'Discard changes in the file' },
@@ -27,6 +27,8 @@ local ACTIONS = {
         { 'scroll_up', 'Scroll the diff up' },
         { 'column_left', 'Select the column to the left' },
         { 'column_right', 'Select the column to the right' },
+        { 'collapse', "Close the directory, or the file's directory" },
+        { 'expand', 'Open the directory' },
     },
     tree = {
         { 'open', 'Open the diff, or open or close the directory' },

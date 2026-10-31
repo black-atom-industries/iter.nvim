@@ -484,6 +484,51 @@ function Preview:worktree_line(file, row)
     return line
 end
 
+-- Diff rows that stand for a line of the file.
+local CODE_ROWS = { context = true, del = true, add = true }
+
+--- On a code row of the view, call `edit` with the file's path and the
+--- row's worktree line; on a gap, expand it.
+---@param edit fun(path: string, line: integer)
+function Preview:open_row(edit)
+    local view = self.view
+    local section, index = view:at()
+    local row = index and section and section.file.rows[index]
+
+    if not row then
+        return
+    end
+
+    ---@cast section IterDocSection
+    ---@cast index integer
+
+    if row.kind == 'gap' then
+        view:expand()
+    elseif CODE_ROWS[row.kind] then
+        edit(section.file.path, self:worktree_line(section.file, index))
+    end
+end
+
+--- Scroll the diff by half a page, or by the count, and leave the cursor
+--- and focus where they are.
+---@param keys string `<C-d>` or `<C-u>`
+function Preview:scroll(keys)
+    local view = self.view
+
+    if not util.is_valid_win(view.win) or not view:is_shown() then
+        return
+    end
+
+    local count = vim.v.count > 0 and vim.v.count or ''
+    local cmd = 'normal! ' .. count .. vim.keycode(keys)
+
+    vim.api.nvim_win_call(view.win, function()
+        vim.cmd(cmd)
+    end)
+    -- Scrollbind follows only the current window.
+    view:sync(view)
+end
+
 --- Close the view and give its window back its buffer and options.
 function Preview:close()
     self.view:close()

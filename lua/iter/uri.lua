@@ -141,7 +141,7 @@ local function elsewhere(kind)
         string.format(
             'The open %s is of %s, not of %s',
             kind == 'commits' and 'commits tab'
-                or kind == 'status' and 'drawer'
+                or kind == 'status' and (iter.config.options.status.style == 'sidebar' and 'status' or 'drawer')
                 or 'review',
             open_root,
             root
@@ -166,7 +166,7 @@ local function route(target, name)
     then
         return
     elseif target.kind == 'status' then
-        iter.status()
+        iter.open_status()
 
         local drawer = iter.drawer
 

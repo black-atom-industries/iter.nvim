@@ -33,6 +33,7 @@ iter does not commit, push or pull, and it does not talk to a host. Keep a Git p
 - [Annotations outside iter](#annotations-outside-iter)
 - [Reference](#reference)
   - [Status drawer](#status-drawer)
+  - [Status sidebar](#status-sidebar)
   - [Review tab](#review-tab)
   - [Annotation sidebar](#annotation-sidebar)
   - [Keys](#keys)
@@ -321,6 +322,36 @@ drawer. A staged line lands where it is in the worktree.
 On a clean tree the drawer says "Working tree clean". Outside a git repository
 iter warns and opens nothing.
 
+### Status sidebar
+
+With `status = { style = 'sidebar' }`, `:Iter` opens the status at the left
+edge of the current tab instead of the drawer, `review.tree_width` wide and at
+most half the editor. The current window shows the diff of the file under the
+cursor. `q`, or `:Iter` again, closes the sidebar and gives that window back
+its buffer, options and view. `:Iter` in another tab moves the sidebar there,
+and in the commits tab opens it in the tab the commits came from.
+
+**Header.** `HEAD <branch>  ↑n ↓m  <upstream>` as in the drawer, and below it
+the number of files with how many are staged and partly staged:
+`4 files · 1 staged · 1 partly`.
+
+**Rows.** The changed files as a tree, as in the review: ● staged, ◐ partly
+staged, ○ unstaged, then the git letter, the name, and the lines changed
+against `HEAD` at the right. A partly staged file is one row, and its diff
+shows the unstaged and the staged section.
+
+- `s` on a ◐ file stages the rest, `u` unstages all of it. On a directory `s`
+  and `u` act on every file below it; `d` and `I` work on files only.
+- `<CR>` on a file opens it in the window and closes the sidebar; on a
+  directory it closes or opens the directory, as `h` and `l` do.
+- `r` closes the sidebar and opens the review on the file.
+
+**Diff.** `<CR>` on a code line opens the file at that line and closes the
+sidebar. `<C-j>` in the diff goes back to the sidebar.
+
+On a clean tree the sidebar says "Working tree clean" and the window keeps its
+buffer.
+
 ### Review tab
 
 **File tree.** The left window lists the changed files as a tree, 34 cells
@@ -545,26 +576,31 @@ require('iter').setup({
 })
 ```
 
-The status drawer (`drawer`):
+The status, as a drawer or a sidebar (`drawer`):
 
-| Key     | Action         | Does                                 |
-| ------- | -------------- | ------------------------------------ |
-| `<CR>`  | `open`         | Open the file and close the drawer   |
-| `s`     | `stage`        | Stage or unstage the file            |
-| `u`     | `unstage`      | Unstage the file                     |
-| `d`     | `discard`      | Discard changes in the file          |
-| `I`     | `ignore`       | Add the untracked file to .gitignore |
-| `r`     | `review`       | Open the review tab                  |
-| `=`     | `mode`         | Toggle one file or all files         |
-| `\|`    | `split`        | Show the diff side by side           |
-| `-`     | `unified`      | Show the diff unified                |
-| `gw`    | `wrap`         | Toggle wrapping long lines           |
-| `q`     | `close`        | Close                                |
-| `?`     | `help`         | Show the keys                        |
-| `<C-d>` | `scroll_down`  | Scroll the diff down                 |
-| `<C-u>` | `scroll_up`    | Scroll the diff up                   |
-| `h`     | `column_left`  | Select the column to the left        |
-| `l`     | `column_right` | Select the column to the right       |
+| Key     | Action         | Does                                         |
+| ------- | -------------- | -------------------------------------------- |
+| `<CR>`  | `open`         | Open the file and close the status           |
+| `s`     | `stage`        | Stage or unstage the file                    |
+| `u`     | `unstage`      | Unstage the file                             |
+| `d`     | `discard`      | Discard changes in the file                  |
+| `I`     | `ignore`       | Add the untracked file to .gitignore         |
+| `r`     | `review`       | Open the review tab                          |
+| `=`     | `mode`         | Toggle one file or all files                 |
+| `\|`    | `split`        | Show the diff side by side                   |
+| `-`     | `unified`      | Show the diff unified                        |
+| `gw`    | `wrap`         | Toggle wrapping long lines                   |
+| `q`     | `close`        | Close                                        |
+| `?`     | `help`         | Show the keys                                |
+| `<C-d>` | `scroll_down`  | Scroll the diff down                         |
+| `<C-u>` | `scroll_up`    | Scroll the diff up                           |
+| `h`     | `column_left`  | Select the column to the left                |
+| `l`     | `column_right` | Select the column to the right               |
+| `h`     | `collapse`     | Close the directory, or the file's directory |
+| `l`     | `expand`       | Open the directory                           |
+
+`column_left` and `column_right` work in the drawer, `collapse` and `expand` in
+the sidebar.
 
 The review's file tree (`tree`):
 
@@ -675,10 +711,13 @@ The base picker (`picker`):
 
 ```lua
 require('iter').setup({
+    status = {
+        style = 'drawer', -- where :Iter shows the status: 'drawer' or 'sidebar'
+    },
     drawer = {
-        height = 0.3,     -- fraction of the window height
+        height = 0.3,     -- fraction of the window height, drawer only
         zindex = 40,      -- float stacking order; help and annotation floats sit above it
-        breakpoint = 80,  -- drawer width below which the columns stack
+        breakpoint = 80,  -- drawer width below which the columns stack, drawer only
         commits = 3,      -- recent commits the status drawer lists, 0 hides them
     },
     diff = {
@@ -745,6 +784,7 @@ local iter = require('iter')
 
 iter.setup(opts)                     -- see Configuration
 iter.status()                        -- same as :Iter status
+iter.open_status()                   -- open the status, or focus it; never closes
 iter.review()                        -- same as :Iter review
 iter.review({ base = 'main' })       -- review against a branch or another ref
 iter.commits()                       -- same as :Iter commits

@@ -210,6 +210,26 @@ T['line_count()'] = function()
     eq(count(nil, nil), { 'bin', 'IterDrawerHint' })
 end
 
+T['line_counts()'] = function()
+    local function counts(added, deleted)
+        return layout.line_counts({
+            path = 'a.txt',
+            added = added,
+            deleted = deleted,
+        })
+    end
+
+    eq(counts(4, 3), {
+        { '+4', 'IterStage' },
+        { ' ' },
+        { '−3', 'IterUnstage' },
+    })
+    eq(counts(11, 0), { { '+11', 'IterStage' } })
+    eq(counts(0, 4), { { '−4', 'IterUnstage' } })
+    eq(counts(0, 0), { { '+0', 'IterStage' } })
+    eq(counts(nil, nil), { { 'bin', 'IterDrawerHint' } })
+end
+
 T['commit_summary()'] = new_set()
 
 T['commit_summary()']['messages, then the files with their counts'] = function()

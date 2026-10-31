@@ -146,6 +146,12 @@ the review straight to an agent pane.
   them.
 - In the status drawer the pane above shows the diff view in place of its buffer. The view saves the window-local
   options it changes and restores them on every exit path.
+- The status sidebar (`iter.ui.status`, `status.style = 'sidebar'`) shows the status in the panel at the tab's left
+  edge, a tree page (`iter.ui.review_tree`, named `iter://status`) with the drawer's keys, and the diff of the file under
+  the cursor in the window it opened from. At open it saves that window's buffer and view and the tab's
+  `winrestcmd()`; closing gives the window its buffer and view back, the view restores the options, and the tab gets
+  its sizes back while its windows are the ones it had. Its line counts come from one `git diff --numstat HEAD` per
+  read.
 - The status drawer's lines come from `iter.ui.layout`: pure functions from a list of column specs and the width to
   render lines, side by side at `drawer.breakpoint` and wider, stacked below it; `h` and `l` step between the
   columns. The drawer and the review share the diff preview (`iter.ui.preview`: the view, the file it shows, all-files

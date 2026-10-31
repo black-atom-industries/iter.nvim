@@ -55,8 +55,6 @@ Drawer.MIN_LINES = 5
 local SELECTED_NS = vim.api.nvim_create_namespace('iter.drawer.selected')
 
 local PREVIEW_DELAY_MS = 50
--- Diff rows that stand for a line of the file.
-local CODE_ROWS = { context = true, del = true, add = true }
 -- Actions the key hint line shows in a file column, in order, with their
 -- short labels.
 local HINTS = {
@@ -198,7 +196,9 @@ function Drawer.open(opts)
             end
         end,
         expand = function()
-            self:open_row()
+            self.preview:open_row(function(path, line)
+                self:edit(path, line)
+            end)
         end,
         mode = function()
             self:set_all_files(not self.preview.all_files)
@@ -283,26 +283,6 @@ function Drawer.open(opts)
     return self
 end
 
---- Scroll the diff above the drawer by half a page, or by the count, and
---- leave the cursor and focus in the drawer.
----@param keys string `<C-d>` or `<C-u>`
-function Drawer:scroll(keys)
-    local win = self.view.win
-
-    if not util.is_valid_win(win) then
-        return
-    end
-
-    local count = vim.v.count > 0 and vim.v.count or ''
-    local cmd = 'normal! ' .. count .. vim.keycode(keys)
-
-    vim.api.nvim_win_call(win, function()
-        vim.cmd(cmd)
-    end)
-    -- Scrollbind follows only the current window.
-    self.view:sync(self.view)
-end
-
 ---@return table<string, fun()>
 function Drawer:make_handlers()
     local function act(method)
@@ -333,10 +313,10 @@ function Drawer:make_handlers()
         close = act('close'),
         help = act('toggle_help'),
         scroll_down = function()
-            self:scroll('<C-d>')
+            self.preview:scroll('<C-d>')
         end,
         scroll_up = function()
-            self:scroll('<C-u>')
+            self.preview:scroll('<C-u>')
         end,
         column_left = function()
             self:step_column(-1)
@@ -1117,30 +1097,6 @@ function Drawer:open_file()
     end
 
     self:edit(item.path)
-end
-
---- In the preview: on a code row, close the drawer and edit the file at the
---- row's worktree line; on a gap, expand it.
-function Drawer:open_row()
-    local view = self.view
-    local section, index = view:at()
-    local row = index and section and section.file.rows[index]
-
-    if not row then
-        return
-    end
-
-    ---@cast section IterDocSection
-    ---@cast index integer
-
-    if row.kind == 'gap' then
-        view:expand()
-    elseif CODE_ROWS[row.kind] then
-        self:edit(
-            section.file.path,
-            self.preview:worktree_line(section.file, index)
-        )
-    end
 end
 
 --- Close the drawer and open the review tab on the selected file.
