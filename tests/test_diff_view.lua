@@ -728,4 +728,81 @@ T['syntax and words']['injected languages get their own captures'] = function()
     end, groups) > 0, true)
 end
 
+T['side labels'] = new_set()
+
+--- The inline labels the view puts after a header's path, by buffer line.
+---@return table<string, string>
+local function side_labels()
+    return child.lua_get([[(function()
+        local ns = vim.api.nvim_create_namespace('iter.diff')
+        local result = {}
+        for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(_G.view.buf, ns, 0, -1, { details = true })) do
+            local d = mark[4]
+            if d.virt_text_pos == 'inline' and mark[3] > 0 then
+                result[tostring(mark[2] + 1)] = vim.trim(d.virt_text[1][1])
+            end
+        end
+        return result
+    end)()]])
+end
+
+--- Stage a change to the first line of two.txt, then change its last line
+--- in the worktree, and open a view of nothing yet as `_G.view`.
+local function partly_staged()
+    child.lua([[
+        local root = vim.fn.getcwd()
+        local lines = vim.fn.readfile('two.txt')
+        lines[1] = 'staged change'
+        vim.fn.writefile(lines, 'two.txt')
+        vim.system({ 'git', 'add', 'two.txt' }, { cwd = root }):wait()
+        lines[#lines] = 'unstaged change'
+        vim.fn.writefile(lines, 'two.txt')
+        local git = require('iter.git')
+        local model = require('iter.diff.model')
+        _G.file_of = function(side)
+            local change = { path = 'two.txt', side = side, code = 'M' }
+            return model.build(change, assert(git.file_diff(root, change, {})))
+        end
+        _G.view = require('iter.diff.view').new(vim.tbl_extend('force', {
+            win = vim.api.nvim_get_current_win(),
+        }, ]] .. VIEW_OPTIONS .. [[))
+    ]])
+end
+
+T['side labels']['two sections of one path name their side after it'] = function()
+    partly_staged()
+    child.lua([[_G.view:show_all({
+        { file = _G.file_of('unstaged') },
+        { file = _G.file_of('staged') },
+    })]])
+
+    local first = child.lua_get('_G.view.document.sections[1].first')
+    local second = child.lua_get('_G.view.document.sections[2].first')
+
+    eq(side_labels(), {
+        [tostring(first)] = 'unstaged',
+        [tostring(second)] = 'staged',
+    })
+end
+
+T['side labels']['one section of a path takes no label'] = function()
+    partly_staged()
+    child.lua([[_G.view:show(_G.file_of('staged'))]])
+
+    eq(side_labels(), {})
+end
+
+T['side labels']['the split layout keeps its version labels'] = function()
+    partly_staged()
+    child.lua([[
+        _G.view:set_layout('split')
+        _G.view:show_all({
+            { file = _G.file_of('unstaged') },
+            { file = _G.file_of('staged') },
+        })
+    ]])
+
+    eq(side_labels()['1'], 'worktree')
+end
+
 return T

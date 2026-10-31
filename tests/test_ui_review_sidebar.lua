@@ -146,57 +146,58 @@ local function goto_note(body)
     )
 end
 
----@return string|vim.NIL
-local function column_note()
-    return child.lua_get([[(function()
-        local d = ]] .. R .. [[.drawer
-        if d.column ~= 'annotations' then return vim.NIL end
-        local item = d:item()
-        return item and item.annotation and item.annotation.body or vim.NIL
-    end)()]])
-end
-
 T['wide'] = new_set()
 
-T['wide']['from 160 tab columns the sidebar replaces the Annotations column'] = function()
+T['wide']['from 160 tab columns the annotations sit right of the diff'] = function()
     open_review()
 
     eq(sidebar_win() ~= nil, true)
-    eq(child.lua_get('#' .. R .. '.drawer.extra'), 0)
-    eq(child.lua_get(R .. '.drawer.float.side_win'), vim.NIL)
     eq(
         child.lua_get('vim.api.nvim_win_get_height(' .. S .. '.win)')
-            > child.lua_get('vim.api.nvim_win_get_height(' .. R .. '.diff_win)'),
+            >= child.lua_get(
+                'vim.api.nvim_win_get_height(' .. R .. '.diff_win)'
+            ),
         true
     )
-    eq(child.api.nvim_get_current_win(), child.lua_get(R .. '.drawer.win'))
+    eq(
+        child.lua_get('vim.api.nvim_win_get_position(' .. S .. '.win)[2]')
+            > child.lua_get(
+                'vim.api.nvim_win_get_position(' .. R .. '.diff_win)[2]'
+            ),
+        true
+    )
+    eq(child.api.nvim_get_current_win(), child.lua_get(H.LIST_WIN))
 end
 
-T['wide']['the sidebar sits right, or left with annotate.side'] = function()
-    open_review()
-
-    local right =
-        child.lua_get('vim.api.nvim_win_get_position(' .. S .. '.win)[2]')
-
-    eq(right > 100, true)
-
-    child.cmd('tabclose')
+T['wide']['the annotations sit right whatever annotate.side says'] = function()
     setup([[{ annotate = { side = 'left' } }]])
     open_review()
 
-    eq(child.lua_get('vim.api.nvim_win_get_position(' .. S .. '.win)[2]'), 0)
+    eq(
+        child.lua_get('vim.api.nvim_win_get_position(' .. S .. '.win)[2]') > 100,
+        true
+    )
 end
 
-T['wide']['marks changed files and counts reviewed among them'] = function()
+T['wide']['marks changed files; the progress sits in the tree'] = function()
     open_review()
 
     local lines = child.lua_get(
         'vim.api.nvim_buf_get_lines(' .. S .. '.buf, 0, -1, false)'
     )
 
-    eq(lines[2]:find('0 of 1', 1, true) ~= nil, true)
-    eq(vim.startswith(lines[4], 'M a.txt'), true)
-    eq(vim.startswith(lines[7], '  e.txt'), true)
+    eq(vim.startswith(lines[3], 'M a.txt'), true)
+    eq(vim.startswith(lines[6], '  e.txt'), true)
+    eq(
+        vim.trim(
+            child.lua_get(
+                'vim.api.nvim_buf_get_lines('
+                    .. R
+                    .. '.tree.buf, 2, 3, false)[1]'
+            )
+        ):find('0 of 1', 1, true) ~= nil,
+        true
+    )
 end
 
 T['wide']['moving in the sidebar previews the note in the diff'] = function()
@@ -227,17 +228,13 @@ T['wide']['<CR> moves into the diff pane at the note'] = function()
     eq(child.api.nvim_get_current_line(), 'a3 changed')
 end
 
-T['wide']['l past the last column enters the sidebar and <C-j> comes back'] = function()
+T['wide']['<C-j> in the sidebar focuses the tree'] = function()
     open_review()
-
-    local drawer = child.lua_get(R .. '.drawer.win')
-
-    child.type_keys('l', 'l')
-    eq(child.api.nvim_get_current_win(), sidebar_win())
+    child.api.nvim_set_current_win(sidebar_win())
 
     child.type_keys('<C-j>')
-    eq(child.api.nvim_get_current_win(), drawer)
-    eq(child.lua_get(R .. '.drawer:item().path'), 'a.txt')
+    eq(child.api.nvim_get_current_win(), child.lua_get(H.LIST_WIN))
+    eq(H.selected(child), 'a.txt')
 end
 
 T['wide']['q in the sidebar closes the review'] = function()
@@ -261,60 +258,56 @@ end
 
 T['resize'] = new_set()
 
-T['resize']['crossing 160 swaps sidebar and column, keeping the note'] = function()
+--- The body of the note under the sidebar's cursor.
+---@return string|vim.NIL
+local function sidebar_note()
+    return child.lua_get([[(function()
+        local s = ]] .. S .. [[
+        local row = s and s:row()
+        return row and row.item and row.item.annotation.body or vim.NIL
+    end)()]])
+end
+
+T['resize']['crossing 160 moves the sidebar below the tree and back, keeping the note'] = function()
     open_review()
     goto_note('Unchanged but odd')
 
     child.o.columns = 120
-    helpers.wait_until(child, R .. '.side_annotations == false')
+    helpers.wait_until(child, S .. ' ~= nil and ' .. S .. '.placement ~= nil')
 
-    eq(sidebar_win(), nil)
-    eq(column_note(), 'Unchanged but odd')
+    eq(sidebar_note(), 'Unchanged but odd')
+    eq(child.lua_get('vim.api.nvim_win_get_position(' .. S .. '.win)[2]'), 0)
+    eq(child.lua_get(R .. '.annotations_closed'), false)
 
     child.type_keys('k')
-    eq(column_note(), 'Why this change?')
-
     child.o.columns = 200
-    helpers.wait_until(child, R .. '.side_annotations == true')
-    helpers.wait_until(child, S .. ' ~= nil')
+    helpers.wait_until(child, S .. ' ~= nil and ' .. S .. '.placement == nil')
 
-    eq(child.lua_get(R .. '.drawer.column') ~= 'annotations', true)
-    eq(
-        child.lua_get([[(function()
-            local s = ]] .. S .. [[
-            local row = s:row()
-            return row and row.item and row.item.annotation.body or vim.NIL
-        end)()]]),
-        'Why this change?'
-    )
+    eq(sidebar_note() ~= vim.NIL, true)
 end
 
-T['resize']['below 160 l still reaches the Annotations column'] = function()
-    child.o.columns = 120
-    open_review()
-    child.type_keys('l')
-
-    eq(child.lua_get(R .. '.drawer.column'), 'annotations')
-    eq(sidebar_win(), nil)
-end
-
-T['resize']['closing the sidebar window brings the column back'] = function()
+T['resize']['a sidebar the user closed stays closed across a resize'] = function()
     open_review()
     child.lua('vim.api.nvim_win_close(' .. S .. '.win, true)')
-    helpers.wait_until(child, R .. '.side_annotations == false')
+    helpers.wait_until(child, R .. '.annotations_closed')
 
-    child.type_keys('l')
-    eq(child.lua_get(R .. '.drawer.column'), 'annotations')
+    child.o.columns = 120
+    child.lua('vim.wait(100)')
+    eq(sidebar_win(), nil)
+
+    child.lua([[require('iter').annotations()]])
+    eq(child.api.nvim_get_current_win(), sidebar_win())
+    eq(child.lua_get(S .. '.placement ~= nil'), true)
 end
 
 T['config'] = new_set()
 
-T['config']['annotate.review_breakpoint sets where the sidebar takes over'] = function()
+T['config']['annotate.review_breakpoint sets where the sidebar moves right'] = function()
     setup([[{ annotate = { review_breakpoint = 250 } }]])
     open_review()
 
-    eq(sidebar_win(), nil)
-    eq(child.lua_get('#' .. R .. '.drawer.extra'), 1)
+    eq(sidebar_win() ~= nil, true)
+    eq(child.lua_get(S .. '.placement ~= nil'), true)
 end
 
 return T

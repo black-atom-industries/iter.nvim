@@ -59,7 +59,7 @@ local function git_out(args)
 end
 
 --- Open the review, wait for the first file's diff, then switch to all
---- files with `=` in the drawer.
+--- files with `=` in the tree.
 local function open_all()
     child.cmd('Iter review')
     helpers.wait_until(
@@ -122,11 +122,29 @@ local function statusline()
     return child.lua_get([[require('iter').statusline()]])
 end
 
+--- Focus the review's annotations window on its first note.
+local function focus_notes()
+    child.lua([[
+        local s = require('iter.ui.sidebar').of(require('iter').current_review.tab)
+        s:focus()
+        local first
+        for lnum, row in pairs(s.rows) do
+            if row.item ~= nil and (first == nil or lnum < first) then
+                first = lnum
+            end
+        end
+        _G.first_note = first
+    ]])
+    child.type_keys(child.lua_get('_G.first_note') .. 'G')
+end
+
 local T = new_set({
     hooks = {
         pre_case = function()
             repo = create_repo()
             helpers.start_child(child, repo)
+            -- An 80-cell diff beside the tree.
+            child.o.columns = 115
             stub_ui()
         end,
         post_case = function()
@@ -138,7 +156,7 @@ local T = new_set({
 
 T['mode'] = new_set()
 
-T['mode']['m shows every file in drawer order, a blank line between'] = function()
+T['mode']['m shows every file in tree order, a blank line between'] = function()
     open_all()
 
     local lines = pane_lines()
@@ -179,7 +197,7 @@ T['mode']['m toggles back to the selected file'] = function()
     open_all()
     cursor_on('cx')
     child.type_keys('k')
-    helpers.wait_until(child, R .. [[.drawer:selected().path == 'c.txt']])
+    helpers.wait_until(child, R .. [[.tree:file().path == 'c.txt']])
 
     child.type_keys('=')
 
@@ -226,8 +244,9 @@ end
 T['mode']['the key hint line names the other mode'] = function()
     local footer = [[(function()
         local text = ''
-        for _, chunk in ipairs(vim.api.nvim_win_get_config(]] .. R .. [[.drawer.win).footer) do
-            text = text .. chunk[1]
+        local r = ]] .. R .. [[
+        for _, line in ipairs(vim.api.nvim_buf_get_lines(r.tree.buf, -3, -1, false)) do
+            text = text .. line .. ' '
         end
         return text
     end)()]]
@@ -238,7 +257,7 @@ T['mode']['the key hint line names the other mode'] = function()
         child,
         R .. [[ ~= nil and ]] .. R .. [[.view:is_shown()]]
     )
-    eq(child.lua_get(footer):find('= all files', 1, true) ~= nil, true)
+    eq(child.lua_get(footer):find('= all ', 1, true) ~= nil, true)
 
     child.type_keys('=')
     eq(child.lua_get(footer):find('= one file', 1, true) ~= nil, true)
@@ -266,22 +285,22 @@ end
 
 T['follow'] = new_set()
 
-T['follow']['the drawer selection follows the cursor across a file boundary'] = function()
+T['follow']['the tree follows the cursor across a file boundary'] = function()
     open_all()
     cursor_on('ax')
-    eq(H.selected(child), 'unstaged a.txt')
+    eq(H.selected(child), 'a.txt')
 
     local generation = child.lua_get(R .. [[.view.generation]])
 
     child.type_keys('j')
-    eq(H.selected(child), 'unstaged a.txt')
+    eq(H.selected(child), 'a.txt')
     child.type_keys('j')
-    helpers.wait_until(child, R .. [[.drawer:selected().path == 'b.txt']])
+    helpers.wait_until(child, R .. [[.tree:file().path == 'b.txt']])
     eq(cursor_row(), 'header b.txt')
     eq(statusline(), 'review · all files · b.txt · 2/3')
 
     child.type_keys('G')
-    helpers.wait_until(child, R .. [[.drawer:selected().path == 'c.txt']])
+    helpers.wait_until(child, R .. [[.tree:file().path == 'c.txt']])
 
     -- The pane keeps its focus and is not drawn again.
     eq(
@@ -293,7 +312,7 @@ T['follow']['the drawer selection follows the cursor across a file boundary'] = 
     eq(cursor_row(), 'add cx')
 end
 
-T['follow']['selecting a file in the drawer puts its header on top'] = function()
+T['follow']['selecting a file in the tree puts its header on top'] = function()
     open_all()
     select_item('unstaged', 'c.txt')
 
@@ -314,9 +333,7 @@ T['follow']['selecting a file in the drawer puts its header on top'] = function(
         child.lua_get(R .. [[.view.document.sections[3].first]])
     )
     eq(
-        child.lua_get(
-            'vim.api.nvim_get_current_win() == ' .. R .. '.drawer.win'
-        ),
+        child.lua_get('vim.api.nvim_get_current_win() == ' .. R .. '.panel.win'),
         true
     )
 end
@@ -329,19 +346,19 @@ T['jumps'][']f and [f land on file headers'] = function()
 
     child.type_keys(']f')
     eq(cursor_row(), 'header b.txt')
-    eq(H.selected(child), 'unstaged b.txt')
+    eq(H.selected(child), 'b.txt')
     child.type_keys(']f')
     eq(cursor_row(), 'header c.txt')
-    eq(H.selected(child), 'unstaged c.txt')
+    eq(H.selected(child), 'c.txt')
     child.type_keys(']f')
     eq(cursor_row(), 'header c.txt')
 
     child.type_keys('[f')
     eq(cursor_row(), 'header b.txt')
-    eq(H.selected(child), 'unstaged b.txt')
+    eq(H.selected(child), 'b.txt')
     child.type_keys('[f', '[f')
     eq(cursor_row(), 'header a.txt')
-    eq(H.selected(child), 'unstaged a.txt')
+    eq(H.selected(child), 'a.txt')
 end
 
 T['jumps'][']c and [c move across files'] = function()
@@ -352,7 +369,7 @@ T['jumps'][']c and [c move across files'] = function()
     eq(cursor_row(), 'hunk @@ -1,4 +1,4 @@')
     child.type_keys(']c', ']c')
     eq(cursor_row(), 'hunk @@ -1 +1 @@')
-    eq(H.selected(child), 'unstaged c.txt')
+    eq(H.selected(child), 'c.txt')
     child.type_keys('[c')
     eq(cursor_row(), 'hunk @@ -17,4 +17,4 @@ b16')
 end
@@ -367,7 +384,7 @@ T['jumps']['<CR> on a gap expands it and keeps the files below'] = function()
     eq(vim.list_contains(lines, 'b10'), true)
     eq(vim.list_slice(lines, #lines - 3), { 'c.txt', '@@ -1 +1 @@', 'c', 'cx' })
     cursor_on('cx')
-    eq(H.selected(child), 'unstaged c.txt')
+    eq(H.selected(child), 'c.txt')
 end
 
 T['jumps']['an edit from outside redraws its file and keeps the others'] = function()
@@ -408,18 +425,18 @@ T['staging']['s stages the hunk of the second file under the cursor'] = function
     eq(git_out({ 'diff', '--cached' }):find('+b20x', 1, true) ~= nil, true)
     eq(git_out({ 'diff', '--cached' }):find('+b1x', 1, true), nil)
 
-    -- Unstaged a, b, c, then the staged b; the cursor stays in the unstaged
-    -- b, on the hunk that is left.
+    -- Tree order, b's Unstaged section before its Staged one; the cursor
+    -- stays in the unstaged b, on the hunk that is left.
     eq(
         child.lua_get(
             [[vim.tbl_map(function(s) return s.key:gsub('%z', ' ') end, ]]
                 .. R
                 .. [[.view.document.sections)]]
         ),
-        { 'unstaged a.txt', 'unstaged b.txt', 'unstaged c.txt', 'staged b.txt' }
+        { 'unstaged a.txt', 'unstaged b.txt', 'staged b.txt', 'unstaged c.txt' }
     )
     eq(cursor_row(), 'hunk @@ -1,4 +1,4 @@')
-    eq(H.selected(child), 'unstaged b.txt')
+    eq(H.selected(child), 'b.txt')
     eq(child.lua_get(R .. [[.preview.all_files]]), true)
     eq(child.lua_get('_G.notes'), {})
 end
@@ -447,7 +464,7 @@ T['staging']['the last hunk of a file follows it to the other side, and back'] =
     eq(git_out({ 'diff', '--cached', '--name-only' }), 'a.txt\n')
     eq(cursor_section(), 'staged a.txt')
     eq(cursor_row(), 'add ax')
-    eq(H.selected(child), 'staged a.txt')
+    eq(H.selected(child), 'a.txt')
 
     cursor_on('ax')
     child.type_keys('u')
@@ -460,7 +477,7 @@ T['staging']['the last hunk of a file follows it to the other side, and back'] =
     )
     eq(git_out({ 'diff', '--cached' }), '')
     eq(cursor_section(), 'unstaged a.txt')
-    eq(H.selected(child), 'unstaged a.txt')
+    eq(H.selected(child), 'a.txt')
     eq(child.lua_get('_G.notes'), {})
 end
 
@@ -512,10 +529,10 @@ T['annotations']['a annotates a line of the third file'] = function()
     cursor_on('ax')
     child.type_keys(']a')
     eq(cursor_row(), 'add cx')
-    eq(H.selected(child), 'unstaged c.txt')
+    eq(H.selected(child), 'c.txt')
 end
 
-T['annotations']['the Annotations column shows its annotation in all files'] = function()
+T['annotations']['the annotations window shows its annotation in all files'] = function()
     child.lua([[require('iter').setup()]])
     open_all()
     cursor_on('cx')
@@ -525,8 +542,7 @@ T['annotations']['the Annotations column shows its annotation in all files'] = f
     helpers.wait_until(child, '#' .. R .. '.view.marks == 1')
 
     cursor_on('ax')
-    child.lua('vim.api.nvim_set_current_win(' .. R .. '.drawer.win)')
-    child.type_keys('l')
+    focus_notes()
 
     local lnum = child.lua_get(R .. [[.view.marks[1].lnum]])
 
@@ -540,7 +556,7 @@ T['annotations']['the Annotations column shows its annotation in all files'] = f
     eq(cursor_row(), 'add cx')
 end
 
-T['annotations']['<CR> in the column jumps to the side the preview showed'] = function()
+T['annotations']['<CR> in the annotations jumps to the side the preview showed'] = function()
     -- b.txt on both sides: b1x staged, b20x unstaged, so b1x hides in a gap
     -- of the unstaged diff.
     local b = numbered('b', 1, 20)
@@ -567,8 +583,7 @@ T['annotations']['<CR> in the column jumps to the side the preview showed'] = fu
     helpers.wait_until(child, '#' .. R .. '.view.marks == 2')
 
     cursor_on('ax')
-    child.lua('vim.api.nvim_set_current_win(' .. R .. '.drawer.win)')
-    child.type_keys('l')
+    focus_notes()
     helpers.wait_until(
         child,
         string.format(
@@ -702,7 +717,7 @@ T['viewport']['a large review decorates only around the lines in view'] = functi
     local after = child.lua_get(words)
     eq(after.first < 10, true)
     eq(after.count > before.count, true)
-    eq(H.selected(child), 'unstaged f40.txt')
+    eq(H.selected(child), 'f40.txt')
 end
 
 T['collapse'] = new_set()
@@ -766,7 +781,7 @@ T['collapse']['r collapses the file to its header, R on the header expands it'] 
         'cx',
     })
     eq(cursor_row(), 'del c')
-    eq(H.selected(child), 'unstaged c.txt')
+    eq(H.selected(child), 'c.txt')
     eq(header_right(2):find('✓ reviewed', 1, true) ~= nil, true)
 
     cursor_on('b.txt', 'header')
@@ -778,7 +793,7 @@ T['collapse']['r collapses the file to its header, R on the header expands it'] 
     eq(child.lua_get(R .. ".reviewed['b.txt']"), 'unreviewed')
 end
 
-T['collapse']['r in the drawer collapses the selected file, R expands it'] = function()
+T['collapse']['r in the tree collapses the selected file, R expands it'] = function()
     open_all()
     select_item('unstaged', 'c.txt')
     child.type_keys('r')
@@ -786,9 +801,7 @@ T['collapse']['r in the drawer collapses the selected file, R expands it'] = fun
 
     eq(vim.list_slice(pane_lines(), #pane_lines() - 1), { '', 'c.txt' })
     eq(
-        child.lua_get(
-            'vim.api.nvim_get_current_win() == ' .. R .. '.drawer.win'
-        ),
+        child.lua_get('vim.api.nvim_get_current_win() == ' .. R .. '.panel.win'),
         true
     )
 
@@ -833,13 +846,13 @@ T['collapse'][']f and [f stop on collapsed headers'] = function()
 
     child.type_keys(']f')
     eq(cursor_row(), 'header b.txt')
-    eq(H.selected(child), 'unstaged b.txt')
+    eq(H.selected(child), 'b.txt')
     eq(child.lua_get(collapsed(2)), true)
     child.type_keys(']f')
     eq(cursor_row(), 'header c.txt')
     child.type_keys('[f')
     eq(cursor_row(), 'header b.txt')
-    eq(H.selected(child), 'unstaged b.txt')
+    eq(H.selected(child), 'b.txt')
     eq(child.lua_get(collapsed(2)), true)
 end
 
@@ -880,14 +893,14 @@ T['collapse']['<CR> expands a file on both sides at once'] = function()
     child.type_keys('=')
     helpers.wait_until(child, R .. [[.view.document.sections[4] ~= nil]])
     eq(child.lua_get(collapsed(2)), true)
-    eq(child.lua_get(collapsed(4)), true)
+    eq(child.lua_get(collapsed(3)), true)
 
     cursor_on('b.txt', 'header')
     eq(cursor_section(), 'unstaged b.txt')
     child.type_keys('<CR>')
 
     eq(child.lua_get(collapsed(2)), vim.NIL)
-    eq(child.lua_get(collapsed(4)), vim.NIL)
+    eq(child.lua_get(collapsed(3)), vim.NIL)
     eq(cursor_row(), 'header b.txt')
     eq(cursor_section(), 'unstaged b.txt')
 end
@@ -925,7 +938,7 @@ T['collapse']['m into all files collapses an expanded reviewed file again'] = fu
     eq(cursor_row(), 'header b.txt')
 end
 
-T['collapse']['the Annotations column shows a collapsed file, <CR> expands it'] = function()
+T['collapse']['the annotations window shows a collapsed file, <CR> expands it'] = function()
     child.lua([[require('iter').setup()]])
     open_all()
     cursor_on('cx')
@@ -944,8 +957,7 @@ T['collapse']['the Annotations column shows a collapsed file, <CR> expands it'] 
     child.type_keys(']a')
     eq(cursor_row(), 'add ax')
 
-    child.lua('vim.api.nvim_set_current_win(' .. R .. '.drawer.win)')
-    child.type_keys('l')
+    focus_notes()
     helpers.wait_until(
         child,
         string.format(

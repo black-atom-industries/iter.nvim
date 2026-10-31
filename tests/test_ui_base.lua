@@ -78,20 +78,18 @@ local function setup(options)
     child.lua('require("iter").setup(' .. options .. ')')
 end
 
---- The file columns of the review drawer: title and `code path` of each
---- item.
+--- What the review's tree lists: the subtitle's words and `code path` of
+--- each change in tree order.
 ---@return { title: string, items: string[] }[]
 local function file_columns()
     return child.lua_get([[(function()
-        local result = {}
-        for _, column in ipairs(]] .. R .. [[.drawer:columns()) do
-            local items = {}
-            for _, item in ipairs(column.items) do
-                table.insert(items, item.code .. ' ' .. item.path)
-            end
-            table.insert(result, { title = column.title, items = items })
+        local r = ]] .. R .. [[
+        local items = {}
+        for _, item in ipairs(r:files()) do
+            table.insert(items, item.code .. ' ' .. item.path)
         end
-        return result
+        local subtitle = vim.api.nvim_buf_get_lines(r.tree.buf, 1, 2, false)[1]
+        return { { title = vim.trim(subtitle):gsub(' · .*$', ''), items = items } }
     end)()]])
 end
 
@@ -116,36 +114,40 @@ local function cursor_on(text)
     )
 end
 
---- The lines of the open base picker, without their leading column.
+--- The items of the open base list, their runs of blanks squeezed.
 ---@return string[]
 local function picker_items()
     helpers.wait_until(
         child,
-        R .. '.picker ~= nil and ' .. R .. '.picker:is_open()'
+        R .. '.picker ~= nil and ' .. R .. '.panel.page == ' .. R .. '.picker'
     )
 
-    return vim.tbl_map(
-        function(line)
-            return line:sub(2)
-        end,
-        child.api.nvim_buf_get_lines(
-            child.lua_get(R .. '.picker.buf'),
-            0,
-            -1,
-            false
-        )
-    )
+    return child.lua_get([[(function()
+        local page = require('iter').current_review.picker
+        local lines = vim.api.nvim_buf_get_lines(page.buf, 0, -1, false)
+        local out = {}
+        for lnum, index in pairs(page.indexes) do
+            out[index] = vim.trim((lines[lnum]:gsub('%s+', ' ')))
+        end
+        return out
+    end)()]])
 end
 
---- Open the base picker with `b` and pick the item whose label starts with
---- `label`.
+--- Open the base list with `b` and pick the item that starts with `label`.
 ---@param label string
 local function pick(label)
     child.type_keys('b')
 
     for index, item in ipairs(picker_items()) do
         if vim.startswith(item, label) then
-            child.api.nvim_win_set_cursor(0, { index, 0 })
+            child.lua(
+                R
+                    .. '.panel:set_cursor('
+                    .. R
+                    .. '.picker:line_of('
+                    .. index
+                    .. '))'
+            )
             child.type_keys('<CR>')
             return
         end
@@ -160,15 +162,14 @@ local function stored_base()
     return child.lua_get([[require('iter.store').load(vim.fn.getcwd()).base]])
 end
 
---- The review drawer's header without its highlight groups.
+--- The tree's title line, with a blank after it.
 ---@return string
 local function header_text()
-    return (
-        child
-            .lua_get('vim.wo[' .. R .. '.drawer.win].winbar')
-            :gsub('%%#[%w]+#', '')
-            :gsub('%%%*', '')
-    )
+    return vim.trim(
+        child.lua_get(
+            'vim.api.nvim_buf_get_lines(' .. R .. '.tree.buf, 0, 1, false)[1]'
+        )
+    ) .. ' '
 end
 
 --- What `git` says about the index and `b.txt`, to tell any write.
@@ -200,7 +201,7 @@ local T = new_set({
 
 T['open'] = new_set()
 
-T['open'][':Iter review main lists the changes since main in one column'] = function()
+T['open'][':Iter review main lists the changes since main without staging icons'] = function()
     H.open(child, 'Iter review main')
     H.wait_diff(child, 'base a.txt')
 
@@ -211,10 +212,21 @@ T['open'][':Iter review main lists the changes since main in one column'] = func
         },
     })
     eq(child.t.iter_label, 'iter review')
+    eq(header_text():find('Review since main (', 1, true) ~= nil, true)
+    eq(
+        vim.trim(
+            child.lua_get(
+                'vim.api.nvim_buf_get_lines('
+                    .. R
+                    .. '.tree.buf, 4, 5, false)[1]'
+            )
+        ),
+        'M a.txt'
+    )
     helpers.expect_screenshot(child, 'base-review')
 end
 
-T['open']['from the wide breakpoint the column sits beside Annotations'] = function()
+T['open']['below the breakpoint at 180 columns the annotations sit below the tree'] = function()
     setup([[{ annotate = { review_breakpoint = 1000 } }]])
     child.o.columns = 180
     H.open(child, 'Iter review main')
@@ -223,26 +235,27 @@ T['open']['from the wide breakpoint the column sits beside Annotations'] = funct
     helpers.expect_screenshot(child, 'base-review-wide')
 end
 
-T['open']['in a narrow drawer the header keeps the file count'] = function()
-    child.o.columns = 40
+T['open']['the subtitle names the base and counts the files'] = function()
     H.open(child, 'Iter review main')
     H.wait_diff(child, 'base a.txt')
 
-    local header = child
-        .lua_get('vim.wo[' .. R .. '.drawer.win].winbar')
-        :gsub('%%#[%w]+#', '')
-        :gsub('%%%*', '')
-
-    eq(header:find('since', 1, true), nil)
-    eq(vim.trim(header):match('4 files$') ~= nil, true)
+    eq(
+        vim.trim(
+            child.lua_get(
+                'vim.api.nvim_buf_get_lines('
+                    .. R
+                    .. '.tree.buf, 1, 2, false)[1]'
+            )
+        ),
+        'Since main · 4 files'
+    )
 end
 
 T['open']['without a base the review shows working changes'] = function()
     H.open(child)
 
     eq(file_columns(), {
-        { title = 'Unstaged', items = { 'M b.txt', '? d.txt' } },
-        { title = 'Staged', items = {} },
+        { title = 'Working changes', items = { 'M b.txt', '? d.txt' } },
     })
     eq(stored_base(), vim.NIL)
 end
@@ -275,7 +288,7 @@ T['open']['iter.review() takes a typed commit as the base and starts after it'] 
     local edit = rev({ 'rev-parse', 'feat' })
 
     child.lua([[require('iter').review({ base = ... })]], { edit })
-    helpers.wait_until(child, R .. ' ~= nil and ' .. R .. '.drawer.win ~= nil')
+    helpers.wait_until(child, R .. ' ~= nil and ' .. R .. '.panel ~= nil')
 
     eq(file_columns(), {
         {
@@ -345,17 +358,15 @@ T['diff']['| shows the diff side by side, the base on the left'] = function()
     helpers.expect_screenshot(child, 'base-split')
 end
 
-T['diff']['the footer offers b in place of the staging keys'] = function()
+T['diff']['the tree hints offer b in place of the staging keys'] = function()
     H.open(child, 'Iter review main')
     H.wait_diff(child, 'base a.txt')
 
-    local footer = child.lua_get([[(function()
-        local text = {}
-        for _, chunk in ipairs(]] .. R .. [[.drawer:footer()) do
-            table.insert(text, chunk[1])
-        end
-        return table.concat(text)
-    end)()]])
+    local footer = child.lua_get(
+        'table.concat(vim.api.nvim_buf_get_lines('
+            .. R
+            .. '.tree.buf, -3, -1, false), " ")'
+    )
 
     eq(footer:find('b base', 1, true) ~= nil, true)
     eq(footer:find('stage', 1, true), nil)
@@ -434,29 +445,34 @@ T['picker']['b offers the parent first, working changes, branches and commits'] 
     local initial = rev({ 'rev-parse', '--short', 'feat~2' })
 
     eq(
-        child
-            .lua_get('vim.wo[' .. R .. '.picker.float.win].winbar')
-            :gsub('%%#[%w]+#', ''),
-        '%* Review since'
+        child.lua_get(
+            'vim.api.nvim_buf_get_lines(' .. R .. '.picker.buf, 0, 2, false)'
+        ),
+        { ' Base of the review', ' / search' }
     )
     eq(items, {
-        'Merge base with main (' .. initial .. ')',
+        'since main parent',
         'Working changes',
-        edit .. '  2026-01-01 00:00  Iter Test  edit a',
-        add .. '  2026-01-01 00:00  Iter Test  add c',
-        initial .. '  2026-01-01 00:00  Iter Test  initial',
+        edit .. ' edit a',
+        add .. ' add c',
+        initial .. ' initial',
     })
+    eq(child.lua_get([[require('iter').statusline()]]), 'review · base · 1/5')
 end
 
---- The section titles of the open base picker, by the item they sit above.
----@return table<integer, string>
+--- The section titles of the open base list, by the item they sit above,
+--- each checked to be a line of the list.
+---@return table<string, string>
 local function picker_sections()
     return child.lua_get([[(function()
-        local buf = require('iter').current_review.picker.buf
-        local ns = vim.api.nvim_get_namespaces()['iter.picker.sections']
+        local page = require('iter').current_review.picker
+        local lines = vim.api.nvim_buf_get_lines(page.buf, 0, -1, false)
         local titles = {}
-        for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
-            titles[tostring(mark[2] + 1)] = vim.trim(mark[4].virt_lines[#mark[4].virt_lines][1][1])
+        for index, title in pairs(page.opts.sections) do
+            local lnum = page:line_of(index)
+            if vim.trim(lines[lnum - 1]) == title then
+                titles[tostring(index)] = title
+            end
         end
         return titles
     end)()]])
@@ -485,64 +501,90 @@ T['picker']['on the default branch the upstream merge base follows working chang
     local items = picker_items()
 
     eq(items[1], 'Working changes')
-    eq(items[2], 'Merge base with origin/main (' .. pushed .. ')')
+    eq(items[2], 'since origin/main upstream')
     eq(vim.tbl_contains(items, 'main'), false)
+    eq(pushed ~= '', true)
 
-    pick('Merge base with origin/main')
+    pick('since origin/main')
     helpers.wait_until(child, R .. '.changes.since ~= nil')
     eq(file_columns()[1].title, 'Since origin/main')
     eq(file_columns()[1].items, { 'M b.txt', '? d.txt', 'M main.txt' })
 end
 
-T['picker']['b opens over the drawer, q goes back without a change'] = function()
+T['picker']['b shows the list in the tree window, q goes back without a change'] = function()
     H.open(child)
     child.type_keys('b')
     picker_items()
 
-    local drawer =
-        child.lua_get('vim.api.nvim_win_get_position(' .. R .. '.drawer.win)')
-    local win = child.lua_get(R .. '.picker.float.win')
-
-    eq(child.api.nvim_get_current_win(), win)
-    eq(child.api.nvim_win_get_position(win), drawer)
+    eq(child.api.nvim_get_current_win(), child.lua_get(H.LIST_WIN))
     eq(
-        child.api.nvim_win_get_width(win),
-        child.lua_get('vim.api.nvim_win_get_width(' .. R .. '.drawer.win)')
+        child.lua_get(
+            'vim.api.nvim_win_get_buf('
+                .. H.LIST_WIN
+                .. ') == '
+                .. R
+                .. '.picker.buf'
+        ),
+        true
     )
     helpers.expect_screenshot(child, 'base-picker')
 
     child.type_keys('q')
 
-    eq(child.lua_get(R .. '.picker:is_open()'), false)
+    eq(child.lua_get(R .. '.picker'), vim.NIL)
     eq(
-        child.api.nvim_get_current_win(),
-        child.lua_get(R .. '.drawer:selection_win()')
+        child.lua_get(
+            'vim.api.nvim_win_get_buf('
+                .. H.LIST_WIN
+                .. ') == '
+                .. R
+                .. '.tree.buf'
+        ),
+        true
     )
-    eq(file_columns()[1].title, 'Unstaged')
+    eq(child.api.nvim_get_current_win(), child.lua_get(H.LIST_WIN))
+    eq(file_columns()[1].title, 'Working changes')
 end
 
-T['picker']['b in the Annotations column opens over the whole drawer'] = function()
-    setup([[{ annotate = { review_breakpoint = 1000 } }]])
-    child.o.columns = 200
+T['picker'][':edit of a file in the list window opens it in the first tab and keeps the list'] = function()
+    local origin = child.api.nvim_get_current_tabpage()
     H.open(child)
-    child.type_keys('l')
-    helpers.wait_until(
-        child,
-        'vim.api.nvim_get_current_win() == ' .. R .. '.drawer.float.side_win'
-    )
     child.type_keys('b')
     picker_items()
 
+    child.cmd('edit d.txt')
+    child.lua('vim.wait(100)')
+
     eq(
-        child.api.nvim_win_get_position(child.lua_get(R .. '.picker.float.win')),
-        child.lua_get('vim.api.nvim_win_get_position(' .. R .. '.drawer.win)')
+        child.lua_get(
+            'vim.api.nvim_win_get_buf('
+                .. H.LIST_WIN
+                .. ') == '
+                .. R
+                .. '.picker.buf'
+        ),
+        true
     )
+    eq(child.api.nvim_get_current_tabpage(), origin)
+    eq(vim.fs.basename(child.api.nvim_buf_get_name(0)), 'd.txt')
+end
 
-    child.type_keys('<Esc>')
+T['picker']['the list stays when another window takes the focus'] = function()
+    H.open(child)
+    child.type_keys('b')
+    picker_items()
+    child.lua('vim.api.nvim_set_current_win(' .. R .. '.diff_win)')
+    child.lua('vim.wait(50)')
 
     eq(
-        child.api.nvim_get_current_win(),
-        child.lua_get(R .. '.drawer.float.side_win')
+        child.lua_get(
+            'vim.api.nvim_win_get_buf('
+                .. H.LIST_WIN
+                .. ') == '
+                .. R
+                .. '.picker.buf'
+        ),
+        true
     )
 end
 
@@ -552,27 +594,27 @@ T['picker']['a refresh keeps the picker open and focused'] = function()
     child.type_keys('b')
     picker_items()
 
-    local win = child.lua_get(R .. '.picker.float.win')
+    local win = child.lua_get(H.LIST_WIN)
 
     helpers.write_file(vim.fs.joinpath(repo, 'e.txt'), { 'new' })
     helpers.wait_until(
         child,
         'vim.iter('
             .. R
-            .. '.drawer:files()):any(function(f) return f.path == "e.txt" end)'
+            .. ':files()):any(function(f) return f.path == "e.txt" end)'
     )
 
-    eq(child.lua_get(R .. '.picker:is_open()'), true)
+    eq(child.lua_get(R .. '.panel.page == ' .. R .. '.picker'), true)
     eq(child.api.nvim_get_current_win(), win)
 end
 
 T['picker']['a picked branch shows and is remembered for the branch'] = function()
     H.open(child)
-    pick('Merge base with main')
+    pick('since main')
 
     helpers.wait_until(child, R .. '.changes.since ~= nil')
     eq(file_columns()[1].title, 'Since main')
-    eq(child.lua_get(R .. '.drawer:selected().path'), 'a.txt')
+    eq(H.selected(child), 'a.txt')
 
     child.type_keys('q')
     H.open(child)
@@ -582,7 +624,7 @@ T['picker']['a picked branch shows and is remembered for the branch'] = function
     pick('Working changes')
 
     helpers.wait_until(child, R .. '.changes.since == nil')
-    eq(file_columns()[1].title, 'Unstaged')
+    eq(file_columns()[1].title, 'Working changes')
     eq(stored_base(), vim.NIL)
 end
 
@@ -609,7 +651,7 @@ end
 T['picker']['on a detached HEAD a pick applies to the open review only'] = function()
     helpers.git(repo, { 'switch', '--quiet', '--detach' })
     H.open(child)
-    pick('Merge base with main')
+    pick('since main')
 
     helpers.wait_until(child, R .. '.changes.since ~= nil')
     eq(file_columns()[1].title, 'Since main')
@@ -635,21 +677,22 @@ end
 
 T['reviewed'] = new_set()
 
---- The drawer line of the `side` item with `path`.
----@param side string
+--- The tree's row of `path`; `_` is the side the row was on in other
+--- layouts.
+---@param _ string
 ---@param path string
 ---@return string
-local function row_line(side, path)
+local function row_line(_, path)
     return child.lua_get(
-        [[(function(side, path)
-            local d = require('iter').current_review.drawer
-            for lnum, row in ipairs(d.rows) do
-                if row[side] ~= nil and row[side].path == path then
-                    return vim.api.nvim_buf_get_lines(d.buf, lnum - 1, lnum, false)[1]
+        [[(function(path)
+            local r = require('iter').current_review
+            for lnum, row in pairs(r.tree.items) do
+                if row.node.path == path then
+                    return vim.api.nvim_buf_get_lines(r.tree.buf, lnum - 1, lnum, false)[1]
                 end
             end
         end)(...)]],
-        { side, path }
+        { path }
     )
 end
 
@@ -682,9 +725,9 @@ T['reviewed']['a mark in working changes does not show since main'] = function()
     mark('unstaged', 'b.txt')
     eq(row_line('unstaged', 'b.txt'):find('✓', 1, true) ~= nil, true)
 
-    switch('Merge base with main', true)
+    switch('since main', true)
     eq(child.lua_get(R .. '.reviewed["b.txt"]'), 'unreviewed')
-    eq(row_line('base', 'b.txt'):find('○', 1, true) ~= nil, true)
+    eq(row_line('base', 'b.txt'):find('✓', 1, true), nil)
 
     switch('Working changes', false)
     eq(child.lua_get(R .. '.reviewed["b.txt"]'), 'reviewed')
@@ -697,7 +740,7 @@ T['reviewed']['a mark since main does not show in working changes'] = function()
 
     switch('Working changes', false)
     eq(child.lua_get(R .. '.reviewed["b.txt"]'), 'unreviewed')
-    eq(row_line('unstaged', 'b.txt'):find('○', 1, true) ~= nil, true)
+    eq(row_line('unstaged', 'b.txt'):find('✓', 1, true), nil)
     eq(
         child.lua_get(
             [[vim.tbl_keys(require('iter.store').load(vim.fn.getcwd()).reviewed_by_base)]]
@@ -705,7 +748,7 @@ T['reviewed']['a mark since main does not show in working changes'] = function()
         { 'branch:main' }
     )
 
-    switch('Merge base with main', true)
+    switch('since main', true)
     eq(child.lua_get(R .. '.reviewed["b.txt"]'), 'reviewed')
 end
 
@@ -721,7 +764,7 @@ T['base']['a remembered branch that is gone falls back to working changes'] = fu
 
     H.open(child)
 
-    eq(file_columns()[1].title, 'Unstaged')
+    eq(file_columns()[1].title, 'Working changes')
     eq(#child.lua_get('_G.notes'), 1)
     eq(
         vim.startswith(
@@ -744,7 +787,7 @@ T['base']['a remembered commit no longer in the history of HEAD falls back to wo
 
     H.open(child)
 
-    eq(file_columns()[1].title, 'Unstaged')
+    eq(file_columns()[1].title, 'Working changes')
     eq(child.lua_get('_G.notes'), {
         {
             '[iter] Cannot compare with '
@@ -826,7 +869,7 @@ T['base']['a checkout to a branch whose base is gone keeps its store'] = functio
     helpers.git(repo, { 'switch', '--quiet', 'other' })
     helpers.wait_until(child, R .. '.changes.since == nil')
 
-    eq(file_columns()[1].title, 'Unstaged')
+    eq(file_columns()[1].title, 'Working changes')
     eq(
         vim.startswith(
             child.lua_get('_G.notes[#_G.notes][1]'),
@@ -915,7 +958,8 @@ T['annotations']['a deleted line since main keeps the merge-base and sits on its
     )
     eq(child.lua_get('_G.notes'), {})
 
-    local label = 'a.txt:3 old ' .. base:sub(1, 7) .. ' Why gone?'
+    -- The annotations window's row, its runs of blanks squeezed.
+    local label = '3 old ' .. base:sub(1, 7) .. ' Why gone?'
 
     helpers.wait_until(
         child,
@@ -926,7 +970,7 @@ T['annotations']['a deleted line since main keeps the merge-base and sits on its
                     local text = table.concat(
                         vim.api.nvim_buf_get_lines(buf, 0, -1, false),
                         '\n'
-                    )
+                    ):gsub('[ \t]+', ' ')
                     if text:find(%q, 1, true) then
                         return true
                     end
@@ -971,7 +1015,7 @@ T['annotations']['a deleted line from a picked commit keeps its parent and sits 
     )
 end
 
-T['annotations']['Y in the drawer and in the sidebar copy the same text'] = function()
+T['annotations']['Y in the tree and in the sidebar copy the same text'] = function()
     annotate_deleted('Why gone?')
     child.lua([[
         _G.echoes = {}
@@ -981,7 +1025,7 @@ T['annotations']['Y in the drawer and in the sidebar copy the same text'] = func
             return echo(chunks, ...)
         end
     ]])
-    child.lua([[vim.api.nvim_set_current_win(]] .. R .. [[.drawer.win)]])
+    H.focus_list(child)
     child.type_keys('Y', 'n')
     helpers.wait_until(child, [[#_G.echoes == 1 and vim.fn.mode() == 'n']])
 

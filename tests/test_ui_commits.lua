@@ -366,15 +366,13 @@ T['review'] = new_set()
 ---@return table
 local function file_columns()
     return child.lua_get([[(function()
-        local result = {}
-        for _, column in ipairs(]] .. R .. [[.drawer:columns()) do
-            local items = {}
-            for _, item in ipairs(column.items) do
-                table.insert(items, item.code .. ' ' .. item.path)
-            end
-            table.insert(result, { title = column.title, items = items })
+        local r = ]] .. R .. [[
+        local items = {}
+        for _, item in ipairs(r:files()) do
+            table.insert(items, item.code .. ' ' .. item.path)
         end
-        return result
+        local subtitle = vim.api.nvim_buf_get_lines(r.tree.buf, 1, 2, false)[1]
+        return { { title = (vim.trim(subtitle):gsub(' · .*$', '')), items = items } }
     end)()]])
 end
 

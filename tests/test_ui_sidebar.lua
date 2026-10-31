@@ -485,9 +485,6 @@ local function open_review_mode()
             {
                 order = function() return { 'ch2.md' } end,
                 changed = function() return { ['ch2.md'] = true } end,
-                progress = function()
-                    return { reviewed = 0, changed = 0, total = 1 }
-                end,
                 on_cursor = function(item)
                     table.insert(_G.moved, item and item.annotation.body or vim.NIL)
                 end,
@@ -510,8 +507,7 @@ T['review mode']['opens without taking the focus, the review order first'] = fun
 
     local lines = sidebar_lines()
 
-    eq(lines[2]:find('reviewed', 1, true) ~= nil, true)
-    eq(vim.startswith(lines[4], 'M ch2.md'), true)
+    eq(vim.startswith(lines[3], 'M ch2.md'), true)
 end
 
 T['review mode']['tells the review where the cursor settles and what <CR> hits'] = function()

@@ -283,8 +283,8 @@ function M.owned(buf)
 end
 
 --- Wipe the `iter://` buffers that aren't iter's own, such as those a
---- session restores, closing the windows that show them unless one is the
---- last window.
+--- session restores, closing the windows that show them, or the tab of the
+--- last one, unless it is the last window.
 function M.clean()
     for _, buf in ipairs(vim.api.nvim_list_bufs()) do
         if
@@ -292,8 +292,15 @@ function M.clean()
             and vim.startswith(vim.api.nvim_buf_get_name(buf), 'iter://')
         then
             for _, win in ipairs(vim.fn.win_findbuf(buf)) do
-                if #vim.api.nvim_list_wins() > 1 then
+                local tab = vim.api.nvim_win_get_tabpage(win)
+
+                if #vim.api.nvim_tabpage_list_wins(tab) > 1 then
                     pcall(vim.api.nvim_win_close, win, true)
+                elseif #vim.api.nvim_list_tabpages() > 1 then
+                    pcall(vim.cmd.tabclose, {
+                        vim.api.nvim_tabpage_get_number(tab),
+                        bang = true,
+                    })
                 end
             end
 

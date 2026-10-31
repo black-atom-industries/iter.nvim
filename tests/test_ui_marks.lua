@@ -242,7 +242,14 @@ local T = new_set({
     },
 })
 
-T['diff view'] = new_set()
+T['diff view'] = new_set({
+    hooks = {
+        pre_case = function()
+            -- An 80-cell diff beside the tree.
+            child.o.columns = 115
+        end,
+    },
+})
 
 T['diff view']['shows each annotation kind under its row'] = function()
     seed(ANNOTATIONS)
@@ -332,7 +339,7 @@ T['diff view']['rewraps the text when the window width changes'] = function()
             .. '|▎   diff window, which is eighty columns minus the rail',
     })
 
-    child.o.columns = 50
+    child.o.columns = 85
     helpers.wait_until(
         child,
         [[#vim.api.nvim_buf_get_extmarks(require('iter').current_review.view.buf, vim.api.nvim_get_namespaces()['iter.diff.annotations'], 0, -1, { details = true })[1][4].virt_lines > 2]]
@@ -344,17 +351,6 @@ T['diff view']['rewraps the text when the window width changes'] = function()
             .. '|▎   diff window, which is eighty columns'
             .. '|▎   minus the rail',
     })
-
-    -- Stacked at 50 columns, the count still ends the full-width cell.
-    eq(
-        child.lua_get(
-            R
-                .. [[.drawer.layout .. '|' .. vim.api.nvim_buf_get_lines(]]
-                .. R
-                .. [[.drawer.buf, 1, 2, false)[1] ]]
-        ),
-        'stacked| M ○ m.txt' .. string.rep(' ', 36) .. '[1] '
-    )
 end
 
 T['diff view']['rewraps when only the diff window narrows'] = function()
@@ -383,7 +379,6 @@ T['diff view']['rewraps when only the diff window narrows'] = function()
             .. '|▎   diff window, which is eighty columns'
             .. '|▎   minus the rail',
     })
-    eq(child.lua_get(R .. '.drawer.layout'), 'columns')
 end
 
 T['diff view']['expanding a gap moves a hidden annotation to its line'] = function()
@@ -407,7 +402,7 @@ T['diff view']['a refresh picks up annotations written meanwhile'] = function()
     eq(placed(), {})
 
     seed({ ANNOTATIONS[1] })
-    child.lua(R .. '.drawer:refresh()')
+    child.lua(R .. ':refresh()')
 
     eq(placed(), { '3 ▎ 󰆉 Line annotation' })
 end
@@ -415,12 +410,7 @@ end
 T['diff view']['a fully staged file outdates a lost annotation'] = function()
     helpers.git(repo, { 'add', 'm.txt' })
     seed({ ANNOTATIONS[5] })
-    open_review('unstaged n.txt')
-    child.lua([[
-        local d = require('iter').current_review.drawer
-        d:step_file(1)
-    ]])
-    H.wait_diff(child, 'staged m.txt')
+    open_review('staged m.txt')
 
     eq(placed(), { '13 ▎ 󰆉 outdated · Outdated annotation' })
 end
@@ -436,14 +426,12 @@ T['diff view']['a partly staged file leaves a lost annotation out'] = function()
     )
     seed({ ANNOTATIONS[5] })
     open_review()
-    child.lua([[
-        local d = require('iter').current_review.drawer
-        d:step_file(1)
-        d:step_file(1)
-    ]])
-    H.wait_diff(child, 'staged m.txt')
+    helpers.wait_until(child, R .. '.view.files[2] ~= nil')
 
-    eq(placed(), {})
+    -- The Staged section leaves it out; the Unstaged one, against the
+    -- worktree, shows it outdated.
+    eq(placed(), { '7 ▎ 󰆉 outdated · Outdated annotation' })
+    eq(child.lua_get(R .. '.view.marks[1].section'), 1)
 end
 
 T['diff view']['a failed store read keeps the annotations'] = function()
@@ -454,15 +442,15 @@ T['diff view']['a failed store read keeps the annotations'] = function()
     child.lua([[
         local path = require('iter.store').path(vim.fn.getcwd())
         vim.fn.writefile({ '{"version":3,"annotations":[],"reviewed":{}}' }, path)
-        require('iter').current_review.drawer:refresh()
+        require('iter').current_review:refresh()
     ]])
 
     eq(placed(), { '3 ▎ 󰆉 Line annotation' })
     eq(
         child.lua_get(
-            [[#vim.api.nvim_buf_get_lines(]]
+            [[table.concat(vim.api.nvim_buf_get_lines(]]
                 .. R
-                .. [[.drawer.buf, 1, 2, false)[1]:match('%[1%]') > 0]]
+                .. [[.tree.buf, 0, -1, false), '\n'):find('✎1', 1, true) ~= nil]]
         ),
         true
     )
@@ -479,14 +467,14 @@ T['diff view']['a refresh reads the store only when its file changed'] = functio
             _G.loads = _G.loads + 1
             return read(...)
         end
-        local d = require('iter').current_review.drawer
-        d:refresh('poll')
-        d:refresh('poll')
+        local r = require('iter').current_review
+        r:refresh('poll')
+        r:refresh('poll')
     ]])
     eq(child.lua_get('_G.loads'), 0)
 
     seed({ ANNOTATIONS[2] })
-    child.lua(R .. [[.drawer:refresh('poll')]])
+    child.lua(R .. [[:refresh('poll')]])
 
     eq(child.lua_get('_G.loads'), 1)
     eq(#placed(), 2)
@@ -544,33 +532,23 @@ end
 
 T['counts'] = new_set()
 
-T['counts']['the review drawer shows counts on rows and files in the header'] = function()
+T['counts']['the tree shows counts on rows and files in the header'] = function()
     seed(ANNOTATIONS)
     open_review()
 
-    local lines = child.lua_get(
-        [[vim.api.nvim_buf_get_lines(]] .. R .. [[.drawer.buf, 0, -1, false)]]
+    local lines = vim.tbl_map(
+        function(line)
+            return (line:gsub('%s+$', ''))
+        end,
+        child.lua_get(
+            [[vim.api.nvim_buf_get_lines(]] .. R .. [[.tree.buf, 0, -1, false)]]
+        )
     )
 
-    -- The count sits at the right end of the cell, which keeps its width.
-    eq(
-        vim.split(lines[2], '│')[1],
-        ' M ○ m.txt' .. string.rep(' ', 38) .. '[6] '
-    )
-    eq(
-        vim.split(lines[3], '│')[1],
-        ' M ○ n.txt' .. string.rep(' ', 38) .. '[1] '
-    )
-
-    local title = child.lua_get([[(function()
-        local text = ''
-        for _, chunk in ipairs(]] .. R .. [[.drawer.float.opts.title) do
-            text = text .. chunk[1]
-        end
-        return text
-    end)()]])
-
-    eq((title:gsub('%s+', ' ')), 'HEAD main 2 files ')
+    -- The count and the reviewed slot at the right edge of the 34 cells.
+    eq(lines[5], '  ○ M m.txt' .. string.rep(' ', 18) .. '✎6')
+    eq(lines[6], '  ○ M n.txt' .. string.rep(' ', 18) .. '✎1')
+    eq(vim.trim(lines[2]), 'Working changes · 2 files')
 end
 
 T['counts']['the status drawer shows no counts and no marks'] = function()

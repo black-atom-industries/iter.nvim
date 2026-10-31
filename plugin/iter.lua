@@ -63,7 +63,11 @@ vim.api.nvim_create_autocmd('BufReadCmd', {
 vim.api.nvim_create_autocmd('SessionLoadPost', {
     group = group,
     callback = function()
-        require('iter.uri').clean()
+        -- After `doautoall`, whose autocmd window can't be the last one left
+        -- in a tab.
+        vim.schedule(function()
+            require('iter.uri').clean()
+        end)
     end,
 })
 vim.api.nvim_create_autocmd('FileReadCmd', {

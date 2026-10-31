@@ -54,7 +54,7 @@ function M.status()
         and review:is_open()
         and vim.api.nvim_get_current_tabpage() == review.tab
     then
-        review.drawer:focus()
+        review:focus()
         return
     end
 
@@ -131,7 +131,7 @@ end
 --- the review compares with and is remembered for the branch; a ref that
 --- isn't a branch names the commit the review starts after. A base spec
 --- applies as it is. Without it the remembered base applies.
----@param target? { path?: string, side?: IterSide, base?: string|IterBaseSpec } file to select and base
+---@param target? { path?: string, base?: string|IterBaseSpec } file to select and base
 function M.review(target)
     log.info('review command called')
 
@@ -183,7 +183,6 @@ function M.review(target)
     M.current_review = require('iter.review').open({
         config = M.config,
         path = path,
-        side = target and target.side,
         base = spec,
         on_annotations = refresh_annotations,
         on_close = function(review)
@@ -272,7 +271,7 @@ local function open_review()
 end
 
 --- The repository the annotation commands work on, with the files of the open
---- review in drawer order: the review's, else the current directory's. Also
+--- review in tree order: the review's, else the current directory's. Also
 --- what that review compares with, against a base.
 ---@return string root
 ---@return string[] order
@@ -280,17 +279,7 @@ end
 local function annotation_scope()
     local review = open_review()
     local root = review and review.changes.root or require('iter.git').root()
-    local order = {}
-
-    if review ~= nil then
-        for _, item in ipairs(review:files()) do
-            table.insert(order, item.path)
-
-            if item.orig_path ~= nil then
-                table.insert(order, item.orig_path)
-            end
-        end
-    end
+    local order = review and review.file_order(review:paths()) or {}
 
     return root, order, review and review:since(root)
 end
@@ -366,13 +355,21 @@ function M.prev_annotation()
     require('iter.annotations.navigate').jump(-1)
 end
 
---- Toggle the annotation sidebar of the current tab.
+--- Toggle the annotation sidebar of the current tab; in the review's tab,
+--- open or focus the review's annotations.
 function M.sidebar()
+    local review = open_review()
+
+    if review ~= nil and vim.api.nvim_get_current_tabpage() == review.tab then
+        review:focus_annotations()
+        return
+    end
+
     require('iter.ui.sidebar').toggle(M.config, refresh_annotations)
 end
 
---- Open the review tab, or switch to it, with the Annotations column of its
---- drawer selected.
+--- Open the review tab, or switch to it, with its annotations window open
+--- and focused.
 function M.annotations()
     M.review()
 

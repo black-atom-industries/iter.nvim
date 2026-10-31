@@ -188,8 +188,8 @@ T['split']['| shows the old side left, aligned with fillers'] = function()
     local before = child.lua_get([[(function()
         local r = ]] .. R .. [[
         return {
-            vim.api.nvim_win_get_height(r.spacer_win),
-            vim.api.nvim_win_get_position(r.drawer.win)[1],
+            vim.api.nvim_win_get_width(r.panel.win),
+            vim.api.nvim_win_get_position(r.panel.win)[2],
         }
     end)()]])
 
@@ -243,8 +243,8 @@ T['split']['| shows the old side left, aligned with fillers'] = function()
             v.win == r.diff_win,
             vim.wo[v.win].scrollbind and vim.wo[v.old.win].scrollbind,
             vim.wo[v.win].cursorbind and vim.wo[v.old.win].cursorbind,
-            vim.api.nvim_win_get_height(r.spacer_win),
-            vim.api.nvim_win_get_position(r.drawer.win)[1],
+            vim.api.nvim_win_get_width(r.panel.win),
+            vim.api.nvim_win_get_position(r.panel.win)[2],
         }
     end)()]])
 
@@ -395,8 +395,9 @@ T['split']['resizing keeps the panes the same width'] = function()
 
     local widths = {}
 
+    -- The diff takes what the 34-cell tree and its separator leave.
     for _, columns in ipairs({ 140, 200, 70 }) do
-        child.o.columns = columns
+        child.o.columns = columns + 35
         helpers.wait_until(
             child,
             string.format(
@@ -467,13 +468,13 @@ T['sync']['jumps from the left window move both'] = function()
     eq(p[1][1], 2)
 end
 
-T['sync']['the drawer scrolls both windows'] = function()
+T['sync']['the tree scrolls both windows'] = function()
     open_review()
     split()
     child.lua([[
         local v = require('iter').current_review.view
         v:expand(16)
-        vim.api.nvim_set_current_win(require('iter').current_review.drawer.win)
+        vim.api.nvim_set_current_win(require('iter').current_review.panel.win)
     ]])
     child.type_keys('<C-d>')
 
@@ -483,7 +484,7 @@ T['sync']['the drawer scrolls both windows'] = function()
     eq(p[1][2] > 1, true)
 end
 
-T['sync']['the drawer scrolls both windows under scrolloff'] = function()
+T['sync']['the tree scrolls both windows under scrolloff'] = function()
     child.stop()
     helpers.cleanup(repo)
     local lines = numbered('line ', 1, 120)
@@ -500,7 +501,7 @@ T['sync']['the drawer scrolls both windows under scrolloff'] = function()
     split()
     child.type_keys('40G')
     child.lua(
-        [[vim.api.nvim_set_current_win(require('iter').current_review.drawer.win)]]
+        [[vim.api.nvim_set_current_win(require('iter').current_review.panel.win)]]
     )
 
     child.type_keys('<C-d>')
@@ -746,7 +747,7 @@ T['keys']['r in the left window toggles reviewed and keeps the split'] = functio
     eq(#left_lines(), #right_lines())
 end
 
-T['keys']['the Annotations column shows an old-side annotation on both'] = function()
+T['keys']['the annotations window shows an old-side annotation on both'] = function()
     open_review()
     split()
     add_annotation({
@@ -761,8 +762,17 @@ T['keys']['the Annotations column shows an old-side annotation on both'] = funct
             lines = { 'local v = 36' },
         },
     })
-    child.lua('vim.api.nvim_set_current_win(' .. R .. '.drawer.win)')
-    child.type_keys('l')
+    child.lua([[
+        require('iter.ui.sidebar').refresh_all()
+        local s = require('iter.ui.sidebar').of(require('iter').current_review.tab)
+        s:focus()
+        for lnum, row in pairs(s.rows) do
+            if row.item ~= nil then
+                _G.note_line = lnum
+            end
+        end
+    ]])
+    child.type_keys(child.lua_get('_G.note_line') .. 'G')
     helpers.wait_until(child, R .. [[.view.focus ~= nil]])
 
     local p = positions()
@@ -805,46 +815,27 @@ end
 
 T['drawer'] = new_set()
 
---- The key hint line of the drawer float.
----@return string
-local function footer()
-    return child.lua_get([[(function()
-        local text = ''
-        for _, chunk in ipairs(vim.api.nvim_win_get_config(]] .. R .. [[.drawer.win).footer) do
-            text = text .. chunk[1]
-        end
-        return text
-    end)()]])
-end
-
-T['drawer']['| and - in the drawer switch the pane and keep the focus'] = function()
+T['drawer']['| and - in the tree switch the pane and keep the focus'] = function()
     open_review()
-    eq(footer():find('| split', 1, true) ~= nil, true)
 
     child.type_keys('|')
     helpers.wait_until(child, R .. [[.view.old ~= nil]])
     eq(
         child.lua_get(
-            [[vim.api.nvim_get_current_win() == ]]
-                .. R
-                .. [[.drawer:selection_win()]]
+            [[vim.api.nvim_get_current_win() == ]] .. R .. [[.panel.win]]
         ),
         true
     )
     eq(#left_lines(), #right_lines())
-    eq(footer():find('- unified', 1, true) ~= nil, true)
 
     child.type_keys('-')
     helpers.wait_until(child, R .. [[.view.old == nil]])
     eq(
         child.lua_get(
-            [[vim.api.nvim_get_current_win() == ]]
-                .. R
-                .. [[.drawer:selection_win()]]
+            [[vim.api.nvim_get_current_win() == ]] .. R .. [[.panel.win]]
         ),
         true
     )
-    eq(footer():find('| split', 1, true) ~= nil, true)
 end
 
 T['drawer']['diff.layout split opens the review side by side'] = function()
@@ -1137,7 +1128,7 @@ T['staging']['unified: the del, then its add, land in place'] = function()
     child.lua([[
         local r = require('iter').current_review
         vim.api.nvim_set_current_win(r.diff_win)
-        r.drawer:refresh()
+        r:refresh()
         for lnum, row in ipairs(r.view.rows) do
             if row.kind == 'add' and row.text == 'l3 changed' then
                 vim.api.nvim_win_set_cursor(r.diff_win, { lnum, 0 })
@@ -1267,7 +1258,7 @@ T['all files']['m and | show every file on both sides'] = function()
     eq(positions()[1][1], 10)
     eq(positions()[2][1], 10)
     helpers.wait_until(child, [[(function()
-        local item = ]] .. R .. [[.drawer:selected()
+        local item = ]] .. R .. [[.tree:file()
         return item and item.path == 'c.txt'
     end)()]])
 
@@ -1334,7 +1325,7 @@ T['wrap']['gw in the split layout warns and wraps back in unified'] = function()
     eq(wraps(), { true })
 end
 
-T['wrap']['gw in the drawer wraps the diff'] = function()
+T['wrap']['gw in the tree wraps the diff'] = function()
     open_review()
 
     child.type_keys('gw')

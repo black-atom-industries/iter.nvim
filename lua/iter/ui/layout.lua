@@ -2,7 +2,6 @@
 --- side above the breakpoint, stacked sections below it, cells cut to fit.
 --- Pure: it builds render lines and touches no window or buffer.
 
-local anchor = require('iter.annotations.anchor')
 local changes = require('iter.changes')
 local render = require('iter.ui.render')
 
@@ -18,12 +17,6 @@ local render = require('iter.ui.render')
 ---@field selectable? fun(item: any): boolean false for an item shown but never selected; every item is selectable by default
 ---@field cell fun(line: IterRenderLine, item: any, first: integer, width: integer): string text of one item's cell, `width` cells wide, highlights added at byte column `first`
 
----@class IterLayoutStack sections one below the other in one column
----@field sections IterLayoutColumn[] each with its title, a blank line between them
----@field weight? number share of the width among the columns, 1 by default
-
----@alias IterLayoutSlot IterLayoutColumn|IterLayoutStack one column side by side
-
 ---@class IterLayoutCell byte columns of one cell on its line
 ---@field first integer
 ---@field last integer
@@ -32,10 +25,6 @@ local render = require('iter.ui.render')
 ---@field lines IterRenderLine[]
 ---@field rows table<string, any>[] per line, the item of each column id on it
 ---@field cells table<string, IterLayoutCell>[] per line, the cell of each item
-
----@class IterLayoutDecor what a file row shows besides its code and path
----@field mark? [string, string] glyph and group after the code letter
----@field count? integer shown as `[n]` at the end of the cell above 0
 
 ---@class IterLayoutProgress the reviewed progress of the review
 ---@field reviewed integer
@@ -199,18 +188,6 @@ end
 ---@field column? IterLayoutColumn
 ---@field item? any
 
---- The sections of `slot`: a stack's own, else the column alone.
----@param slot IterLayoutSlot
----@return IterLayoutColumn[]
-local function sections(slot)
-    if slot.sections ~= nil then
-        return slot.sections
-    end
-
-    ---@cast slot IterLayoutColumn
-    return { slot }
-end
-
 --- The lines of `list` top to bottom: per column a title line and its
 --- items, with a blank line before each title after the first.
 ---@param list IterLayoutColumn[]
@@ -265,19 +242,17 @@ local function entry_text(line, entry, first, width, row, cells)
     return text
 end
 
---- The slots side by side in `widths`, separated by `SEPARATOR`, at least
---- `height` lines; with `trailing` a separator also ends each line.
----@param slots IterLayoutSlot[]
+--- The columns side by side in `widths`, separated by `SEPARATOR`.
+---@param slots IterLayoutColumn[]
 ---@param widths integer[]
----@param height integer
----@param trailing boolean
 ---@return IterLayout
-local function lay(slots, widths, height, trailing)
+local function lay(slots, widths)
     local result = { lines = {}, rows = {}, cells = {} }
     local lists = {}
+    local height = 0
 
     for i, slot in ipairs(slots) do
-        lists[i] = entries(sections(slot))
+        lists[i] = entries({ slot })
         height = math.max(height, #lists[i])
     end
 
@@ -293,7 +268,7 @@ local function lay(slots, widths, height, trailing)
             table.insert(parts, text)
             first = first + #text
 
-            if i < #slots or trailing then
+            if i < #slots then
                 table.insert(parts, M.SEPARATOR)
                 render.add_highlight(
                     line,
@@ -314,7 +289,7 @@ local function lay(slots, widths, height, trailing)
     return result
 end
 
----@param slots IterLayoutSlot[]
+---@param slots IterLayoutColumn[]
 ---@return number[]
 local function weights(slots)
     return vim.tbl_map(function(slot)
@@ -322,62 +297,24 @@ local function weights(slots)
     end, slots)
 end
 
---- The slots side by side, separated by `SEPARATOR`: a column has its
---- title on the first line and one item per line below; a stack has its
---- sections one below the other, as `stacked` lays them out, the first
---- title on the first line.
----@param slots IterLayoutSlot[]
+--- The columns side by side, separated by `SEPARATOR`, each with its title
+--- on the first line and one item per line below.
+---@param slots IterLayoutColumn[]
 ---@param width integer
 ---@return IterLayout
 function M.columns(slots, width)
-    return lay(slots, M.widths(width, weights(slots)), 0, false)
+    return lay(slots, M.widths(width, weights(slots)))
 end
 
----@class IterLayoutSplit the last slot apart from the others
----@field left IterLayout the other slots, each line ending in a separator
----@field right IterLayout the last slot, as many lines as `left`
----@field col integer display column the last slot starts at
-
---- The slots as `columns` lays them out in `width`, the last one in a
---- layout of its own, for a window of its own beside the others.
----@param slots IterLayoutSlot[]
----@param width integer
----@return IterLayoutSplit
-function M.split(slots, width)
-    local widths = M.widths(width, weights(slots))
-    local last = #slots
-    local height = 0
-    local col = (last - 1) * vim.fn.strdisplaywidth(M.SEPARATOR)
-
-    for i, slot in ipairs(slots) do
-        height = math.max(height, #entries(sections(slot)))
-
-        if i < last then
-            col = col + widths[i]
-        end
-    end
-
-    return {
-        left = lay(vim.list_slice(slots, 1, last - 1), widths, height, true),
-        right = lay({ slots[last] }, { widths[last] }, height, false),
-        col = col,
-    }
-end
-
---- Every section of the slots one below the other, each the full `width`:
---- a title line, its items, and a blank line before the next title.
----@param slots IterLayoutSlot[]
+--- Every column one below the other, each the full `width`: a title line,
+--- its items, and a blank line before the next title.
+---@param slots IterLayoutColumn[]
 ---@param width integer
 ---@return IterLayout
 function M.stacked(slots, width)
     local result = { lines = {}, rows = {}, cells = {} }
-    local list = {}
 
-    for _, slot in ipairs(slots) do
-        vim.list_extend(list, sections(slot))
-    end
-
-    for _, entry in ipairs(entries(list)) do
+    for _, entry in ipairs(entries(slots)) do
         local line = render.line('')
         local row, cells = {}, {}
 
@@ -431,30 +368,16 @@ local function path_text(item, width)
 end
 
 --- The cell of a file row: code letter and path, the path cut from the
---- left to fit, a rename or copy as `old → new`. With `decor`, a mark slot
---- follows the code letter, blank without a mark, and a count above 0 ends
---- the cell.
+--- left to fit, a rename or copy as `old → new`.
 ---@param line IterRenderLine
 ---@param item IterChange
 ---@param first integer byte column the cell starts at
 ---@param width integer
----@param decor? IterLayoutDecor
 ---@return string
-function M.file_cell(line, item, first, width, decor)
+function M.file_cell(line, item, first, width)
     local indent = ' '
     local prefix = indent .. item.code .. ' '
-    local mark = decor and decor.mark
-
-    if decor ~= nil then
-        prefix = prefix .. (mark and mark[1] or ' ') .. ' '
-    end
-
-    local count = decor and decor.count or 0
-    local suffix = count > 0 and string.format(' [%d] ', count) or ''
-    local path, arrow = path_text(
-        item,
-        width - vim.fn.strdisplaywidth(prefix) - vim.fn.strdisplaywidth(suffix)
-    )
+    local path, arrow = path_text(item, width - vim.fn.strdisplaywidth(prefix))
     local text = prefix .. path
 
     render.add_highlight(line, code_group(item), first + #indent)
@@ -465,67 +388,16 @@ function M.file_cell(line, item, first, width, decor)
         render.add_highlight(line, 'IterDrawerHint', start, start + #ARROW)
     end
 
-    if mark then
-        local start = first + #indent + #item.code + 1
-
-        render.add_highlight(line, mark[2], start, start + #mark[1])
-    end
-
-    if suffix == '' then
-        return pad(text, width)
-    end
-
-    text = pad(text, width - #suffix)
-    render.add_highlight(
-        line,
-        'IterDrawerCount',
-        first + #text,
-        first + #text + #suffix
-    )
-
-    return text .. suffix
+    return pad(text, width)
 end
 
 ---@class IterLayoutAnnotation an annotation row
 ---@field annotation IterAnnotation
 ---@field outdated boolean
----@field label string location, from `annotation_label`
+---@field label string location of the annotation
 
 -- Fewest cells of the reviewed progress bar.
 M.PROGRESS_MIN_CELLS = 8
-
---- The location an annotation row shows: `review` for the whole review,
---- the file's name for a file annotation, else `name:line` or
---- `name:first–last`, with ` old` for deleted lines. `start` is the line the
---- annotation's text starts on now; without it the stored line shows.
----@param annotation IterAnnotation
----@param start? integer
----@return string
-function M.annotation_label(annotation, start)
-    local a = annotation.anchor
-
-    if annotation.scope == 'review' then
-        return 'review'
-    end
-
-    local name = vim.fs.basename(a.path or '')
-
-    if annotation.scope == 'file' or a.start_line == nil then
-        return name
-    end
-
-    local first = start or a.start_line
-    local last = first + (a.end_line or a.start_line) - a.start_line
-    local loc = first == last and tostring(first) or (first .. '–' .. last)
-
-    local sha = anchor.short_base(a)
-
-    return name
-        .. ':'
-        .. loc
-        .. (a.side == 'old' and ' old' or '')
-        .. (sha ~= nil and ' ' .. sha or '')
-end
 
 --- The cell of an annotation row: the label padded to `label_width`, then
 --- the first line of the body, cut with `…` to fit. An outdated row is
@@ -711,6 +583,19 @@ function M.commit_chunks(commit, author_width)
     return chunks
 end
 
+--- A commit as a row of a list in the left window: the short sha and the
+--- subject, cut with `…` to fit `width` cells.
+---@param commit GitCommit
+---@param width integer
+---@return [string, string?][]
+function M.commit_short(commit, width)
+    local room = width - vim.fn.strdisplaywidth(commit.sha) - 1
+    local subject = room > 0 and fit(commit.subject, room):gsub('%s+$', '')
+        or ''
+
+    return { { commit.sha, 'IterCommitSha' }, { ' ' .. subject } }
+end
+
 -- Display cells the author column of commit rows keeps at most; longer
 -- names are cut.
 local AUTHOR_WIDTH = 20
@@ -889,6 +774,27 @@ function M.commits(recent, width, now)
     end
 
     return result
+end
+
+--- Append `hints`, a chunk list per line, one cell in, so they end on line
+--- `height` of the page; past it, a blank line keeps them apart from
+--- `lines`.
+---@param lines IterRenderLine[]
+---@param hints [string, string?][][]
+---@param height integer
+function M.bottom_hints(lines, hints, height)
+    local gap = height - #lines - #hints
+
+    for _ = 1, gap < 0 and 1 or gap do
+        table.insert(lines, render.line(''))
+    end
+
+    for _, chunks in ipairs(hints) do
+        table.insert(
+            lines,
+            render.chunks_line(vim.list_extend({ { ' ' } }, chunks))
+        )
+    end
 end
 
 --- Key hints `<lhs> <label>` for `actions`, in order, those without a bound

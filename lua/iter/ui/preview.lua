@@ -108,58 +108,104 @@ function Preview.new(opts)
     }, Preview)
 end
 
---- Show the diff of `item`, a file of the changes, in the view.
+--- The key of `items`, the changes of one path, as `previewed` holds it.
+---@param items IterChange[]
+---@return string
+function Preview.keys(items)
+    return table.concat(vim.tbl_map(key, items), '\n')
+end
+
+--- Whether `file`, shown in the view, is still the diff `item` reads now.
+---@param file? IterFileDiff
 ---@param item IterChange
----@param force boolean also when the view already shows the item
-function Preview:show(item, force)
-    if item.dir then
+---@param raw string[]
+---@return boolean
+local function same_diff(file, item, raw)
+    return file ~= nil
+        and file.side == item.side
+        and file.path == item.path
+        and file.code == item.code
+        and file.base == item.base
+        and vim.deep_equal(file.raw, raw)
+end
+
+--- Show the diff of `items`, the changes of one path (its Unstaged change
+--- then its Staged one for a partly staged file), in the view: one section
+--- per item.
+---@param items IterChange[]
+---@param force boolean also when the view already shows them
+function Preview:show(items, force)
+    items = vim.tbl_filter(function(item)
+        return not item.dir
+    end, items)
+
+    if #items == 0 then
         return
     end
 
-    if not force and key(item) == self.previewed then
+    local k = Preview.keys(items)
+
+    if not force and k == self.previewed then
         return
     end
 
     if self.all_files then
-        self:show_all(item, force)
+        self:show_all(items[1], force, k)
         return
     end
 
-    local stat = self:stat(item)
-    local source, err = git.file_diff(
-        self.source.changes().root,
-        item,
-        self.config.options.diff.args
-    )
+    local stat = self:stat(items[1])
+    local root = self.source.changes().root
+    ---@type IterDocEntry[]
+    local entries = {}
+    local same = self.view:is_shown() and #self.view.files == #items
 
-    if source == nil then
-        util.error(err, 'Cannot read the diff of ' .. item.path)
-        return
+    for index, item in ipairs(items) do
+        local source, err =
+            git.file_diff(root, item, self.config.options.diff.args)
+
+        if source == nil then
+            util.error(err, 'Cannot read the diff of ' .. item.path)
+            return
+        end
+
+        local shown = self.view.files[index]
+        -- One file takes the view's own `new_follows`; two carry theirs.
+        local new_follows = #items > 1 and self:new_follows(item) or nil
+        local reuse = #self.view.files == #items
+            and same_diff(shown, item, source.raw)
+
+        same = same
+            and reuse
+            and self.view.document.sections[index].new_follows
+                == new_follows
+
+        table.insert(entries, {
+            file = reuse and shown or model.build(item, source),
+            new_follows = new_follows,
+        })
     end
 
     self.previewed_stat = stat
     self.all_shown = false
-    self.view:set_new_follows(self:new_follows(item))
+    self.previewed = k
+
+    if #items == 1 then
+        self.view:set_new_follows(self:new_follows(items[1]))
+    end
 
     -- The same diff again keeps the view as it is, expanded gaps included.
-    local shown = #self.view.files == 1 and self.view.files[1] or nil
-
-    if
-        self.view:is_shown()
-        and shown ~= nil
-        and shown.side == item.side
-        and shown.path == item.path
-        and shown.code == item.code
-        and shown.base == item.base
-        and vim.deep_equal(shown.raw, source.raw)
-    then
-        self.previewed = key(item)
+    if same then
         self.source.shown()
         return
     end
 
-    self.previewed = key(item)
-    self.view:show(model.build(item, source))
+    if #entries == 1 then
+        self.view:show(entries[1].file)
+    else
+        self.view:show_all(entries)
+    end
+
     self.source.shown()
 end
 
@@ -281,7 +327,8 @@ end
 --- window, unless a forced read finds the cursor in `item` already.
 ---@param item IterChange
 ---@param force boolean
-function Preview:show_all(item, force)
+---@param previewed? string the key `previewed` takes, `item`'s by default
+function Preview:show_all(item, force, previewed)
     local view = self.view
 
     if force or not self.all_shown then
@@ -290,7 +337,7 @@ function Preview:show_all(item, force)
         view:show_document(view.document)
     end
 
-    self.previewed = key(item)
+    self.previewed = previewed or key(item)
 
     local index = document.find(view.document, key(item))
     local _, _, at = view:at()
@@ -302,10 +349,11 @@ function Preview:show_all(item, force)
     self.source.shown()
 end
 
---- Show every file in one buffer (`on`), or `target` alone. Without a
---- `target` file, the file the view shows stays shown, near its row.
+--- Show every file in one buffer (`on`), or `target` alone, the changes of
+--- one path. Without a `target`, the file the view shows stays shown, near
+--- its row.
 ---@param on boolean
----@param target? IterChange
+---@param target? IterChange[]
 function Preview:set_all_files(on, target)
     if on == self.all_files then
         return
@@ -313,13 +361,13 @@ function Preview:set_all_files(on, target)
 
     local shown = self.view:is_shown() and self.view:file() or nil
 
-    if (target == nil or target.dir) and shown ~= nil then
-        target = nil
+    if (target == nil or #target == 0 or target[1].dir) and shown ~= nil then
+        target = vim.tbl_filter(function(item)
+            return item.path == shown.path
+        end, self.source.files())
 
-        for _, item in ipairs(self.source.files()) do
-            if key(item) == key(shown) then
-                target = item
-            end
+        if #target == 0 then
+            target = nil
         end
     end
 

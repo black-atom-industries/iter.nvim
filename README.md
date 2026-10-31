@@ -17,7 +17,7 @@ loop:
 
 iter does not commit, push or pull, and it does not talk to a host. Keep a Git plugin such as [mini.git](https://github.com/nvim-mini/mini-git) for that.
 
-![The review tab: moving through the files, a annotates a line, r marks the file reviewed and moves on, the Annotations column lists the annotation](docs/assets/review.webp)
+![The review tab: moving through the files, a annotates a line, r marks the file reviewed and moves on, the annotations list the annotation](docs/assets/review.webp)
 
 ## Contents
 
@@ -68,12 +68,14 @@ The drawer shows:
 
 ### Review
 
-The review tab has the review drawer below and the diff above. iter draws the
-diff itself, with treesitter syntax, the changed words emphasized, old and new
-line numbers, and hidden context that `<CR>` expands.
+The review tab has the changed files as a tree on the left, the diff in the
+middle and the annotations on the right. iter draws the diff itself, with
+treesitter syntax, the changed words emphasized, old and new line numbers, and
+hidden context that `<CR>` expands.
 
 1. Read the file. `=` shows every file in one scroll, `|` shows old and new
-   side by side. Both drawers keep the layout you picked last, for the whole
+   side by side. The review and the status drawer keep the layout you picked
+   last, for the whole
    Neovim session, or follow the window width with
    [`diff.layout = 'auto'`](#configuration).
 2. Stage as you go: `s` and `u` take the hunk under the cursor, or in visual
@@ -90,7 +92,7 @@ The review can compare the files on disk with a base instead of the index, so
 work that is already committed shows up too. To review a pull request, check
 out its branch (a worktree per pull request works well), then:
 
-- `b` in the review drawer picks the base: working changes, the parent branch,
+- `b` in the file tree picks the base: working changes, the parent branch,
   another branch, or a recent commit.
 - `:Iter review main` opens the review against `main` directly.
 
@@ -98,8 +100,8 @@ A branch base means its merge-base with `HEAD`, read again on every refresh. A
 commit picked with `b` is part of the review. A ref typed after `:Iter review`,
 or passed as `iter.review({ base })`, that isn't a branch, such as `HEAD~3` or
 `v1.0`, is where the review starts: that commit itself is not part of it. The
-drawer shows one column, `Since main`, beside Annotations. Staging does not
-apply there. Reviewed marks belong to the base they were made against,
+tree lists the files since the base, `Since main` under its title, without
+staging icons. Staging does not apply there. Reviewed marks belong to the base they were made against,
 annotations are shared, and the copied prompt names the base. iter remembers the
 base per branch.
 
@@ -118,13 +120,13 @@ base per branch.
 - Annotations follow their code when it moves and turn outdated when it is
   gone.
 
-The Annotations column of the review drawer lists every annotation, with the
-reviewed progress on top. On a row:
+The review's annotations window lists every annotation in the tree's file
+order. On a note:
 
 - moving onto it shows the annotation in the diff
 - `<CR>` jumps there
 - `e` edits, `d` deletes after a confirm (`d` again confirms)
-- `y` copies the annotation, or the file's annotations on a file row; `Y`
+- `y` copies the annotation, or the file's annotations on a file header; `Y`
   copies all
 
 `:Iter annotate` lists every annotation of the repository in a sidebar beside
@@ -184,7 +186,7 @@ plugin manager must not delay it until the first `:Iter`.
 :Iter review      " open the review tab, or switch to it
 :Iter review main " open it against a branch or another ref
 :Iter commits     " browse the recent commits and their diffs
-:Iter annotate    " open or close the annotation sidebar
+:Iter annotate    " open or close the annotation sidebar; in the review, focus its annotations
 ```
 
 `?` lists the keys of the view you are in.
@@ -197,7 +199,7 @@ straight from the repository:
 ```sh
 nvim iter://review                # the review
 nvim 'iter://review#all'          # in all-files mode
-nvim 'iter://review#annotations'  # on the Annotations column
+nvim 'iter://review#annotations'  # with its annotations focused
 ```
 
 An alias makes it a command of its own:
@@ -236,7 +238,7 @@ vim.keymap.set('n', '<leader>ar', function()
     iter.annotate({ scope = 'review' })
 end, { desc = 'Annotate the review' })
 
--- Open the review on its Annotations column
+-- Open the review with its annotations focused
 vim.keymap.set('n', '<leader>al', iter.annotations, { desc = 'List the annotations' })
 
 -- Open or close the annotation sidebar
@@ -319,58 +321,77 @@ iter warns and opens nothing.
 
 ### Review tab
 
-**Drawer.** `h` and `l` move between the columns:
+**File tree.** The left window lists the changed files as a tree, 34 cells
+wide (`review.tree_width`):
 
-- the files on the left, Unstaged above Staged; in wide windows the two sit
-  side by side. Against a base there is one column, `Since <base>`.
-- the Annotations column on the right, in a window of its own that stays put
-  while the files scroll
+```
+ Review HEAD main
+ Working changes · 6 files
+ reviewed ▰▰▱▱▱▱▱▱▱▱▱▱ 2 of 6 · ↻ 1
 
-In narrow windows all three stack, and `h` and `l` still step through them.
+  ▾ lua/iter/
+    ▾ ui/
+      ◐ M drawer.lua           ✎1
+      ○ A tree.lua
+    ◐ M git.lua                ✎2 ✓
+  ○ M README.md                ✎1 ↻
 
-From 160 tab columns (`annotate.review_breakpoint`) the annotations move out of
-the drawer into the annotation sidebar, beside the diff at full height, and the
-drawer keeps Unstaged and Staged. `l` past the last file column goes into the
-sidebar and `<C-j>` comes back. Moving through the sidebar previews each
-annotation in the diff as the Annotations column does, `<CR>` goes into the
-diff at it, and `q` closes the review. Files with changes carry an `M`, and the
-reviewed progress sits under the title. The layout switches as the window
-resizes, keeping the selected annotation.
+ s stage  u unstage  r reviewed
+ b base  = all  ? help
+```
 
-**Base.** `b` picks what the review compares with, in a list over the drawer
-(`/` searches it):
+- The title names the branch, or the base: `since main (a1b2c3d)` for a branch
+  and its merge-base, `since v1.0 (a1b2c3d)` for a typed ref and its commit,
+  `from a1b2c3d` for a picked commit. The line under it counts the files, and
+  the reviewed progress follows, with `· ↻ n` for files changed since they were
+  reviewed.
+- Directories come first, a chain of single directories on one row
+  (`lua/iter/`), all open at first. `h` closes the directory, or on a file the
+  directory it is in; `l` opens it; `<CR>` on a directory does either. A
+  directory stays closed across refreshes.
+- A file row: in working changes `●` staged, `◐` partly staged, `○` unstaged;
+  the git letter (`M`, `A`, `D`, `R`, `?`); the name; `✎n` annotations; `✓`
+  reviewed or `↻` changed since reviewed. Against a base the letter alone.
+- `j` and `k` move and the diff follows: all of the file's changes, a partly
+  staged file as its Unstaged section, then its Staged one, each header naming
+  its side. `<CR>` moves into the diff.
+- `s` and `u` stage and unstage the file, or every file below a directory.
+  `d` and `I` work on a file.
+- The key hints sit at the bottom.
 
-1. The merge base with the parent branch, the branch this one was created
-   from, when it can be told: what a pull request shows. On the default branch
-   the list starts with Working changes, then the merge base with the upstream,
-   which shows what isn't pushed yet.
-2. Working changes, the index and worktree as in the status drawer.
-3. Local, then remote branches. A branch means its merge-base with `HEAD`.
-4. The last 20 commits, each with its date, time and author. A commit means
-   its parent, so the commit is included.
-
-The header names the base when it fits: `· since main (a1b2c3d)` for a branch
-and its merge-base, `· since v1.0 (a1b2c3d)` for a typed ref and its commit,
-`· from a1b2c3d` for a picked commit. The copied prompt uses the same words after
-`Reviewed`, as in `Reviewed since main (a1b2c3d)`. The column title drops the
-sha: `Since main` or `From a1b2c3d`. Against a base the drawer lists the files
-that differ from it, committed and uncommitted together, and `s`, `u`, `d` and
-`I` warn instead of acting. The new side of every diff is the file on disk. If
-the base's branch is gone, or a remembered commit is no longer in the history of
-`HEAD` after a rebase, iter warns and shows working changes. On a detached
-`HEAD` a picked base applies to the open review only.
-
-**Annotations column.**
-
-1. The progress: `reviewed ▰▰▰▱▱▱▱▱ 3 of 8`, then `· ↻ n` for files changed
-   since they were reviewed. The bar fills the column.
-2. Every annotation in file order, review annotations last: the file with
-   `:line`, `:first–last` or ` old` for a deleted line, and the start of the
-   text. Outdated annotations are dimmed.
+**Annotations.** From 160 tab columns (`annotate.review_breakpoint`) the
+annotations window sits right of the diff at full height, below that under the
+tree in a third of its column. It is the [annotation sidebar](#annotation-sidebar), listing the tree's
+files first: moving through it previews each annotation in the diff, `<CR>`
+goes into the diff at it, `<C-j>` back to the tree, and `q` closes the review.
+Files with changes carry an `M`. The window moves as the tab resizes, keeping
+the selected annotation. Closed, it stays closed until `:Iter annotate` or
+`iter.annotations()`.
 
 An annotation of a file without changes shows that file at `HEAD` in the diff,
 read-only, with the annotation in place. `<CR>` on it opens the file in the
 tab the review came from. On a review annotation `<CR>` opens the editor.
+
+**Base.** `b` picks what the review compares with, in a list that takes the
+tree's place (`/` searches it, `q` goes back to the tree unchanged):
+
+1. `since <parent>`, the merge base with the parent branch, the branch this
+   one was created from, when it can be told: what a pull request shows. On
+   the default branch the list starts with Working changes, then
+   `since <upstream>`, which shows what isn't pushed yet.
+2. Working changes, the index and worktree as in the status drawer.
+3. Local, then remote branches. A branch means its merge-base with `HEAD`.
+4. The last 20 commits, each as its short sha and subject. A commit means its
+   parent, so the commit is included.
+
+The copied prompt names the base with the title's words after `Reviewed`, as in
+`Reviewed since main (a1b2c3d)`. The line under the title drops the sha:
+`Since main` or `From a1b2c3d`. Against a base the tree lists the files that
+differ from it, committed and uncommitted together, and `s`, `u`, `d` and `I`
+warn instead of acting. The new side of every diff is the file on disk. If the
+base's branch is gone, or a remembered commit is no longer in the history of
+`HEAD` after a rebase, iter warns and shows working changes. On a detached
+`HEAD` a picked base applies to the open review only.
 
 **Diff header.** The reviewed state, the stat and the number of annotations.
 
@@ -388,12 +409,13 @@ tab the review came from. On a review annotation `<CR>` opens the editor.
 A file opened in the diff pane with `:edit` opens in the tab the review came
 from.
 
-**All files.** `=` shows every file in one buffer in drawer order, each under
+**All files.** `=` shows every file in one buffer in tree order, each under
 its header, until the review tab closes.
 
-- A file on both sides shows twice.
-- The drawer selection follows the cursor.
-- `]f` and `[f` jump between headers. `]c`, `[c`, `]a` and `[a` run across
+- A partly staged file shows twice, its Unstaged section first.
+- The tree follows the cursor.
+- `]f` and `[f` jump to the next or previous file, also into closed
+  directories, which open. `]c`, `[c`, `]a` and `[a` run across
   files.
 - A reviewed file shows its header alone. `<CR>` on that header opens it until
   `r` or `=` closes it again.
@@ -459,8 +481,10 @@ sidebar keeps the repository it opened in.
 - The key hints sit at the bottom.
 
 The command toggles: in another window it focuses the sidebar, in the sidebar
-it closes it, and `q` closes it too. In a wide review tab the sidebar belongs
-to the review (see [Review tab](#review-tab)), and the command only focuses it.
+it closes it, and `q` closes it too. In the review tab the sidebar belongs to
+the review (see [Review tab](#review-tab)), and the command opens or focuses
+it. `:edit` of an `iter://` address in the sidebar runs from the window you
+came from.
 
 On a row:
 
@@ -511,32 +535,31 @@ The status drawer (`drawer`):
 | `h`     | `column_left`  | Select the column to the left        |
 | `l`     | `column_right` | Select the column to the right       |
 
-The review drawer (`review_drawer`):
+The review's file tree (`tree`):
 
-| Key     | Action          | Does                                                                            |
-| ------- | --------------- | ------------------------------------------------------------------------------- |
-| `<CR>`  | `open`          | Open the diff, or jump to the annotation                                        |
-| `s`     | `stage`         | Stage or unstage the file                                                       |
-| `u`     | `unstage`       | Unstage the file                                                                |
-| `d`     | `discard`       | Discard changes in the file, or delete the annotation in the Annotations column |
-| `I`     | `ignore`        | Add the untracked file to .gitignore                                            |
-| `b`     | `base`          | Pick what the review compares with                                              |
-| `r`     | `reviewed`      | Mark reviewed and go to the next file                                           |
-| `R`     | `unreviewed`    | Remove the reviewed mark                                                        |
-| `=`     | `mode`          | Toggle one file or all files                                                    |
-| `\|`    | `split`         | Show the diff side by side                                                      |
-| `-`     | `unified`       | Show the diff unified                                                           |
-| `gw`    | `wrap`          | Toggle wrapping long lines                                                      |
-| `A`     | `annotate_file` | Annotate the file                                                               |
-| `e`     | `edit`          | Edit the annotation                                                             |
-| `y`     | `yank`          | Copy the annotation or file                                                     |
-| `Y`     | `yank_all`      | Copy all annotations                                                            |
-| `q`     | `close`         | Close                                                                           |
-| `?`     | `help`          | Show the keys                                                                   |
-| `<C-d>` | `scroll_down`   | Scroll the diff down                                                            |
-| `<C-u>` | `scroll_up`     | Scroll the diff up                                                              |
-| `h`     | `column_left`   | Select the column to the left                                                   |
-| `l`     | `column_right`  | Select the column to the right                                                  |
+| Key     | Action          | Does                                          |
+| ------- | --------------- | --------------------------------------------- |
+| `<CR>`  | `open`          | Open the diff, or open or close the directory |
+| `s`     | `stage`         | Stage or unstage the file or directory        |
+| `u`     | `unstage`       | Unstage the file or directory                 |
+| `d`     | `discard`       | Discard changes in the file                   |
+| `I`     | `ignore`        | Add the untracked file to .gitignore          |
+| `r`     | `reviewed`      | Mark reviewed and go to the next file         |
+| `R`     | `unreviewed`    | Remove the reviewed mark                      |
+| `b`     | `base`          | Pick what the review compares with            |
+| `=`     | `mode`          | Toggle one file or all files                  |
+| `\|`    | `split`         | Show the diff side by side                    |
+| `-`     | `unified`       | Show the diff unified                         |
+| `gw`    | `wrap`          | Toggle wrapping long lines                    |
+| `A`     | `annotate_file` | Annotate the file                             |
+| `y`     | `yank`          | Copy the file's annotations                   |
+| `Y`     | `yank_all`      | Copy all annotations                          |
+| `h`     | `collapse`      | Close the directory, or the file's directory  |
+| `l`     | `expand`        | Open the directory                            |
+| `q`     | `close`         | Close                                         |
+| `?`     | `help`          | Show the keys                                 |
+| `<C-d>` | `scroll_down`   | Scroll the diff down                          |
+| `<C-u>` | `scroll_up`     | Scroll the diff up                            |
 
 The diff pane (`diff`), in the review tab and above the status drawer:
 
@@ -564,22 +587,22 @@ The diff pane (`diff`), in the review tab and above the status drawer:
 | `gw`    | `wrap`            | Toggle wrapping long lines                                      |
 | `y`     | `yank`            | Copy the annotation or file                                     |
 | `Y`     | `yank_all`        | Copy all annotations                                            |
-| `<C-j>` | `focus_drawer`    | Focus the drawer                                                |
+| `<C-j>` | `focus_drawer`    | Focus the drawer or the file tree                               |
 | `q`     | `close`           | Close                                                           |
 | `?`     | `help`            | Show the keys                                                   |
 
 The annotation sidebar (`annotate`):
 
-| Key     | Action         | Does                                   |
-| ------- | -------------- | -------------------------------------- |
-| `<CR>`  | `jump`         | Jump to the annotation                 |
-| `y`     | `yank`         | Copy the annotation or file            |
-| `Y`     | `yank_all`     | Copy all annotations                   |
-| `d`     | `delete`       | Delete the annotation                  |
-| `e`     | `edit`         | Edit the annotation                    |
-| `<C-j>` | `focus_drawer` | Focus the review drawer, in the review |
-| `q`     | `close`        | Close                                  |
-| `?`     | `help`         | Show the keys                          |
+| Key     | Action         | Does                               |
+| ------- | -------------- | ---------------------------------- |
+| `<CR>`  | `jump`         | Jump to the annotation             |
+| `y`     | `yank`         | Copy the annotation or file        |
+| `Y`     | `yank_all`     | Copy all annotations               |
+| `d`     | `delete`       | Delete the annotation              |
+| `e`     | `edit`         | Edit the annotation                |
+| `<C-j>` | `focus_drawer` | Focus the file tree, in the review |
+| `q`     | `close`        | Close                              |
+| `?`     | `help`         | Show the keys                      |
 
 The annotation float (`annotation`):
 
@@ -623,7 +646,6 @@ require('iter').setup({
         height = 0.3,     -- fraction of the window height
         zindex = 40,      -- float stacking order; help and annotation floats sit above it
         breakpoint = 80,  -- drawer width below which the columns stack
-        wide_breakpoint = 160, -- review drawer width from which Unstaged and Staged sit side by side
         commits = 3,      -- recent commits the status drawer lists, 0 hides them
     },
     diff = {
@@ -635,17 +657,20 @@ require('iter').setup({
         wrap = false,              -- wrap long lines a session starts with, unified layout only
         args = {},                 -- extra flags for every `git diff`, see below
     },
+    review = {
+        tree_width = 34,  -- columns of the review's file tree, 10 or more
+    },
     export = {
         intro = 'I reviewed your changes and have these annotations.\n'
             .. 'Please address them.',
     },
     annotate = {
-        side = 'right',   -- tab edge the sidebar opens on: 'left' or 'right'
+        side = 'right',   -- tab edge the sidebar opens on outside the review: 'left' or 'right'
         width = 40,       -- sidebar columns, 10 or more
-        review_breakpoint = 160, -- tab columns from which the review shows the sidebar, 0 = always
+        review_breakpoint = 160, -- tab columns from which the review's annotations sit right of the diff, below that under the tree; 0 = always right
     },
     refresh = {
-        poll_ms = 2000,   -- poll interval while a drawer or the sidebar is open
+        poll_ms = 2000,   -- poll interval while a drawer, the review or the sidebar is open
     },
     confirm = {
         discard = true,   -- ask before discarding changes
@@ -695,7 +720,7 @@ iter.annotate({ scope = 'file' })    -- annotate the current buffer's file
 iter.annotate({ scope = 'review' })  -- annotate the whole review
 iter.next_annotation()               -- move to the next annotation of the buffer
 iter.prev_annotation()               -- move to the previous annotation of the buffer
-iter.annotations()                   -- open the review on its Annotations column
+iter.annotations()                   -- open the review with its annotations focused
 iter.sidebar()                       -- same as :Iter annotate
 iter.yank()                          -- copy the annotations as a prompt
 iter.yank({ ids = { id } })          -- copy only the annotations with these ids
@@ -771,11 +796,11 @@ what it names in the repository of the current directory:
 | --------------------------- | ------------------------------------------------------------------------ |
 | `iter://status`             | The status drawer, or focuses it                                         |
 | `iter://status/<path>`      | The status drawer with `<path>` selected                                 |
-| `iter://review`             | The review tab, or switches to it                                        |
-| `iter://review/<path>`      | The review tab with `<path>` selected, Unstaged before Staged            |
+| `iter://review`             | The review tab, or switches to it; the file tree's buffer                |
+| `iter://review/<path>`      | The review tab with `<path>` selected in the tree                        |
 | `iter://review/<path>#L<n>` | The same, with the cursor on worktree line `n`, revealed if it is hidden |
 | `iter://review#all`         | The review tab in all-files mode                                         |
-| `iter://review#annotations` | The review tab on its Annotations column                                 |
+| `iter://review#annotations` | The review tab with its annotations window focused                       |
 | `iter://commits`            | The commits drawer, or focuses it                                        |
 | `iter://annotate`           | Opens the annotation sidebar, or focuses it                              |
 | `iter://annotation`         | The hidden annotation draft                                              |
@@ -788,7 +813,7 @@ what it names in the repository of the current directory:
 ### Tab label
 
 The review tab sets `vim.t.iter_label` to `iter review`. Neovim's default
-tabline ignores it and counts the drawer float among the windows. `tabline()`
+tabline ignores it and counts the status drawer's float among the windows. `tabline()`
 is a 'tabline' like the default that shows the label and counts only normal
 windows:
 
@@ -826,24 +851,24 @@ event, so no colorscheme needs to define them.
 
 | Group                        | Colours                                                 | Derived from                                                                |
 | ---------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `IterStage`                  | Staged files in the drawer                              | fg of `Added`, `String`                                                     |
-| `IterUnstage`                | Unstaged files in the drawer                            | fg of `Removed`, `Error`                                                    |
+| `IterStage`                  | Staged files in the drawer, `●` in the tree             | fg of `Added`, `String`                                                     |
+| `IterUnstage`                | Unstaged files in the drawer, `◐` in the tree           | fg of `Removed`, `Error`                                                    |
 | `IterUntracked`              | Untracked files                                         | fg of `DiagnosticInfo`, `Directory`, `Identifier`                           |
 | `IterConflict`               | Files with merge conflicts                              | fg of `DiagnosticError`, `ErrorMsg`, `Error`                                |
-| `IterHead`                   | Branch name in the drawer                               | fg of `Identifier`, `Keyword`                                               |
+| `IterHead`                   | Branch name in the drawer and the tree                  | fg of `Identifier`, `Keyword`                                               |
 | `IterUnpushed`               | Unpushed commits and the ahead count                    | fg of `Constant`, `Number`                                                  |
 | `IterBehind`                 | Behind count                                            | fg of `Removed`, `Error`                                                    |
 | `IterReviewed`               | Reviewed marks and progress                             | fg of `Added`, `String`                                                     |
 | `IterReviewedChanged`        | Files changed since reviewed                            | fg of `DiagnosticWarn`, `WarningMsg`, `Constant`                            |
-| `IterSidebar`                | Annotation sidebar background                           | link to `NormalFloat`                                                       |
+| `IterSidebar`                | Annotation sidebar and file tree background             | link to `NormalFloat`                                                       |
 | `IterDrawer`                 | Drawer text                                             | link to `Normal`, `NormalFloat` when `Normal` has no bg                     |
 | `IterDrawerTitle`            | Drawer titles                                           | link to `Title`                                                             |
 | `IterDrawerHeader`           | Drawer header row, under its rule                       | bg of `Title` fg, blended with `Normal`                                     |
-| `IterDrawerSelected`         | Selected drawer row                                     | link to `Visual`                                                            |
+| `IterDrawerSelected`         | Selected drawer row, the tree's cursor line             | link to `Visual`                                                            |
 | `IterDrawerKey`              | Key hints                                               | link to `Special`                                                           |
-| `IterDrawerHint`             | Dimmed drawer text                                      | link to `Comment`                                                           |
-| `IterDrawerCount`            | Counts in section titles                                | link to `Special`                                                           |
-| `IterCommitSha`              | Commit sha in the base picker                           | link to `Constant`                                                          |
+| `IterDrawerHint`             | Dimmed drawer and tree text, `○` in the tree            | link to `Comment`                                                           |
+| `IterDrawerCount`            | Counts in section titles, `✎n` in the tree              | link to `Special`                                                           |
+| `IterCommitSha`              | Commit sha in the base list                             | link to `Constant`                                                          |
 | `IterCommitDate`             | Commit date and time in the base picker                 | link to `Special`                                                           |
 | `IterCommitAuthor`           | Commit author in the base picker                        | link to `Identifier`                                                        |
 | `IterCommitBody`             | Commit body after the subject in the base picker        | link to `Comment`                                                           |

@@ -7,8 +7,10 @@
 ---@field height? number Fraction of the pane height, in (0, 1]
 ---@field zindex? integer
 ---@field breakpoint? integer Drawer width below which the columns stack
----@field wide_breakpoint? integer Drawer width from which the review drawer shows Unstaged and Staged side by side
 ---@field commits? integer Recent commits the status drawer lists, 0 hides them
+
+---@class IterReviewOptions
+---@field tree_width? integer Columns of the review's file tree, 10 or more
 
 ---@class IterDiffOptions
 ---@field expand_step? integer Hidden context lines revealed per expand
@@ -25,7 +27,7 @@
 ---@class IterAnnotateOptions
 ---@field side? 'left'|'right' Side of the window the sidebar opens on
 ---@field width? integer Columns of the sidebar, 10 or more
----@field review_breakpoint? integer Tab width from which the review shows the sidebar in place of the drawer's Annotations column; 0 = always
+---@field review_breakpoint? integer Tab width from which the review's annotations sit right of the diff; below it they sit under the file tree; 0 = always right
 
 ---@class IterRefreshOptions
 ---@field poll_ms? integer
@@ -39,13 +41,14 @@
 
 ---@alias IterLayoutOption 'unified'|'split'|'auto'
 
----@alias IterView 'drawer'|'review_drawer'|'diff'|'annotate'|'annotation'|'help'|'picker'|'commits'
+---@alias IterView 'drawer'|'tree'|'diff'|'annotate'|'annotation'|'help'|'picker'|'commits'
 
 ---@alias IterKeyValue string|string[]|false
 
 ---@class IterOptions
 ---@field drawer? IterDrawerOptions
 ---@field diff? IterDiffOptions
+---@field review? IterReviewOptions
 ---@field export? IterExportOptions
 ---@field annotate? IterAnnotateOptions
 ---@field refresh? IterRefreshOptions
@@ -55,8 +58,9 @@
 ---@field debug? boolean
 
 ---@class IterResolvedOptions
----@field drawer { height: number, zindex: integer, breakpoint: integer, wide_breakpoint: integer, commits: integer }
+---@field drawer { height: number, zindex: integer, breakpoint: integer, commits: integer }
 ---@field diff { expand_step: integer, syntax_max_lines: integer, word_diff: boolean, layout: IterLayoutOption, split_breakpoint: integer, wrap: boolean, args: string[] }
+---@field review { tree_width: integer }
 ---@field export { intro: string }
 ---@field annotate { side: 'left'|'right', width: integer, review_breakpoint: integer }
 ---@field refresh { poll_ms: integer }
