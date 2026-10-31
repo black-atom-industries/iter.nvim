@@ -542,7 +542,7 @@ T['keys']['m, | and - switch the preview from the drawer and the pane'] = functi
 
     child.type_keys('=')
     helpers.wait_until(child, '#' .. sections .. ' > 1')
-    eq(child.lua_get(D .. [[.all_files]]), true)
+    eq(child.lua_get(D .. [[.preview.all_files]]), true)
 
     child.type_keys('|')
     eq(child.lua_get(D .. [[.view.layout]]), 'split')
@@ -557,7 +557,7 @@ T['keys']['m, | and - switch the preview from the drawer and the pane'] = functi
     child.type_keys('-')
     eq(child.lua_get(D .. [[.view.layout]]), 'unified')
     child.type_keys('=')
-    eq(child.lua_get(D .. [[.all_files]]), false)
+    eq(child.lua_get(D .. [[.preview.all_files]]), false)
     eq(child.lua_get('#' .. sections), 1)
 end
 

@@ -1,4 +1,5 @@
 local helpers = dofile('tests/helpers.lua')
+local H = dofile('tests/helpers_review.lua')
 local marks = require('iter.annotations.marks')
 
 local new_set = MiniTest.new_set
@@ -8,7 +9,7 @@ local child = MiniTest.new_child_neovim()
 ---@type string
 local repo
 
-local R = [[require('iter').current_review]]
+local R = H.R
 
 ---@param prefix string
 ---@param from integer
@@ -148,32 +149,10 @@ local function stub_ui()
     ]])
 end
 
---- Wait until the review's diff pane shows `expected` (`side path`).
----@param expected string
-local function wait_diff(expected)
-    helpers.wait_until(
-        child,
-        string.format(
-            [[(function()
-                local r = %s
-                local f = r and r.drawer.view.files[1]
-                return f ~= nil and f.side .. ' ' .. f.path == %q
-                    and r.drawer.view:is_shown()
-            end)()]],
-            R,
-            expected
-        )
-    )
-end
-
 ---@param expected? string diff to wait for, `unstaged m.txt` by default
 local function open_review(expected)
-    child.cmd('Iter review')
-    helpers.wait_until(
-        child,
-        R .. [[ ~= nil and ]] .. R .. [[.drawer.win ~= nil]]
-    )
-    wait_diff(expected or 'unstaged m.txt')
+    H.open(child)
+    H.wait_diff(child, expected or 'unstaged m.txt')
 end
 
 --- Each annotation mark of the review's diff buffer as `<lnum> <text>`, the
@@ -181,7 +160,7 @@ end
 ---@return string[]
 local function placed()
     return child.lua_get([[(function()
-        local view = require('iter').current_review.drawer.view
+        local view = require('iter').current_review.view
         local ns = vim.api.nvim_get_namespaces()['iter.diff.annotations']
         local result = {}
         for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(view.buf, ns, 0, -1, { details = true })) do
@@ -237,7 +216,7 @@ end
 ---@return string[]
 local function diff_text_marks()
     return text_marks(
-        [[require('iter').current_review.drawer.view.buf]],
+        [[require('iter').current_review.view.buf]],
         'iter.diff.annotation_text'
     )
 end
@@ -331,7 +310,7 @@ T['diff view']['dims outdated annotations'] = function()
     open_review()
 
     local groups = child.lua_get([[(function()
-        local view = require('iter').current_review.drawer.view
+        local view = require('iter').current_review.view
         local ns = vim.api.nvim_get_namespaces()['iter.diff.annotations']
         local result = {}
         for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(view.buf, ns, 0, -1, { details = true })) do
@@ -356,7 +335,7 @@ T['diff view']['rewraps the text when the window width changes'] = function()
     child.o.columns = 50
     helpers.wait_until(
         child,
-        [[#vim.api.nvim_buf_get_extmarks(require('iter').current_review.drawer.view.buf, vim.api.nvim_get_namespaces()['iter.diff.annotations'], 0, -1, { details = true })[1][4].virt_lines > 2]]
+        [[#vim.api.nvim_buf_get_extmarks(require('iter').current_review.view.buf, vim.api.nvim_get_namespaces()['iter.diff.annotations'], 0, -1, { details = true })[1][4].virt_lines > 2]]
     )
 
     eq(placed(), {
@@ -391,7 +370,7 @@ T['diff view']['rewraps when only the diff window narrows'] = function()
     ]])
     helpers.wait_until(
         child,
-        [[#vim.api.nvim_buf_get_extmarks(require('iter').current_review.drawer.view.buf, vim.api.nvim_get_namespaces()['iter.diff.annotations'], 0, -1, { details = true })[1][4].virt_lines > 2]]
+        [[#vim.api.nvim_buf_get_extmarks(require('iter').current_review.view.buf, vim.api.nvim_get_namespaces()['iter.diff.annotations'], 0, -1, { details = true })[1][4].virt_lines > 2]]
     )
 
     eq(
@@ -414,13 +393,13 @@ T['diff view']['expanding a gap moves a hidden annotation to its line'] = functi
     eq(placed(), { '15 ▎ 󰆉 Hidden annotation' })
 
     child.lua([[
-        local view = require('iter').current_review.drawer.view
+        local view = require('iter').current_review.view
         view:expand(15)
     ]])
 
     -- The gap of nine lines opens whole: l12 to l20 on rows 15 to 23.
     eq(placed(), { '19 ▎ 󰆉 Hidden annotation' })
-    eq(child.lua_get(R .. '.drawer.view.rows[19].text'), 'l16')
+    eq(child.lua_get(R .. '.view.rows[19].text'), 'l16')
 end
 
 T['diff view']['a refresh picks up annotations written meanwhile'] = function()
@@ -441,7 +420,7 @@ T['diff view']['a fully staged file outdates a lost annotation'] = function()
         local d = require('iter').current_review.drawer
         d:step_file(1)
     ]])
-    wait_diff('staged m.txt')
+    H.wait_diff(child, 'staged m.txt')
 
     eq(placed(), { '13 ▎ 󰆉 outdated · Outdated annotation' })
 end
@@ -462,7 +441,7 @@ T['diff view']['a partly staged file leaves a lost annotation out'] = function()
         d:step_file(1)
         d:step_file(1)
     ]])
-    wait_diff('staged m.txt')
+    H.wait_diff(child, 'staged m.txt')
 
     eq(placed(), {})
 end

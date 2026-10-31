@@ -1,4 +1,5 @@
 local helpers = dofile('tests/helpers.lua')
+local H = dofile('tests/helpers_review.lua')
 local export = require('iter.export')
 
 local new_set = MiniTest.new_set
@@ -8,7 +9,7 @@ local child = MiniTest.new_child_neovim()
 ---@type string
 local repo
 
-local R = [[require('iter').current_review]]
+local R = H.R
 local INTRO = 'I reviewed your changes and have these annotations.\n'
     .. 'Please address them.'
 
@@ -465,17 +466,8 @@ local function notes()
 end
 
 local function open_review()
-    child.cmd('Iter review')
-    helpers.wait_until(
-        child,
-        string.format(
-            [[(function()
-                local r = %s
-                return r and r.drawer.win and r.drawer.view:is_shown()
-            end)()]],
-            R
-        )
-    )
+    H.open(child)
+    helpers.wait_until(child, R .. [[.view:is_shown()]])
 end
 
 local function expect_copied()

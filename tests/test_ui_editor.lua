@@ -1,4 +1,5 @@
 local helpers = dofile('tests/helpers.lua')
+local H = dofile('tests/helpers_review.lua')
 
 local new_set = MiniTest.new_set
 local eq = MiniTest.expect.equality
@@ -7,7 +8,7 @@ local child = MiniTest.new_child_neovim()
 ---@type string
 local repo
 
-local R = [[require('iter').current_review]]
+local R = H.R
 local E = [[require('iter.annotations.editor')]]
 
 ---@param prefix string
@@ -68,17 +69,13 @@ end
 
 --- Open the review tab and wait until the diff pane shows `m.txt`.
 local function open_review()
-    child.cmd('Iter review')
+    H.open(child)
     helpers.wait_until(
         child,
-        string.format(
-            [[(function()
-                local r = %s
-                local f = r and r.drawer.win and r.drawer.view.files[1]
-                return f ~= nil and f.path == 'm.txt' and r.drawer.view:is_shown()
-            end)()]],
-            R
-        )
+        R
+            .. [[.view.files[1].path == 'm.txt' and ]]
+            .. R
+            .. [[.view:is_shown()]]
     )
 end
 
@@ -90,7 +87,7 @@ local function diff_cursor(text, kind)
         [[
         local text, kind = ...
         local review = require('iter').current_review
-        local view = review.drawer.view
+        local view = review.view
         vim.api.nvim_set_current_win(review.diff_win)
         for lnum, row in ipairs(view.rows) do
             if row.text == text and (kind == nil or row.kind == kind) then
@@ -275,8 +272,8 @@ T['float']['the diff pane shows the saved annotation'] = function()
     start_annotation('shown')
     child.type_keys('<C-s>')
 
-    helpers.wait_until(child, [[#]] .. R .. [[.drawer.view.marks == 1]])
-    eq(child.lua_get(R .. [[.drawer.view.marks[1].annotation.body]]), 'shown')
+    helpers.wait_until(child, [[#]] .. R .. [[.view.marks == 1]])
+    eq(child.lua_get(R .. [[.view.marks[1].annotation.body]]), 'shown')
 end
 
 T['float']['an empty annotation is not saved'] = function()
@@ -719,13 +716,13 @@ T['anchors']['a staged line anchors on the worktree line'] = function()
         R .. [[ ~= nil and ]] .. R .. [[.drawer.win ~= nil]]
     )
     child.lua(R .. [[.drawer:switch('staged')]])
-    child.lua(R .. [[.drawer:preview(true)]])
+    child.lua(R .. [[.drawer:show_selection(true)]])
     helpers.wait_until(
         child,
         R
-            .. [[.drawer.view.files[1] ~= nil and ]]
+            .. [[.view.files[1] ~= nil and ]]
             .. R
-            .. [[.drawer.view.files[1].side == 'staged']]
+            .. [[.view.files[1].side == 'staged']]
     )
     diff_cursor('l3 new')
     child.type_keys('a')
@@ -746,7 +743,7 @@ T['anchors']['a hunk row takes no line annotation'] = function()
     child.lua([[
         local review = require('iter').current_review
         vim.api.nvim_set_current_win(review.diff_win)
-        for lnum, row in ipairs(review.drawer.view.rows) do
+        for lnum, row in ipairs(review.view.rows) do
             if row.kind == 'hunk' then
                 vim.api.nvim_win_set_cursor(0, { lnum, 0 })
                 break
@@ -858,7 +855,7 @@ T['edit and delete']['d deletes after the confirm'] = function()
     child.lua('_G.confirm_answer = 1')
     child.type_keys('d')
     eq(#stored(), 0)
-    helpers.wait_until(child, [[#]] .. R .. [[.drawer.view.marks == 0]])
+    helpers.wait_until(child, [[#]] .. R .. [[.view.marks == 0]])
 end
 
 --- Text of the annotation lines in the buffer of `m.txt`.

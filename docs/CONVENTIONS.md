@@ -137,8 +137,10 @@ the review straight to an agent pane.
   a focusable window over the right of the float's text rows at `drawer.zindex + 1`, with its own buffer, so the file
   list scrolls alone. The float opens, moves and closes it; the drawer closes when it is closed from outside, and
   focus moves into it only through `h` and `l`, opening the review on the Annotations column, and a resize that splits
-  it off while an annotation is selected in the drawer. The drawer holds what the status and review
-  drawers share; the review tab plugs in its reviewed marks, annotation counts, header, Annotations column, its preview
+  it off while an annotation is selected in the drawer. The drawer, with its diff preview
+  (`iter.ui.preview`: the view, the file it shows, all-files mode, and the diff layout and wrap chosen last, held for
+  the session) and its file actions (`iter.ui.file_actions`: stage, unstage, discard and ignore on files of the
+  changes), holds what the status and review drawers share; the review tab plugs in its reviewed marks, annotation counts, header, Annotations column, its preview
   and spacer sizing as the drawer's extras (`IterDrawerExtras`). Columns the extras add come after the file columns;
   their items carry a `key`, and `Drawer:selected()` returns files only.
 - Reviewed marks, annotation counts and the Annotations column show only in the review drawer.

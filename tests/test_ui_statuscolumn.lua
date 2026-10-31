@@ -167,7 +167,7 @@ T['iter windows render without the column'] = function()
     child.cmd('Iter review')
     helpers.wait_until(
         child,
-        [[require('iter').current_review ~= nil and require('iter').current_review.drawer.view:is_shown()]]
+        [[require('iter').current_review ~= nil and require('iter').current_review.view:is_shown()]]
     )
 
     local offending = child.lua_get([[(function()

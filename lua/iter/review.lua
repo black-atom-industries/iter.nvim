@@ -32,6 +32,9 @@ local sidebar = require('iter.ui.sidebar')
 ---@field spacer_win integer bottom split the drawer float covers
 ---@field buf integer empty buffer of the split and of the diff window without a diff
 ---@field drawer IterDrawer
+---@field preview IterPreview the diff of the drawer's selection
+---@field view IterDiffView the preview's view in the diff window
+---@field changes IterChanges the files of the review, read on every load
 ---@field annotations IterAnnotation[] stored annotations
 ---@field records table<string, IterReviewed> stored reviewed records against the current base
 ---@field reviewed table<string, IterReviewedState> state per file path in the drawer
@@ -270,16 +273,16 @@ end
 function Review:view_handlers()
     return {
         next_hunk = function()
-            self.drawer.view:jump_hunk(1)
+            self.view:jump_hunk(1)
         end,
         prev_hunk = function()
-            self.drawer.view:jump_hunk(-1)
+            self.view:jump_hunk(-1)
         end,
         next_annotation = function()
-            self.drawer.view:jump_annotation(1)
+            self.view:jump_annotation(1)
         end,
         prev_annotation = function()
-            self.drawer.view:jump_annotation(-1)
+            self.view:jump_annotation(-1)
         end,
         next_file = function()
             self.drawer:step_file(1)
@@ -333,13 +336,13 @@ function Review:view_handlers()
             self:toggle_mode()
         end,
         split = function()
-            self.drawer:set_layout('split')
+            self.preview:set_layout('split')
         end,
         unified = function()
-            self.drawer:set_layout('unified')
+            self.preview:set_layout('unified')
         end,
         wrap = function()
-            self.drawer:toggle_wrap()
+            self.preview:toggle_wrap()
         end,
         yank = function()
             self:yank_under_cursor()
@@ -360,7 +363,7 @@ end
 --- `=` into all-files mode or `r` marks it reviewed again; elsewhere expand
 --- hidden context.
 function Review:expand()
-    local view = self.drawer.view
+    local view = self.view
     local section, row = view:at()
 
     if section ~= nil and section.collapsed and row == 1 then
@@ -374,7 +377,7 @@ end
 --- The file under the cursor of the diff pane.
 ---@return IterFileDiff?
 function Review:shown_file()
-    local view = self.drawer.view
+    local view = self.view
 
     return view:is_shown() and view:file() or nil
 end
@@ -388,7 +391,7 @@ end
 ---@return IterDocSection?
 ---@return integer[] rows
 function Review:selected_section(first, last, side)
-    local view = self.drawer.view
+    local view = self.view
     local section, _, index = view:at(first)
     local last_section, _, last_index = view:at(last)
 
@@ -491,7 +494,7 @@ end
 --- else the last one.
 ---@param kind 'stage'|'unstage'
 function Review:apply_change(kind)
-    local view = self.drawer.view
+    local view = self.view
     local visual = vim.fn.mode():find('^[vV\22]') ~= nil
     local first, last = editor.selection()
 
@@ -546,7 +549,7 @@ function Review:apply_change(kind)
         return
     end
 
-    local root = self.drawer.changes.root
+    local root = self.changes.root
     local raw =
         git.file_diff_bytes(root, file, self.drawer.config.options.diff.args)
 
@@ -628,7 +631,9 @@ end
 ---@param drawer IterDrawer
 ---@return boolean changed
 function Review:drawer_load(drawer)
-    local root = drawer.changes.root
+    self:take_handles(drawer)
+
+    local root = self.changes.root
     local before_annotations, before_reviewed = self.annotations, self.reviewed
     local data = store.cached(root, self.fresh)
     local paths, seen = {}, {}
@@ -650,7 +655,7 @@ function Review:drawer_load(drawer)
         not vim.deep_equal(before_annotations, self.annotations)
 
     if annotations_changed then
-        drawer.view:set_annotations(self.annotations, root)
+        self.view:set_annotations(self.annotations, root)
     end
 
     return annotations_changed
@@ -675,15 +680,15 @@ end
 
 --- Against a base `· ` and the base's name, when it fits, then
 --- `<n> files` at the right edge, in place of the change summary.
----@param drawer IterDrawer
+---@param _ IterDrawer
 ---@param _summary [string, string]
 ---@param room integer
 ---@return [string, string][]
-function Review:drawer_header(drawer, _summary, room)
+function Review:drawer_header(_, _summary, room)
     local total = reviewed.summary(self.reviewed).total
     local files =
         string.format('%d %s ', total, total == 1 and 'file' or 'files')
-    local since = drawer.changes.since
+    local since = self.changes.since
     local chunks = {}
 
     if since ~= nil then
@@ -711,10 +716,12 @@ end
 --- one remembered for the new branch. A base that no longer resolves falls
 --- back to working changes, with a warning, and is forgotten for the
 --- branch, unless it was just read for a branch checked out since.
----@param _ IterDrawer
+---@param drawer IterDrawer
 ---@param root string
 ---@return IterChangesBase?
-function Review:drawer_base(_, root)
+function Review:drawer_base(drawer, root)
+    self:take_handles(drawer)
+
     local branch = git.head_branch(root)
     local switched = branch ~= self.base_branch
 
@@ -753,11 +760,26 @@ function Review:drawer_base(_, root)
     return { kind = spec.kind, sha = sha, label = label }
 end
 
+--- Keep the drawer's preview, view and changes at hand. The drawer calls
+--- the extras while it opens, before `Review.open` has it.
+---@param drawer IterDrawer
+function Review:take_handles(drawer)
+    self.preview = drawer.preview
+    self.view = drawer.view
+    self.changes = drawer.changes
+end
+
+--- The files of the review in drawer order, directories left out.
+---@return IterChange[]
+function Review:files()
+    return self.drawer:files()
+end
+
 --- Compare the review with `spec`, nil for working changes, and remember
 --- it for the branch, unless HEAD is detached.
 ---@param spec? IterBaseSpec
 function Review:set_base(spec)
-    remember_base(self.drawer.changes.root, spec)
+    remember_base(self.changes.root, spec)
 
     self.base_spec = spec
     self.expanded = {}
@@ -775,7 +797,7 @@ end
 --- default branch, the merge base with the upstream follows working changes.
 --- A picked commit is part of the review.
 function Review:pick_base()
-    local root = self.drawer.changes.root
+    local root = self.changes.root
     local head = git.head_branch(root)
     local parent = git.parent_branch(root)
     local recent = git.recent(root, PICKER_COMMITS)
@@ -867,14 +889,13 @@ function Review:pick_base()
     })
 end
 
---- The paths of the drawer's files in drawer order, a renamed file's
---- original path after its new one.
----@param drawer IterDrawer
+--- The paths of `files`, a renamed file's original path after its new one.
+---@param files IterChange[]
 ---@return string[]
-local function file_order(drawer)
+local function file_order(files)
     local order = {}
 
-    for _, item in ipairs(drawer:files()) do
+    for _, item in ipairs(files) do
         table.insert(order, item.path)
 
         if item.orig_path ~= nil then
@@ -895,13 +916,13 @@ function Review:drawer_columns(drawer)
         return {}
     end
 
-    local order = file_order(drawer)
+    local order = file_order(drawer:files())
 
     ---@type IterReviewRow[]
     local rows = {}
     local outdated, label_width = 0, 0
     local groups =
-        list.groups(self.annotations, order, list.reader(drawer.changes.root))
+        list.groups(self.annotations, order, list.reader(self.changes.root))
 
     for _, group in ipairs(groups) do
         for _, entry in ipairs(group.items) do
@@ -960,14 +981,13 @@ function Review:drawer_columns(drawer)
     }
 end
 
---- The files of the changes in `drawer` whose diff can place `annotation`,
---- the side of its old version first.
----@param drawer IterDrawer
+--- The files of `changes` whose diff can place `annotation`, the side of
+--- its old version first.
+---@param changes IterChanges
 ---@param annotation IterAnnotation
 ---@return IterChange[]
-local function annotation_files(drawer, annotation)
+local function annotation_files(changes, annotation)
     local a = annotation.anchor
-    local changes = drawer.changes
     local found = {}
 
     if annotation.scope == 'review' or a.path == nil then
@@ -997,17 +1017,15 @@ local function annotation_files(drawer, annotation)
     return found
 end
 
---- The line of the diff pane `annotation` sits below, in `file` when
---- given, nil when it isn't placed there; in a collapsed file its header
---- row, with the file's section index.
----@param drawer IterDrawer
+--- The line of `view` `annotation` sits below, in `file` when given, nil
+--- when it isn't placed there; in a collapsed file its header row, with the
+--- file's section index.
+---@param view IterDiffView
 ---@param annotation IterAnnotation
 ---@param file? IterChange|IterFileDiff
 ---@return integer?
 ---@return integer? collapsed section index of the file, when collapsed
-local function annotation_row(drawer, annotation, file)
-    local view = drawer.view
-
+local function annotation_row(view, annotation, file)
     if not view:is_shown() then
         return nil
     end
@@ -1032,11 +1050,10 @@ end
 --- Show the file of `annotation`, which the changes don't list, in the
 --- diff pane: its `HEAD` version, read-only, every line as context. A file
 --- `HEAD` lacks shows as it is on disk.
----@param drawer IterDrawer
 ---@param annotation IterAnnotation
 ---@return boolean shown false when the file exists in neither
-local function show_outside(drawer, annotation)
-    local root = drawer.changes.root
+function Review:show_outside(annotation)
+    local root = self.changes.root
     local path = annotation.anchor.path --[[@as string]]
     local lines = git.blob_lines(root, 'HEAD:' .. path)
 
@@ -1059,10 +1076,10 @@ local function show_outside(drawer, annotation)
     }, { raw = {}, old_lines = lines, new_lines = lines, binary = false })
 
     model.expand(file, 2, #lines)
-    drawer.all_shown = false
-    drawer.view:set_new_follows(true)
-    drawer.view:show(file)
-    drawer:shown()
+    self.preview.all_shown = false
+    self.view:set_new_follows(true)
+    self.view:show(file)
+    self.drawer:shown()
 
     return true
 end
@@ -1072,14 +1089,15 @@ end
 --- file at `HEAD` when the changes don't list it. Shown again, after a
 --- refresh, the diff cursor stays where it is. The progress row and a
 --- review annotation keep the pane as it is.
----@param drawer IterDrawer
+---@param _ IterDrawer
 ---@param item IterReviewRow
 ---@param force boolean
-function Review:drawer_preview(drawer, item, force)
+function Review:drawer_preview(_, item, force)
     local annotation = item.annotation
-    local files = annotation and annotation_files(drawer, annotation) or {}
-    local view = drawer.view
-    local again = drawer.previewed == item.key
+    local files = annotation and annotation_files(self.changes, annotation)
+        or {}
+    local view = self.view
+    local again = self.preview.previewed == item.key
 
     if
         annotation ~= nil
@@ -1087,14 +1105,14 @@ function Review:drawer_preview(drawer, item, force)
         and annotation.scope ~= 'review'
         and annotation.anchor.path ~= nil
     then
-        if not show_outside(drawer, annotation) then
+        if not self:show_outside(annotation) then
             view:set_focus(nil)
             return
         end
 
         view:set_focus(annotation.id)
 
-        local row = annotation_row(drawer, annotation)
+        local row = annotation_row(view, annotation)
 
         self.preview_target = { id = annotation.id, file = view.files[1] }
 
@@ -1117,9 +1135,9 @@ function Review:drawer_preview(drawer, item, force)
     local lnum, placed, shown
 
     for _, file in ipairs(files) do
-        drawer:show(file, force)
+        self.preview:show(file, force)
 
-        local row = annotation_row(drawer, annotation, file)
+        local row = annotation_row(view, annotation, file)
 
         if row ~= nil then
             placed = placed or { file = file, lnum = row }
@@ -1138,7 +1156,7 @@ function Review:drawer_preview(drawer, item, force)
     end
 
     if lnum == nil then
-        drawer:show(placed and placed.file or files[1], force)
+        self.preview:show(placed and placed.file or files[1], force)
 
         if placed == nil then
             return
@@ -1173,11 +1191,10 @@ function Review:jump_to(item, previewed)
         return
     end
 
-    local drawer = self.drawer
     local a = annotation.anchor
 
-    if #annotation_files(drawer, annotation) == 0 then
-        local path = vim.fs.joinpath(drawer.changes.root, a.path)
+    if #annotation_files(self.changes, annotation) == 0 then
+        local path = vim.fs.joinpath(self.changes.root, a.path)
 
         if vim.uv.fs_stat(path) == nil then
             util.warn(a.path .. ' is deleted')
@@ -1189,26 +1206,25 @@ function Review:jump_to(item, previewed)
     end
 
     if not previewed then
-        drawer:preview(false)
+        self.drawer:show_selection(false)
     end
 
     local target = self.preview_target
     local file = target ~= nil and target.id == annotation.id and target.file
         or nil
-    local lnum, collapsed = annotation_row(drawer, annotation, file)
+    local view = self.view
+    local lnum, collapsed = annotation_row(view, annotation, file)
 
     if collapsed ~= nil then
-        local view = drawer.view
-
         local path = view.document.sections[collapsed].file.path
 
         self.expanded[path] = true
         view:expand_path(path)
-        lnum = annotation_row(drawer, annotation, file)
+        lnum = annotation_row(view, annotation, file)
     end
 
     if lnum ~= nil then
-        drawer.view:reveal(lnum)
+        view:reveal(lnum)
         vim.api.nvim_set_current_win(self.diff_win)
     end
 end
@@ -1232,12 +1248,11 @@ end
 ---@param item IterAnnotationItem
 ---@param force? boolean
 function Review:preview_note(item, force)
-    local drawer = self.drawer
     local row = sidebar_row(item)
 
-    if force or drawer.previewed ~= row.key then
-        self:drawer_preview(drawer, row, force == true)
-        drawer.previewed = row.key
+    if force or self.preview.previewed ~= row.key then
+        self:drawer_preview(self.drawer, row, force == true)
+        self.preview.previewed = row.key
     end
 end
 
@@ -1248,12 +1263,12 @@ end
 function Review:sidebar_mode()
     return {
         order = function()
-            return file_order(self.drawer)
+            return file_order(self:files())
         end,
         changed = function()
             local changed = {}
 
-            for _, path in ipairs(file_order(self.drawer)) do
+            for _, path in ipairs(file_order(self:files())) do
                 changed[path] = true
             end
 
@@ -1268,7 +1283,7 @@ function Review:sidebar_mode()
             end
 
             if item == nil then
-                self.drawer.view:set_focus(nil)
+                self.view:set_focus(nil)
                 return
             end
 
@@ -1310,7 +1325,7 @@ function Review:open_sidebar(id)
 
     local opened = sidebar.open_review(
         self.config,
-        self.drawer.changes.root,
+        self.changes.root,
         function()
             if self.on_annotations ~= nil then
                 self.on_annotations()
@@ -1475,7 +1490,7 @@ end
 function Review:reveal(path, line)
     local drawer = self.drawer
     local at =
-        drawer:find_path(vim.fs.joinpath(drawer.changes.root, path), 'unstaged')
+        drawer:find_path(vim.fs.joinpath(self.changes.root, path), 'unstaged')
     local item = at and drawer.rows[at.lnum][at.side]
 
     if item == nil or item.dir then
@@ -1485,13 +1500,13 @@ function Review:reveal(path, line)
 
     ---@cast at -nil
     drawer:select(at.lnum, at.side)
-    drawer:preview(false)
+    drawer:show_selection(false)
 
     if line == nil then
         return
     end
 
-    local view = drawer.view
+    local view = self.view
     local index = document.find(view.document, document.key(item))
 
     if index == nil then
@@ -1545,7 +1560,7 @@ end
 --- two files.
 ---@return string?
 function Review:uri()
-    local view = self.drawer.view
+    local view = self.view
     local win = vim.api.nvim_get_current_win()
 
     if
@@ -1565,7 +1580,7 @@ function Review:uri()
     return uri.of(
         'review',
         section.file.path,
-        self.drawer:worktree_line(section.file, row)
+        self.preview:worktree_line(section.file, row)
     )
 end
 
@@ -1575,12 +1590,12 @@ end
 ---@param drawer IterDrawer
 ---@param count integer
 function Review:drawer_rendered(drawer, count)
-    if not util.is_valid_win(drawer.view.win) then
+    if not util.is_valid_win(self.view.win) then
         return
     end
 
     local current = vim.api.nvim_win_get_height(drawer.pane)
-    local total = current + vim.api.nvim_win_get_height(drawer.view.win)
+    local total = current + vim.api.nvim_win_get_height(self.view.win)
     local option = drawer.config.options.drawer.height
     local base = option <= 1 and math.floor(total * option) or option
     -- The review drawer has no rule: the split above it draws a line.
@@ -1616,9 +1631,9 @@ function Review:drawer_collapsed(_, item)
 end
 
 --- Show the reviewed state of the shown files in their diff headers.
----@param drawer IterDrawer
-function Review:drawer_shown(drawer)
-    drawer.view:set_reviewed(self.reviewed)
+---@param _ IterDrawer
+function Review:drawer_shown(_)
+    self.view:set_reviewed(self.reviewed)
 end
 
 --- The review's drawer actions: `open` moves into the diff, and the
@@ -1734,7 +1749,7 @@ end
 ---@param from? IterChange|IterFileDiff
 function Review:mark_reviewed(path, from)
     local _, err = reviewed.set(
-        self.drawer.changes.root,
+        self.changes.root,
         path,
         true,
         reviewed.base_key(self.base_spec)
@@ -1747,7 +1762,7 @@ function Review:mark_reviewed(path, from)
 
     self.expanded[path] = nil
 
-    local order = self.drawer:files()
+    local order = self:files()
 
     self:refresh_annotations()
 
@@ -1775,7 +1790,7 @@ end
 ---@param path string
 function Review:unmark_reviewed(path)
     local _, err = reviewed.set(
-        self.drawer.changes.root,
+        self.changes.root,
         path,
         false,
         reviewed.base_key(self.base_spec)
@@ -1797,7 +1812,7 @@ end
 function Review:advance_to(item)
     local drawer = self.drawer
     local at = drawer:find_path(
-        vim.fs.joinpath(drawer.changes.root, item.path),
+        vim.fs.joinpath(self.changes.root, item.path),
         item.side
     )
 
@@ -1806,9 +1821,9 @@ function Review:advance_to(item)
     end
 
     drawer:select(at.lnum, at.side)
-    drawer:preview(false)
+    drawer:show_selection(false)
 
-    local view = drawer.view
+    local view = self.view
     local index = document.find(view.document, document.key(item))
 
     if index == nil then
@@ -1842,7 +1857,7 @@ function Review:toggle_help()
         return
     end
 
-    local view = self.drawer.view
+    local view = self.view
     local config = self.drawer.config
 
     self.help = help.open({
@@ -1862,7 +1877,7 @@ function Review:attach()
 
     -- A file opened in the left pane of the split layout opens in the tab
     -- the review came from, as one opened in the diff pane does.
-    self.drawer.view.on_pane_replaced = function(buf, line)
+    self.view.on_pane_replaced = function(buf, line)
         local path = vim.bo[buf].buftype == ''
                 and vim.api.nvim_buf_get_name(buf)
             or ''
@@ -1902,7 +1917,7 @@ function Review:attach()
     })
     vim.api.nvim_create_autocmd('BufWinLeave', {
         group = self.group,
-        buffer = self.drawer.view.buf,
+        buffer = self.view.buf,
         callback = function()
             if vim.api.nvim_get_current_win() ~= self.diff_win then
                 return
@@ -1948,12 +1963,12 @@ end
 --- the line it was opened on.
 ---@param cursor integer[] the diff pane's cursor before it changed
 function Review:take_back(cursor)
-    local view = self.drawer.view
+    local view = self.view
 
     if
         self.closed
         or not util.is_valid_win(self.diff_win)
-        or self.drawer.previewed == nil
+        or self.preview.previewed == nil
         or #view.document.sections == 0
         or view:is_shown()
     then
@@ -2015,7 +2030,7 @@ end
 ---@param root string
 ---@return IterChangesBase?
 function Review:since(root)
-    local result = self:is_open() and self.drawer.changes or nil
+    local result = self:is_open() and self.changes or nil
 
     return result ~= nil and result.root == root and result.since or nil
 end
@@ -2095,9 +2110,9 @@ function Review:statusline()
     end
 
     local file = self:shown_file()
-    local mode = self.drawer.all_files and 'review · all files' or 'review'
+    local mode = self.preview.all_files and 'review · all files' or 'review'
 
-    if self.drawer.view.layout == 'split' then
+    if self.view.layout == 'split' then
         mode = mode .. ' · split'
     end
 
@@ -2105,7 +2120,7 @@ function Review:statusline()
         return mode
     end
 
-    local files = self.drawer:files()
+    local files = self:files()
 
     for index, item in ipairs(files) do
         if item.side == file.side and item.path == file.path then
@@ -2124,17 +2139,17 @@ end
 
 --- Show every file in the diff pane, or the selected one alone.
 function Review:toggle_mode()
-    if not self.drawer.all_files then
+    if not self.preview.all_files then
         self.expanded = {}
     end
 
-    self.drawer:set_all_files(not self.drawer.all_files)
+    self.drawer:set_all_files(not self.preview.all_files)
 end
 
 --- Edit the file of the diff in the tab the review came from, at the
 --- worktree line of the cursor row. The review stays open.
 function Review:goto_file()
-    local view = self.drawer.view
+    local view = self.view
     local section, row = view:at()
 
     if section == nil or not view:is_shown() then
@@ -2143,15 +2158,14 @@ function Review:goto_file()
 
     local file = section.file
 
-    local changes = self.drawer.changes
-    local path = vim.fs.joinpath(changes.root, file.path)
+    local path = vim.fs.joinpath(self.changes.root, file.path)
 
     if vim.uv.fs_stat(path) == nil then
         util.warn(file.path .. ' is deleted')
         return
     end
 
-    self:open_file(path, self.drawer:worktree_line(file, row or #file.rows))
+    self:open_file(path, self.preview:worktree_line(file, row or #file.rows))
 end
 
 --- Edit `path`, an absolute file path, at `line` in the tab the review
@@ -2184,7 +2198,7 @@ end
 ---@param annotation table
 function Review:open_editor(annotation)
     editor.open({
-        root = self.drawer.changes.root,
+        root = self.changes.root,
         annotation = annotation,
         config = self.drawer.config,
         pane = self.diff_win,
@@ -2243,11 +2257,11 @@ function Review:anchor_rows(file, rows, side, passage)
         end
     end
 
-    local changes = self.drawer.changes
+    local changes = self.changes
 
     if #new_rows > 0 then
-        local start = self.drawer:worktree_line(file, new_rows[1])
-        local stop = self.drawer:worktree_line(file, new_rows[#new_rows])
+        local start = self.preview:worktree_line(file, new_rows[1])
+        local stop = self.preview:worktree_line(file, new_rows[#new_rows])
         local path = vim.fs.joinpath(changes.root, file.path)
         local ok, lines = pcall(vim.fn.readfile, path)
 
@@ -2306,7 +2320,7 @@ end
 --- visual range; in the split layout the rows of the side in the current
 --- window.
 function Review:annotate()
-    local view = self.drawer.view
+    local view = self.view
 
     if not view:is_shown() then
         return
@@ -2402,7 +2416,7 @@ end
 --- the split layout one shown on the side of the current window first.
 ---@return IterAnnotation?
 function Review:find_annotation_under_cursor()
-    local view = self.drawer.view
+    local view = self.view
 
     if not view:is_shown() then
         return nil
@@ -2459,7 +2473,7 @@ end
 --- Delete `annotation` after the confirm.
 ---@param annotation IterAnnotation
 function Review:delete(annotation)
-    if editor.delete(self.drawer.changes.root, annotation) ~= nil then
+    if editor.delete(self.changes.root, annotation) ~= nil then
         self:annotations_changed()
     end
 end
