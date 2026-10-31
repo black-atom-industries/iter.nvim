@@ -978,6 +978,115 @@ function Status:attach()
             end)
         end,
     })
+    vim.api.nvim_create_autocmd('BufWinLeave', {
+        group = self.group,
+        buffer = self.summary_buf,
+        callback = function()
+            vim.schedule(function()
+                if
+                    self.summary_winopts ~= nil
+                    and util.is_valid_win(self.pane)
+                    and not self:showing()
+                then
+                    self:close()
+                end
+            end)
+        end,
+    })
+    vim.api.nvim_create_autocmd('BufWinLeave', {
+        group = self.group,
+        buffer = self.tree.buf,
+        callback = function()
+            if vim.api.nvim_get_current_win() == self.panel.win then
+                vim.schedule(function()
+                    self:take_back_tree()
+                end)
+            end
+        end,
+    })
+    -- A split starts out with the buffer of the window it was split from.
+    vim.api.nvim_create_autocmd('WinNew', {
+        group = self.group,
+        callback = function()
+            vim.schedule(function()
+                self:give_back()
+            end)
+        end,
+    })
+end
+
+--- Show the tree in the panel again after another buffer took its place,
+--- as `:edit` does there. A file then closes the status and opens in the
+--- pane.
+function Status:take_back_tree()
+    if not self:is_open() then
+        return
+    end
+
+    local win = self.panel.win
+    local buf = vim.api.nvim_win_get_buf(win)
+
+    if buf == self.tree.buf then
+        return
+    end
+
+    local path = vim.bo[buf].buftype == '' and vim.api.nvim_buf_get_name(buf)
+        or ''
+    local line = vim.api.nvim_win_get_cursor(win)[1]
+
+    self:show_tree()
+    vim.api.nvim_win_call(win, function()
+        vim.cmd.clearjumps()
+    end)
+
+    -- `:enew` leaves an empty buffer nobody would find again.
+    if
+        vim.api.nvim_buf_is_valid(buf)
+        and vim.api.nvim_buf_get_name(buf) == ''
+        and not vim.bo[buf].modified
+        and #vim.fn.win_findbuf(buf) == 0
+    then
+        vim.api.nvim_buf_delete(buf, { force = true })
+    end
+
+    if path ~= '' and util.can_leave(self.origin.buf, path) then
+        self:close()
+        util.edit_at(path, line)
+    end
+end
+
+--- Give a window of the tab other than the panel and the diff's the
+--- user's buffer when it shows one of the status's.
+function Status:give_back()
+    if not self:is_open() or not vim.api.nvim_tabpage_is_valid(self.tab) then
+        return
+    end
+
+    local ours = {
+        [self.tree.buf] = true,
+        [self.view.buf] = true,
+        [self.summary_buf] = true,
+    }
+    local own = { [self.panel.win] = true, [self.pane] = true }
+    local old = self.view.old
+
+    if old ~= nil then
+        ours[old.buf] = true
+        own[old.win] = true
+    end
+
+    for _, win in ipairs(vim.api.nvim_tabpage_list_wins(self.tab)) do
+        if not own[win] and ours[vim.api.nvim_win_get_buf(win)] then
+            local buf = self.origin.buf
+
+            if not vim.api.nvim_buf_is_valid(buf) then
+                buf = vim.api.nvim_create_buf(false, true)
+                vim.bo[buf].bufhidden = 'wipe'
+            end
+
+            vim.api.nvim_win_set_buf(win, buf)
+        end
+    end
 end
 
 ---@return boolean
@@ -1058,6 +1167,19 @@ function Status:close()
     end
 
     local restore = util.is_valid_win(pane) and same_windows(self)
+
+    -- A tab of the panel alone keeps an empty window in its place.
+    if
+        self.panel:is_open()
+        and #vim.tbl_filter(function(win)
+                return vim.api.nvim_win_get_config(win).relative == ''
+            end, vim.api.nvim_tabpage_list_wins(self.tab))
+            == 1
+    then
+        vim.api.nvim_win_call(self.panel.win, function()
+            vim.cmd('rightbelow vnew')
+        end)
+    end
 
     self.panel:close({ silent = true })
     self.tree:close()

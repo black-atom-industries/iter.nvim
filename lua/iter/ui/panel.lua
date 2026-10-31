@@ -43,10 +43,16 @@ local WINOPTS = {
     winhighlight = 'Normal:IterSidebar,EndOfBuffer:IterSidebar,SignColumn:IterSidebar,FoldColumn:IterSidebar,CursorLine:IterDrawerSelected',
 }
 
+--- Local values only: a buffer `:edit` puts in the window, and a window
+--- split from it, start out with the window's global values, the user's.
 ---@param win integer
 local function apply_winopts(win)
     for name, value in pairs(WINOPTS) do
-        vim.wo[win][name] = value
+        vim.api.nvim_set_option_value(
+            name,
+            value,
+            { scope = 'local', win = win }
+        )
     end
 end
 

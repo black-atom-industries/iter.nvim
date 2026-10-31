@@ -299,18 +299,27 @@ function M.owned(buf)
 end
 
 --- Wipe the `iter://` buffers that aren't iter's own, such as those a
---- session restores, closing the windows that show them, or the tab of the
---- last one, unless it is the last window.
+--- session restores. A window that shows the status sidebar's diff, its
+--- new side in the split layout, or its summary is the user's and keeps an
+--- empty buffer; any other closes, or
+--- the tab of the last one, unless it is the last window.
 function M.clean()
     for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-        if
-            owners[buf] == nil
-            and vim.startswith(vim.api.nvim_buf_get_name(buf), 'iter://')
-        then
+        local name = vim.api.nvim_buf_get_name(buf)
+
+        if owners[buf] == nil and vim.startswith(name, 'iter://') then
             for _, win in ipairs(vim.fn.win_findbuf(buf)) do
                 local tab = vim.api.nvim_win_get_tabpage(win)
 
-                if #vim.api.nvim_tabpage_list_wins(tab) > 1 then
+                if
+                    name:match('^iter://status[/#]')
+                    and not vim.endswith(name, '#old')
+                then
+                    local empty = vim.api.nvim_create_buf(false, true)
+
+                    vim.bo[empty].bufhidden = 'wipe'
+                    vim.api.nvim_win_set_buf(win, empty)
+                elseif #vim.api.nvim_tabpage_list_wins(tab) > 1 then
                     pcall(vim.api.nvim_win_close, win, true)
                 elseif #vim.api.nvim_list_tabpages() > 1 then
                     pcall(vim.cmd.tabclose, {

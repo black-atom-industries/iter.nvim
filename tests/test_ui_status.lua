@@ -863,4 +863,238 @@ T['commits']['a clean tree puts the cursor on the newest commit'] = function()
     eq(wait_summary()[3], ' initial')
 end
 
+T['hand back'] = new_set()
+
+--- The window options the panel sets, as the current window has them.
+---@return table<string, any>
+local function panel_opts()
+    return child.lua_get([[{
+        winhighlight = vim.wo.winhighlight,
+        winfixwidth = vim.wo.winfixwidth,
+        cursorline = vim.wo.cursorline,
+    }]])
+end
+
+local NO_PANEL_OPTS =
+    { winhighlight = '', winfixwidth = false, cursorline = false }
+
+T['hand back'][':edit in the window closes the sidebar and keeps the file'] = function()
+    child.cmd('edit long.txt')
+    set_pane_opts()
+
+    open_status()
+    wait_preview({ 'unstaged dir/sub/d.txt' })
+    child.api.nvim_set_current_win(child.lua_get('_G.pane'))
+    child.cmd('edit b.txt')
+    helpers.wait_until(child, S .. ' == nil')
+
+    eq(#child.api.nvim_list_wins(), 1)
+    eq(child.fn.fnamemodify(child.api.nvim_buf_get_name(0), ':t'), 'b.txt')
+    eq(pane_opts(), PANE_OPTS)
+    eq(child.v.errmsg, '')
+end
+
+T['hand back'][':edit in the window over a summary closes the sidebar'] = function()
+    child.cmd('edit long.txt')
+    set_pane_opts()
+
+    open_status()
+    to_commit()
+    wait_summary()
+    child.api.nvim_set_current_win(child.lua_get('_G.pane'))
+    child.cmd('edit b.txt')
+    helpers.wait_until(child, S .. ' == nil')
+
+    eq(#child.api.nvim_list_wins(), 1)
+    eq(child.fn.fnamemodify(child.api.nvim_buf_get_name(0), ':t'), 'b.txt')
+    eq(pane_opts(), PANE_OPTS)
+    eq(child.v.errmsg, '')
+end
+
+T['hand back'][':edit in the sidebar closes it and edits the file in the window'] = function()
+    child.cmd('edit long.txt')
+    set_pane_opts()
+
+    open_status()
+    wait_preview({ 'unstaged dir/sub/d.txt' })
+    child.cmd('edit b.txt')
+    helpers.wait_until(child, S .. ' == nil')
+
+    eq(#child.api.nvim_list_wins(), 1)
+    eq(child.api.nvim_get_current_win(), child.lua_get('_G.pane'))
+    eq(child.fn.fnamemodify(child.api.nvim_buf_get_name(0), ':t'), 'b.txt')
+    eq(pane_opts(), PANE_OPTS)
+    eq(panel_opts(), NO_PANEL_OPTS)
+    eq(child.v.errmsg, '')
+end
+
+T['hand back'][':enew in the sidebar puts the tree back and leaves no buffer'] = function()
+    open_status()
+    wait_preview({ 'unstaged dir/sub/d.txt' })
+    local bufs = #child.api.nvim_list_bufs()
+
+    child.cmd('enew')
+    helpers.wait_until(
+        child,
+        'vim.api.nvim_get_current_buf() == ' .. S .. '.tree.buf'
+    )
+
+    eq(child.lua_get(S .. ':is_open()'), true)
+    eq(#child.api.nvim_list_bufs(), bufs)
+end
+
+T['hand back'][':split in the window gives the new window the file'] = function()
+    child.cmd('edit long.txt')
+    set_pane_opts()
+    local buf = child.api.nvim_get_current_buf()
+
+    open_status()
+    wait_preview({ 'unstaged dir/sub/d.txt' })
+    child.api.nvim_set_current_win(child.lua_get(S .. '.pane'))
+    child.cmd('split')
+    helpers.wait_until(child, 'vim.api.nvim_get_current_buf() == ' .. buf)
+    child.lua('_G.pane = vim.api.nvim_get_current_win()')
+
+    eq(pane_opts(), PANE_OPTS)
+    eq(child.lua_get(S .. ':is_open()'), true)
+    eq(
+        child.api.nvim_win_get_buf(child.lua_get(S .. '.pane')),
+        child.lua_get(S .. '.view.buf')
+    )
+end
+
+T['hand back'][':close of the last window beside the sidebar leaves an empty window'] = function()
+    open_status()
+    wait_preview({ 'unstaged dir/sub/d.txt' })
+    local panel = child.lua_get(S .. '.panel.win')
+
+    child.cmd(
+        'call win_execute(' .. child.lua_get(S .. '.pane') .. ', "close")'
+    )
+    helpers.wait_until(child, S .. ' == nil')
+
+    eq(#child.api.nvim_list_wins(), 1)
+    eq(child.api.nvim_get_current_win() ~= panel, true)
+    eq(child.api.nvim_buf_get_name(0), '')
+    eq(panel_opts(), NO_PANEL_OPTS)
+    eq(child.v.errmsg, '')
+end
+
+T['hand back'][':q in the sidebar gives the window back'] = function()
+    child.cmd('edit long.txt')
+    set_pane_opts()
+    local buf = child.api.nvim_get_current_buf()
+
+    open_status()
+    wait_preview({ 'unstaged dir/sub/d.txt' })
+    child.cmd('quit')
+    helpers.wait_until(child, S .. ' == nil')
+
+    eq(#child.api.nvim_list_wins(), 1)
+    eq(child.api.nvim_get_current_buf(), buf)
+    eq(pane_opts(), PANE_OPTS)
+end
+
+T['hand back']['a restored session keeps the window and no buffer of iter'] = function()
+    child.cmd('edit long.txt')
+    open_status()
+    to_commit()
+    wait_summary()
+    child.cmd('tabnew')
+    child.cmd('edit a.txt')
+    open_status()
+    wait_preview({ 'unstaged a.txt' })
+    child.type_keys('|')
+    helpers.wait_until(child, S .. '.view.old ~= nil')
+
+    local session = vim.fn.tempname()
+    child.cmd('mksession! ' .. vim.fn.fnameescape(session))
+    eq(
+        table
+            .concat(vim.fn.readfile(session), '\n')
+            :find('iter://status/a.txt', 1, true) ~= nil,
+        true
+    )
+    child.stop()
+    helpers.start_child(child, repo)
+    stub_ui()
+    configure()
+    child.cmd('source ' .. vim.fn.fnameescape(session))
+    child.lua('vim.wait(100)')
+
+    eq(child.lua_get(S), vim.NIL)
+    eq(
+        child.lua_get([[#vim.tbl_filter(function(b)
+            return vim.startswith(vim.api.nvim_buf_get_name(b), 'iter://')
+        end, vim.api.nvim_list_bufs())]]),
+        0
+    )
+    eq(#child.api.nvim_list_tabpages(), 2)
+    eq(#child.api.nvim_tabpage_list_wins(1), 1)
+    eq(#child.api.nvim_tabpage_list_wins(2), 1)
+    eq(child.v.errmsg, '')
+    vim.fn.delete(session)
+end
+
+T['hand back']['a 50-column tab gives the sidebar half of it'] = function()
+    child.o.columns = 50
+
+    open_status()
+    wait_preview({ 'unstaged dir/sub/d.txt' })
+
+    eq(child.api.nvim_win_get_width(child.lua_get(S .. '.panel.win')), 25)
+    helpers.expect_screenshot(child, 'status-sidebar-narrow')
+end
+
+T['hand back']['a layout switch keeps the width, a resize keeps the user one'] = function()
+    child.o.columns = 160
+
+    open_status()
+    wait_preview({ 'unstaged dir/sub/d.txt' })
+    local panel = child.lua_get(S .. '.panel.win')
+
+    child.type_keys('|')
+    eq(child.api.nvim_win_get_width(panel), 34)
+    child.type_keys('-')
+    eq(child.api.nvim_win_get_width(panel), 34)
+
+    child.cmd('vertical resize 40')
+    child.o.columns = 140
+    child.lua('vim.wait(50)')
+
+    eq(child.api.nvim_win_get_width(panel), 40)
+end
+
+T['hand back']['the tab line counts the windows without the sidebar'] = function()
+    child.o.columns = 120
+    child.o.showtabline = 2
+    child.o.tabline = [[%!v:lua.require'iter'.tabline()]]
+    child.cmd('tabnew')
+
+    local function tabline()
+        return child.lua_get([[(function()
+            vim.cmd.redraw()
+            local cells = {}
+            for col = 1, vim.o.columns do
+                table.insert(cells, vim.fn.screenstring(1, col))
+            end
+            return table.concat(cells)
+        end)()]])
+    end
+
+    open_status()
+    wait_preview({ 'unstaged dir/sub/d.txt' })
+
+    eq(tabline():find(' 2 d/s/d.txt ', 1, true), nil)
+    eq(tabline():find(' d/s/d.txt ', 1, true) ~= nil, true)
+
+    to_commit()
+    wait_summary()
+    eq(tabline():find(' status ', 1, true) ~= nil, true)
+
+    child.api.nvim_set_current_win(child.lua_get(S .. '.pane'))
+    child.cmd('vsplit')
+    eq(tabline():find(' 2 ', 1, true) ~= nil, true)
+end
+
 return T

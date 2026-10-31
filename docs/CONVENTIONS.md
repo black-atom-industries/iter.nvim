@@ -153,7 +153,11 @@ the review straight to an agent pane.
   its sizes back while its windows are the ones it had. Its line counts come from one `git diff --numstat HEAD` per
   read. The Recent commits are lines of the tree page, after the rows and above the hints (`review_tree`'s `footer`),
   and the cursor stops on them; a commit under it shows its summary (`commits.summary`, `layout.commit_summary`) in
-  the window in the diff's place, with the options `tab.show_summary` sets.
+  the window in the diff's place, with the options `tab.show_summary` sets. The window is the user's again once
+  another buffer takes it: `:edit` there closes the status and keeps the buffer, `:edit` of a file in the panel puts
+  the tree back, closes the status and edits the file in the window, and a split of the window gets the user's buffer.
+  The panel sets its window options as local values, so a buffer `:edit` puts there, or a window split from it, starts
+  out with the user's. A tab left with the panel alone gets an empty window before the panel closes.
 - The status drawer's lines come from `iter.ui.layout`: pure functions from a list of column specs and the width to
   render lines, side by side at `drawer.breakpoint` and wider, stacked below it; `h` and `l` step between the
   columns. The drawer and the review share the diff preview (`iter.ui.preview`: the view, the file it shows, all-files
@@ -168,9 +172,12 @@ the review straight to an agent pane.
   iter's buffers stay unlisted, and a window is never handed one of them back. Addresses route only while the open
   drawer, review or commits tab is of the current directory's repository. `util.name_buf` wipes another buffer of the
   new name unless it is a loaded buffer of iter's own (then the name stays with it), and wipes the buffer of the old
-  name that `nvim_buf_set_name` leaves behind. `SessionLoadPost` wipes `iter://` buffers that aren't iter's own.
+  name that `nvim_buf_set_name` leaves behind. `SessionLoadPost` wipes `iter://` buffers that aren't iter's own; a
+  window that shows the status sidebar's diff (its new side in the split layout) or summary keeps its place with an
+  empty buffer, any other closes.
 - iter's tabs, the review and the commits, carry their label in the tab variable `iter_label`; `iter.tabline` renders
-  it for users who set 'tabline' to it.
+  it for users who set 'tabline' to it. `iter.tabline` leaves the status sidebar out of the window count and, while it
+  is the current window, labels the tab after the window it shows the diff in.
 - The ahead and behind counts with the upstream's name, and the Recent commits section, show only in the status
   drawer and the status sidebar. They count against the upstream as last fetched; iter never fetches. A poll reads HEAD and the upstream with
   one `git rev-parse`, and reads the counts (`rev-list --left-right`) and the commits (`log`) again only when either

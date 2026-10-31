@@ -364,6 +364,12 @@ scroll with them.
 On a clean tree the sidebar says "Working tree clean", the cursor starts on
 the newest commit, and the window keeps its buffer until the cursor moves.
 
+**The window.** `:edit` of another buffer in the window closes the sidebar and
+keeps that buffer there. `:edit` of a file in the sidebar closes it and opens
+the file in the window. A split of the window shows your buffer. Closing the
+window closes the sidebar, and when the sidebar is the tab's last window an
+empty window takes its place.
+
 ### Review tab
 
 **File tree.** The left window lists the changed files as a tree, 34 cells
@@ -880,8 +886,8 @@ what it names in the repository of the current directory:
 
 | Address                     | Opens                                                                    |
 | --------------------------- | ------------------------------------------------------------------------ |
-| `iter://status`             | The status drawer, or focuses it                                         |
-| `iter://status/<path>`      | The status drawer with `<path>` selected                                 |
+| `iter://status`             | The status, or focuses it                                                |
+| `iter://status/<path>`      | The status with `<path>` selected                                        |
 | `iter://review`             | The review tab, or switches to it; the file tree's buffer                |
 | `iter://review/<path>`      | The review tab with `<path>` selected in the tree                        |
 | `iter://review/<path>#L<n>` | The same, with the cursor on worktree line `n`, revealed if it is hidden |
@@ -896,13 +902,17 @@ what it names in the repository of the current directory:
 - On the command line `#` needs a backslash (`:e iter://review/a.txt\#L3`).
   `open_uri()` takes the address as it is.
 - iter's buffers stay unlisted, and a restored session gets none of them back.
+  A window that showed the status sidebar's diff keeps its place with an empty
+  buffer.
 
 ### Tab label
 
 The review tab sets `vim.t.iter_label` to `iter review`, the commits tab to
 `iter commits`. Neovim's default tabline ignores it and counts the status
-drawer's float among the windows. `tabline()` is a 'tabline' like the default
-that shows the label and counts only normal windows:
+drawer's float and the status sidebar among the windows. `tabline()` is a
+'tabline' like the default that shows the label and counts only normal windows
+besides the sidebar. While the sidebar is the current window, the tab is named
+after the file its diff shows, or `status` for all files or a commit summary:
 
 ```lua
 vim.o.tabline = "%!v:lua.require'iter'.tabline()"
