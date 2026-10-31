@@ -199,8 +199,6 @@ T['age()'] = function()
     eq(layout.age(800 * 86400), '2y')
 end
 
-T['commit_chunks()'] = new_set()
-
 ---@param author string
 ---@param body string
 ---@return GitCommit
@@ -216,38 +214,6 @@ local function picker_commit(author, body)
     }
 end
 
-T['commit_chunks()']['sha, date, padded author, subject, dimmed body'] = function()
-    local chunks = layout.commit_chunks(picker_commit('Nik', 'why it broke'), 5)
-
-    eq(chunks, {
-        { 'a1b2c3d', 'IterCommitSha' },
-        { '  ' },
-        { os.date('%Y-%m-%d %H:%M', 1767225600), 'IterCommitDate' },
-        { '  ' },
-        { 'Nik  ', 'IterCommitAuthor' },
-        { '  fix the thing' },
-        { '  why it broke', 'IterCommitBody' },
-    })
-end
-
-T['commit_chunks()']['no body chunk without a body'] = function()
-    local chunks = layout.commit_chunks(picker_commit('Nik', ''), 3)
-
-    eq(#chunks, 6)
-    eq(chunks[6], { '  fix the thing' })
-end
-
-T['commit_chunks()']['author_width() takes the widest author up to 20'] = function()
-    eq(
-        layout.author_width({
-            picker_commit('Nik', ''),
-            picker_commit('Someone Longer', ''),
-        }),
-        14
-    )
-    eq(layout.author_width({ picker_commit(string.rep('x', 30), '') }), 20)
-end
-
 T['commit_short()'] = function()
     local commit = picker_commit('Nik', '')
 
@@ -261,6 +227,22 @@ T['commit_short()'] = function()
     eq(cut[2][1], ' ' .. commit.subject:sub(1, 4) .. '…')
     eq(vim.fn.strdisplaywidth(cut[1][1] .. cut[2][1]), #commit.sha + 6)
     eq(layout.commit_short(commit, #commit.sha)[2][1], ' ')
+end
+
+T['line_count()'] = function()
+    local function count(added, deleted)
+        return layout.line_count({
+            path = 'a.txt',
+            added = added,
+            deleted = deleted,
+        })
+    end
+
+    eq(count(11, 0), { '+11', 'IterStage' })
+    eq(count(0, 4), { '−4', 'IterUnstage' })
+    eq(count(60, 11), { '±71', 'IterDrawerHint' })
+    eq(count(0, 0), { '+0', 'IterStage' })
+    eq(count(nil, nil), { 'bin', 'IterDrawerHint' })
 end
 
 T['commit_summary()'] = new_set()

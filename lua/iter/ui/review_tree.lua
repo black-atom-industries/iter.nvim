@@ -1,5 +1,6 @@
---- The review's file tree, a page of the panel: a header, the changed files
---- as a directory tree, and two lines of key hints at the bottom.
+--- A file tree page of the panel, the review's or a commit's: a header,
+--- the changed files as a directory tree, and two lines of key hints at the
+--- bottom.
 
 local keymap = require('iter.keymap')
 local layout = require('iter.ui.layout')
@@ -9,7 +10,8 @@ local tree = require('iter.ui.tree')
 local M = {}
 
 ---@class IterReviewTreeOptions
----@field keys table<string, string[]> resolved keys of the tree view
+---@field view IterView the keys view the page maps
+---@field keys table<string, string[]> resolved keys of `view`
 ---@field handlers table<string, fun()> tree actions by name
 ---@field header fun(width: integer): IterRenderLine[] the lines above the rows
 ---@field decorate fun(file: IterTreeFile): IterTreeDecor
@@ -32,6 +34,7 @@ Tree.__index = Tree
 ---@return IterReviewTree
 function M.new(opts)
     vim.validate('opts', opts, 'table')
+    vim.validate('opts.view', opts.view, 'string')
     vim.validate('opts.keys', opts.keys, 'table')
     vim.validate('opts.handlers', opts.handlers, 'table')
     vim.validate('opts.header', opts.header, 'function')
@@ -44,7 +47,7 @@ function M.new(opts)
     vim.bo[buf].bufhidden = 'hide'
     vim.bo[buf].modifiable = false
     vim.bo[buf].filetype = 'iter'
-    keymap.attach(buf, 'tree', opts.keys, opts.handlers)
+    keymap.attach(buf, opts.view, opts.keys, opts.handlers)
 
     return setmetatable({
         buf = buf,
@@ -62,7 +65,8 @@ end
 ---@param width integer
 ---@return [string, string][][]
 local function hint_chunks(self, width)
-    local bound = keymap.list('tree', self.opts.keys, self.opts.handlers)
+    local bound =
+        keymap.list(self.opts.view, self.opts.keys, self.opts.handlers)
 
     return vim.tbl_map(function(actions)
         return layout.hints(bound, actions, width - 1)
@@ -200,6 +204,43 @@ function Tree:toggle(dir)
     else
         self.collapsed[dir.path] = true
     end
+end
+
+--- Fold the directory under the cursor: `toggle` closes or opens it,
+--- `collapse` closes it, `expand` opens it. On a file `collapse` closes the
+--- file's directory. Returns the directory, whose row the cursor belongs
+--- on, or nil when nothing applies.
+---@param action 'toggle'|'collapse'|'expand'
+---@return IterTreeDir?
+function Tree:fold(action)
+    local node = self:node()
+
+    if node == nil then
+        return nil
+    end
+
+    if node.kind == 'file' then
+        local parent = action == 'collapse' and self:parent(node)
+
+        if not parent then
+            return nil
+        end
+
+        node = parent
+    end
+
+    ---@cast node IterTreeDir
+    local closed = false
+
+    for _, span in ipairs(node.spans) do
+        closed = closed or self.collapsed[span] == true
+    end
+
+    if action == 'toggle' or (action == 'collapse') ~= closed then
+        self:toggle(node)
+    end
+
+    return node
 end
 
 --- The directory that holds `node`, nil at the top level. Nodes match by

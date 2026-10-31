@@ -557,32 +557,6 @@ local function commit_line(commit, markers, age, width)
     return line
 end
 
---- The chunks of a commit row in the base picker and the commits drawer:
---- the short sha, the committer date and time, the author cut or padded to
---- `author_width` cells, the subject, then the body when there is one.
----@param commit GitCommit
----@param author_width integer
----@return [string, string?][]
-function M.commit_chunks(commit, author_width)
-    local chunks = {
-        { commit.sha, 'IterCommitSha' },
-        { '  ' },
-        {
-            os.date('%Y-%m-%d %H:%M', commit.time) --[[@as string]],
-            'IterCommitDate',
-        },
-        { '  ' },
-        { fit(commit.author, author_width), 'IterCommitAuthor' },
-        { '  ' .. commit.subject },
-    }
-
-    if commit.body ~= '' then
-        table.insert(chunks, { '  ' .. commit.body, 'IterCommitBody' })
-    end
-
-    return chunks
-end
-
 --- A commit as a row of a list in the left window: the short sha and the
 --- subject, cut with `…` to fit `width` cells.
 ---@param commit { sha: string, subject: string }
@@ -596,22 +570,23 @@ function M.commit_short(commit, width)
     return { { commit.sha, 'IterCommitSha' }, { ' ' .. subject } }
 end
 
--- Display cells the author column of commit rows keeps at most; longer
--- names are cut.
-local AUTHOR_WIDTH = 20
+--- The lines a file of a commit changes, for its tree row: `+a` without
+--- deletions, `−d` without additions, `±n` for the sum of both, `bin` for
+--- a binary file.
+---@param stat GitStat
+---@return [string, string]
+function M.line_count(stat)
+    vim.validate('stat', stat, 'table')
 
---- The author column's width for `commits`: the widest author, at most
---- `AUTHOR_WIDTH` cells.
----@param commits GitCommit[]
----@return integer
-function M.author_width(commits)
-    local width = 0
-
-    for _, commit in ipairs(commits) do
-        width = math.max(width, vim.fn.strdisplaywidth(commit.author))
+    if stat.added == nil then
+        return { 'bin', 'IterDrawerHint' }
+    elseif stat.added > 0 and stat.deleted > 0 then
+        return { '±' .. (stat.added + stat.deleted), 'IterDrawerHint' }
+    elseif stat.deleted > 0 then
+        return { '−' .. stat.deleted, 'IterUnstage' }
     end
 
-    return math.min(width, AUTHOR_WIDTH)
+    return { '+' .. stat.added, 'IterStage' }
 end
 
 --- A commit's short sha, date and time and author, a blank line, then its
@@ -697,7 +672,7 @@ local function stat_rows(stats)
     return rows, added, deleted
 end
 
---- The summary of commits the commits drawer shows above it: per commit,
+--- The summary of commits the commits tab shows beside its list: per commit,
 --- newest first, its short sha, date and time and author, then its whole
 --- message under it; after them a line with the number of files and the
 --- lines added and deleted, then a row per file with its counts.

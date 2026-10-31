@@ -466,28 +466,35 @@ The status drawer's diff takes `=`, `|` and `-` too.
 - `<C-c>` drops the draft
 - `q` closes a saved annotation
 
-### Commits drawer
+### Commits tab
 
-`:Iter commits` opens a drawer with the last 100 commits of the branch, newest
-first: sha, date and time, author, subject and the body, dimmed. Above it, the
-summary of the commit under the cursor: its whole message, then the files it
-changed with the lines added and deleted.
+`:Iter commits` opens a tab of its own. The left window lists the last 100
+commits of the branch, newest first, each as its short sha and subject; the
+window beside it shows the summary of the commit under the cursor: its sha,
+date and author, its whole message, then the files it changed with the lines
+added and deleted.
 
 - `V` selects several commits; the summary then covers them all, each message
   and the files changed from the parent of the oldest to the newest, and the
-  header names the range.
-- `<CR>` opens the commit's files, or the selection's, in the drawer, as the
-  status drawer lists them. The diff above shows the file under the cursor,
-  from the commit's parent to it; a merge commit shows its changes against its
-  first parent. `<CR>` moves into the diff, `<C-j>` back, `|` and `-` switch
-  side by side and unified, and `q` goes back to the commits.
-- `<C-d>` and `<C-u>` scroll the summary or the diff from the drawer.
-- `r` closes the drawer and opens the review from the commit, or from the oldest
-  selected or opened one. The review includes that commit and everything after
+  line under the title names the range.
+- `<CR>` enters the commit, or the selection: its files take the list's place
+  as a tree, each with the lines it changes (`+3` added only, `−2` deleted
+  only, `±5` both, `bin` binary). The window beside it shows the diff of the
+  file under the cursor, from the commit's parent to it; a merge commit shows
+  its changes against its first parent. `<CR>` moves into the diff, `<C-j>`
+  back, `h` and `l` close and open a directory, `|` and `-` switch side by side
+  and unified, and `q` goes back to the list.
+- `<C-d>` and `<C-u>` scroll the summary or the diff from the left window.
+- `r` closes the tab and opens the review from the commit, or from the oldest
+  selected or entered one. The review includes that commit and everything after
   it, up to the files on disk, so you can annotate and mark files reviewed; for
   the newest commits with nothing uncommitted that is exactly the selection.
+- `q` on the list closes the tab, as closing either window does, and you are
+  back in the tab you came from.
+- `:edit` of a file in either window opens it in the tab you came from; the
+  tab keeps its list, tree, summary or diff.
 
-The diff in the drawer is for reading: it shows no annotations and stages
+The diff in the commits tab is for reading: it shows no annotations and stages
 nothing.
 
 ### Annotation sidebar
@@ -639,7 +646,7 @@ The annotation float (`annotation`):
 
 The help float (`help`) closes on `q`, `?` and `<Esc>`.
 
-The commits drawer (`commits`):
+The commits tab (`commits`):
 
 | Key     | Action        | Does                                                        |
 | ------- | ------------- | ----------------------------------------------------------- |
@@ -648,6 +655,8 @@ The commits drawer (`commits`):
 | `\|`    | `split`       | Show the diff side by side                                  |
 | `-`     | `unified`     | Show the diff unified                                       |
 | `gw`    | `wrap`        | Toggle wrapping long lines                                  |
+| `h`     | `collapse`    | Close the directory, or the file's directory                |
+| `l`     | `expand`      | Open the directory                                          |
 | `q`     | `close`       | Back to the commits, or close                               |
 | `?`     | `help`        | Show the keys                                               |
 | `<C-d>` | `scroll_down` | Scroll the summary or the diff down                         |
@@ -752,7 +761,7 @@ iter.statusline()                    -- text for your statusline
 iter.statuscolumn()                  -- a 'statuscolumn' with the bar on wrapped rows
 iter.uri()                           -- address of the review's diff cursor
 iter.open_uri(uri)                   -- open an iter:// address, unescaped
-iter.tabline()                       -- a 'tabline' that labels the review tab
+iter.tabline()                       -- a 'tabline' that labels iter's tabs
 ```
 
 `annotate()` works in any buffer of a file inside a git repository.
@@ -826,7 +835,7 @@ what it names in the repository of the current directory:
 | `iter://review#all`         | The review tab in all-files mode                                         |
 | `iter://review#annotations` | The review tab with its annotations window focused                       |
 | `iter://review#base`        | The review tab with its base list; the list's buffer                     |
-| `iter://commits`            | The commits drawer, or focuses it                                        |
+| `iter://commits`            | The commits tab, or switches to it; the commit list's buffer             |
 | `iter://annotate`           | Opens the annotation sidebar, or focuses it                              |
 | `iter://annotation`         | The hidden annotation draft                                              |
 
@@ -837,10 +846,10 @@ what it names in the repository of the current directory:
 
 ### Tab label
 
-The review tab sets `vim.t.iter_label` to `iter review`. Neovim's default
-tabline ignores it and counts the status drawer's float among the windows. `tabline()`
-is a 'tabline' like the default that shows the label and counts only normal
-windows:
+The review tab sets `vim.t.iter_label` to `iter review`, the commits tab to
+`iter commits`. Neovim's default tabline ignores it and counts the status
+drawer's float among the windows. `tabline()` is a 'tabline' like the default
+that shows the label and counts only normal windows:
 
 ```lua
 vim.o.tabline = "%!v:lua.require'iter'.tabline()"
@@ -874,46 +883,45 @@ event, so no colorscheme needs to define them.
   fallback.
 - Row backgrounds blend the diff colour 60 % towards `Normal`.
 
-| Group                        | Colours                                                 | Derived from                                                                |
-| ---------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `IterStage`                  | Staged files in the drawer, `●` in the tree             | fg of `Added`, `String`                                                     |
-| `IterUnstage`                | Unstaged files in the drawer, `◐` in the tree           | fg of `Removed`, `Error`                                                    |
-| `IterUntracked`              | Untracked files                                         | fg of `DiagnosticInfo`, `Directory`, `Identifier`                           |
-| `IterConflict`               | Files with merge conflicts                              | fg of `DiagnosticError`, `ErrorMsg`, `Error`                                |
-| `IterHead`                   | Branch name in the drawer and the tree                  | fg of `Identifier`, `Keyword`                                               |
-| `IterUnpushed`               | Unpushed commits and the ahead count                    | fg of `Constant`, `Number`                                                  |
-| `IterBehind`                 | Behind count                                            | fg of `Removed`, `Error`                                                    |
-| `IterReviewed`               | Reviewed marks and progress                             | fg of `Added`, `String`                                                     |
-| `IterReviewedChanged`        | Files changed since reviewed                            | fg of `DiagnosticWarn`, `WarningMsg`, `Constant`                            |
-| `IterSidebar`                | Annotation sidebar and file tree background             | link to `NormalFloat`                                                       |
-| `IterDrawer`                 | Drawer text                                             | link to `Normal`, `NormalFloat` when `Normal` has no bg                     |
-| `IterDrawerTitle`            | Drawer titles                                           | link to `Title`                                                             |
-| `IterDrawerHeader`           | Drawer header row, under its rule                       | bg of `Title` fg, blended with `Normal`                                     |
-| `IterDrawerSelected`         | Selected drawer row, the tree's cursor line             | link to `Visual`                                                            |
-| `IterDrawerKey`              | Key hints                                               | link to `Special`                                                           |
-| `IterDrawerHint`             | Dimmed drawer and tree text, `○` in the tree            | link to `Comment`                                                           |
-| `IterDrawerCount`            | Counts in section titles, `✎n` in the tree              | link to `Special`                                                           |
-| `IterCommitSha`              | Commit sha in the base list and its preview             | link to `Constant`                                                          |
-| `IterCommitDate`             | Commit date and time in the base preview                | link to `Special`                                                           |
-| `IterCommitAuthor`           | Commit author in the base preview                       | link to `Identifier`                                                        |
-| `IterCommitBody`             | Commit body after the subject in the commits drawer     | link to `Comment`                                                           |
-| `IterDiffAdd`                | Added line rows                                         | bg of `DiffAdd`, blended with `Normal`                                      |
-| `IterDiffDelete`             | Deleted line rows                                       | bg of `DiffDelete`, blended with `Normal`                                   |
-| `IterDiffAddText`            | Changed words in added lines                            | bg of `DiffAdd`                                                             |
-| `IterDiffDeleteText`         | Changed words in deleted lines                          | bg of `DiffDelete`                                                          |
-| `IterDiffAddNr`              | Line number of added lines                              | fg of `diffAdded`, `Added`, `DiffAdd`; bg as `IterDiffAdd`                  |
-| `IterDiffDeleteNr`           | Line number of deleted lines                            | fg of `diffRemoved`, `Removed`, `DiffDelete`; bg as `IterDiffDelete`        |
-| `IterDiffNr`                 | Line number of context lines                            | link to `LineNr`                                                            |
-| `IterDiffHeader`             | File header rows in the diff                            | fg of `Normal`; bg of `Title` fg, blended with `Normal`; bold               |
-| `IterDiffHeaderRule`         | Rule above a file header and the drawer, code letter    | fg of `Title`                                                               |
-| `IterDiffHunk`               | Hunk headers and stats                                  | link to `Comment`                                                           |
-| `IterDiffGap`                | Collapsed unchanged lines                               | link to `Folded`                                                            |
-| `IterDiffFiller`             | Filler rows beside a one-sided change                   | link to `NonText`                                                           |
-| `IterDiffAnnotation`         | Annotation text                                         | link to `NormalFloat`                                                       |
-| `IterDiffAnnotationOutdated` | Annotation whose lines changed                          | link to `Comment`                                                           |
-| `IterDiffAnnotationFocus`    | Focused annotation                                      | link to `Visual`                                                            |
-| `IterAnnotationSign`         | Annotation sign in the gutter                           | link to `Special`                                                           |
-| `IterAnnotationText`         | Annotated text: the words of a passage, else full lines | fg of `@function`, `Function`, blended 15 % into `Normal`; else `Visual` bg |
+| Group                        | Colours                                                   | Derived from                                                                |
+| ---------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `IterStage`                  | Staged files in the drawer, `●` in the tree               | fg of `Added`, `String`                                                     |
+| `IterUnstage`                | Unstaged files in the drawer, `◐` in the tree             | fg of `Removed`, `Error`                                                    |
+| `IterUntracked`              | Untracked files                                           | fg of `DiagnosticInfo`, `Directory`, `Identifier`                           |
+| `IterConflict`               | Files with merge conflicts                                | fg of `DiagnosticError`, `ErrorMsg`, `Error`                                |
+| `IterHead`                   | Branch name in the drawer and the tree                    | fg of `Identifier`, `Keyword`                                               |
+| `IterUnpushed`               | Unpushed commits and the ahead count                      | fg of `Constant`, `Number`                                                  |
+| `IterBehind`                 | Behind count                                              | fg of `Removed`, `Error`                                                    |
+| `IterReviewed`               | Reviewed marks and progress                               | fg of `Added`, `String`                                                     |
+| `IterReviewedChanged`        | Files changed since reviewed                              | fg of `DiagnosticWarn`, `WarningMsg`, `Constant`                            |
+| `IterSidebar`                | Annotation sidebar and file tree background               | link to `NormalFloat`                                                       |
+| `IterDrawer`                 | Drawer text                                               | link to `Normal`, `NormalFloat` when `Normal` has no bg                     |
+| `IterDrawerTitle`            | Drawer titles                                             | link to `Title`                                                             |
+| `IterDrawerHeader`           | Drawer header row, under its rule                         | bg of `Title` fg, blended with `Normal`                                     |
+| `IterDrawerSelected`         | Selected drawer row, the tree's cursor line               | link to `Visual`                                                            |
+| `IterDrawerKey`              | Key hints                                                 | link to `Special`                                                           |
+| `IterDrawerHint`             | Dimmed drawer and tree text, `○` in the tree              | link to `Comment`                                                           |
+| `IterDrawerCount`            | Counts in section titles, `✎n` in the tree                | link to `Special`                                                           |
+| `IterCommitSha`              | Commit sha in the commits tab, the base list and previews | link to `Constant`                                                          |
+| `IterCommitDate`             | Commit date and time in the commit and base previews      | link to `Special`                                                           |
+| `IterCommitAuthor`           | Commit author in the commit and base previews             | link to `Identifier`                                                        |
+| `IterDiffAdd`                | Added line rows                                           | bg of `DiffAdd`, blended with `Normal`                                      |
+| `IterDiffDelete`             | Deleted line rows                                         | bg of `DiffDelete`, blended with `Normal`                                   |
+| `IterDiffAddText`            | Changed words in added lines                              | bg of `DiffAdd`                                                             |
+| `IterDiffDeleteText`         | Changed words in deleted lines                            | bg of `DiffDelete`                                                          |
+| `IterDiffAddNr`              | Line number of added lines                                | fg of `diffAdded`, `Added`, `DiffAdd`; bg as `IterDiffAdd`                  |
+| `IterDiffDeleteNr`           | Line number of deleted lines                              | fg of `diffRemoved`, `Removed`, `DiffDelete`; bg as `IterDiffDelete`        |
+| `IterDiffNr`                 | Line number of context lines                              | link to `LineNr`                                                            |
+| `IterDiffHeader`             | File header rows in the diff                              | fg of `Normal`; bg of `Title` fg, blended with `Normal`; bold               |
+| `IterDiffHeaderRule`         | Rule above a file header and the drawer, code letter      | fg of `Title`                                                               |
+| `IterDiffHunk`               | Hunk headers and stats                                    | link to `Comment`                                                           |
+| `IterDiffGap`                | Collapsed unchanged lines                                 | link to `Folded`                                                            |
+| `IterDiffFiller`             | Filler rows beside a one-sided change                     | link to `NonText`                                                           |
+| `IterDiffAnnotation`         | Annotation text                                           | link to `NormalFloat`                                                       |
+| `IterDiffAnnotationOutdated` | Annotation whose lines changed                            | link to `Comment`                                                           |
+| `IterDiffAnnotationFocus`    | Focused annotation                                        | link to `Visual`                                                            |
+| `IterAnnotationSign`         | Annotation sign in the gutter                             | link to `Special`                                                           |
+| `IterAnnotationText`         | Annotated text: the words of a passage, else full lines   | fg of `@function`, `Function`, blended 15 % into `Normal`; else `Visual` bg |
 
 ### Files
 

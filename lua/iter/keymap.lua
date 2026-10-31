@@ -111,6 +111,8 @@ local ACTIONS = {
         { 'split', 'Show the diff side by side' },
         { 'unified', 'Show the diff unified' },
         { 'wrap', 'Toggle wrapping long lines' },
+        { 'collapse', "Close the directory, or the file's directory" },
+        { 'expand', 'Open the directory' },
         { 'close', 'Back to the commits, or close' },
         { 'help', 'Show the keys' },
         { 'scroll_down', 'Scroll the summary or the diff down' },

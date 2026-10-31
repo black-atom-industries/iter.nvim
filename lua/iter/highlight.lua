@@ -181,7 +181,6 @@ function M.apply()
         IterCommitSha = { link = 'Constant' },
         IterCommitDate = { link = 'Special' },
         IterCommitAuthor = { link = 'Identifier' },
-        IterCommitBody = { link = 'Comment' },
     }
 
     for name, spec in pairs(FOREGROUNDS) do

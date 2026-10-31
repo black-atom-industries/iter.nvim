@@ -24,6 +24,7 @@ end
 ---@return IterReviewTree
 local function new_page(items, selected)
     page = review_tree.new({
+        view = 'tree',
         keys = { help = { '?' } },
         handlers = { help = function() end },
         header = function()
@@ -194,6 +195,41 @@ T['rows']['parent is the directory above, nil at the top'] = function()
     eq(p:parent(file).path, 'lua/')
     eq(p:parent(p.items[5].node), nil)
     eq(p:parent(p.items[3].node), nil)
+end
+
+T['rows']['fold toggles, collapses and expands directories'] = function()
+    local p = new_page({ change('lua/x.lua'), change('b.txt') })
+
+    p:render(30, 9)
+
+    -- Lines: 3 `lua/`, 4 `x.lua`, 5 `b.txt`.
+    p.lnum = 4
+
+    local dir = p:fold('collapse')
+
+    eq(dir and dir.path, 'lua/')
+    eq(p.collapsed['lua/'], true)
+
+    p:render(30, 9)
+    p.lnum = 3
+
+    eq(p:fold('collapse').path, 'lua/')
+    eq(p.collapsed['lua/'], true)
+    eq(p:fold('expand').path, 'lua/')
+    eq(p.collapsed['lua/'], nil)
+    eq(p:fold('toggle').path, 'lua/')
+    eq(p.collapsed['lua/'], true)
+
+    p:render(30, 9)
+    p.lnum = 4
+
+    eq(p:node().path, 'b.txt')
+    eq(p:fold('collapse'), nil)
+    eq(p:fold('expand'), nil)
+
+    p.lnum = 1
+
+    eq(p:fold('toggle'), nil)
 end
 
 T['rows']['a partly staged path is one row'] = function()
