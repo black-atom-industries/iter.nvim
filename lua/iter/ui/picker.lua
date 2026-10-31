@@ -20,6 +20,7 @@ local M = {}
 ---@field keys table<string, string[]> resolved keys of the picker view
 ---@field on_pick fun(index: integer)
 ---@field on_close fun() after the close key
+---@field on_select? fun(index: integer) when the cursor comes to another item, and to the first when the page shows
 
 ---@class IterPickerPage: IterPanelPage
 ---@field buf integer
@@ -27,6 +28,7 @@ local M = {}
 ---@field handlers table<string, fun()>
 ---@field indexes table<integer, integer> buffer line → item index
 ---@field lnum integer the cursor line the page saw last
+---@field selected? integer the item `on_select` saw last
 local Page = {}
 Page.__index = Page
 
@@ -81,6 +83,7 @@ function M.page(opts)
     vim.validate('opts.keys', opts.keys, 'table')
     vim.validate('opts.on_pick', opts.on_pick, 'function')
     vim.validate('opts.on_close', opts.on_close, 'function')
+    vim.validate('opts.on_select', opts.on_select, 'function', true)
 
     local buf = vim.api.nvim_create_buf(false, true)
 
@@ -171,11 +174,12 @@ function Page:render(width, height)
     render.apply(self.buf, lines)
 end
 
---- Snap the cursor to the nearest item line, looking the way it moved.
+--- The item line nearest to `lnum`, looking `dir` first, else `lnum`.
+---@param self IterPickerPage
 ---@param lnum integer
----@param prev integer
-function Page:on_cursor(lnum, prev)
-    local dir = lnum < prev and -1 or 1
+---@param dir integer
+---@return integer
+local function nearest(self, lnum, dir)
     local last = vim.api.nvim_buf_line_count(self.buf)
 
     for _, step in ipairs({ dir, -dir }) do
@@ -183,19 +187,36 @@ function Page:on_cursor(lnum, prev)
 
         while l >= 1 and l <= last do
             if self.indexes[l] ~= nil then
-                if l ~= lnum then
-                    vim.api.nvim_win_set_cursor(0, { l, 0 })
-                end
-
-                self.lnum = l
-                return
+                return l
             end
 
             l = l + step
         end
     end
 
-    self.lnum = lnum
+    return lnum
+end
+
+--- Snap the cursor to the nearest item line, looking the way it moved,
+--- and tell `on_select` about another item.
+---@param lnum integer
+---@param prev integer
+function Page:on_cursor(lnum, prev)
+    self.lnum = nearest(self, lnum, lnum < prev and -1 or 1)
+
+    if self.lnum ~= lnum then
+        vim.api.nvim_win_set_cursor(0, { self.lnum, 0 })
+    end
+
+    local index = self:index()
+
+    if index ~= nil and index ~= self.selected then
+        self.selected = index
+
+        if self.opts.on_select ~= nil then
+            self.opts.on_select(index)
+        end
+    end
 end
 
 --- The index of the item under the cursor.

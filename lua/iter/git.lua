@@ -1002,38 +1002,17 @@ end
 ---@field author string the author's name
 ---@field message string[] the message's lines, the subject first, trailing blank lines dropped
 
---- The commits from `oldest` to `newest`, newest first, with their whole
---- messages: `newest` and its ancestors that `oldest`'s parents don't
---- reach, so a root `oldest` takes every ancestor.
----@param root string
----@param oldest string commit
----@param newest string commit
----@return GitMessage[]?
----@return string? error
-function git.messages(root, oldest, newest)
-    vim.validate('oldest', oldest, 'string')
-    vim.validate('newest', newest, 'string')
+-- The `log` format `parse_messages` reads.
+local MESSAGE_FORMAT = '--format=%h%x1f%ct%x1f%an%x1f%B'
 
-    local out = git.run({
-        'log',
-        '--no-color',
-        '--no-show-signature',
-        '-z',
-        '--format=%h%x1f%ct%x1f%an%x1f%B',
-        newest,
-        '--not',
-        oldest .. '^@',
-        '--',
-    }, { cwd = root, ignore_error = true })
-
-    if out.exit_code ~= 0 then
-        return nil, return_result(out)
-    end
-
+--- The commits of a `git log -z` in `MESSAGE_FORMAT`.
+---@param output string
+---@return GitMessage[]
+local function parse_messages(output)
     ---@type GitMessage[]
     local messages = {}
 
-    for _, record in ipairs(vim.split(out.output, '\0', { plain = true })) do
+    for _, record in ipairs(vim.split(output, '\0', { plain = true })) do
         local fields = vim.split(record, SEP, { plain = true })
 
         if #fields >= 4 then
@@ -1056,33 +1035,110 @@ function git.messages(root, oldest, newest)
     return messages
 end
 
+--- The commits from `oldest` to `newest`, newest first, with their whole
+--- messages: `newest` and its ancestors that `oldest`'s parents don't
+--- reach, so a root `oldest` takes every ancestor.
+---@param root string
+---@param oldest string commit
+---@param newest string commit
+---@return GitMessage[]?
+---@return string? error
+function git.messages(root, oldest, newest)
+    vim.validate('oldest', oldest, 'string')
+    vim.validate('newest', newest, 'string')
+
+    local out = git.run({
+        'log',
+        '--no-color',
+        '--no-show-signature',
+        '-z',
+        MESSAGE_FORMAT,
+        newest,
+        '--not',
+        oldest .. '^@',
+        '--',
+    }, { cwd = root, ignore_error = true })
+
+    if out.exit_code ~= 0 then
+        return nil, return_result(out)
+    end
+
+    return parse_messages(out.output)
+end
+
+--- The commits on `head` since `base`, `base..head`, newest first with
+--- their whole messages, at most `limit`, and how many more there are.
+---@param root string
+---@param base string commit
+---@param head string commit
+---@param limit integer
+---@return GitMessage[]?
+---@return string? error
+---@return integer more the commits past `limit`
+function git.messages_since(root, base, head, limit)
+    vim.validate('base', base, 'string')
+    vim.validate('head', head, 'string')
+    vim.validate('limit', limit, 'number')
+
+    local range = base .. '..' .. head
+    local out = git.run({
+        'log',
+        '--no-color',
+        '--no-show-signature',
+        '-z',
+        '--max-count=' .. limit,
+        MESSAGE_FORMAT,
+        '--end-of-options',
+        range,
+        '--',
+    }, { cwd = root, ignore_error = true })
+
+    if out.exit_code ~= 0 then
+        return nil, return_result(out), 0
+    end
+
+    local messages = parse_messages(out.output)
+
+    if #messages < limit then
+        return messages, nil, 0
+    end
+
+    local count = git.run(
+        { 'rev-list', '--count', '--end-of-options', range, '--' },
+        { cwd = root, ignore_error = true }
+    )
+
+    return messages,
+        nil,
+        math.max(0, (tonumber(return_result(count)) or #messages) - #messages)
+end
+
 ---@class GitStat the lines a diff adds and deletes in one file
 ---@field path string
 ---@field orig_path? string the old path of a rename
 ---@field added? integer nil for a binary file
 ---@field deleted? integer nil for a binary file
 
---- The lines added and deleted per file from `base` to `head`, in git's
---- order.
+--- The lines added and deleted per file from `base` to `head`, or to the
+--- worktree's tracked files without `head`, in git's order.
 ---@param root string
 ---@param base string commit or tree
----@param head string commit
+---@param head? string commit
 ---@return GitStat[]?
 ---@return string? error
 function git.stats(root, base, head)
     vim.validate('base', base, 'string')
-    vim.validate('head', head, 'string')
+    vim.validate('head', head, 'string', true)
 
-    local out = git.run({
-        'diff',
-        '-M',
-        '--numstat',
-        '-z',
-        '--no-color',
-        base,
-        head,
-        '--',
-    }, { cwd = root, ignore_error = true })
+    local args = { 'diff', '-M', '--numstat', '-z', '--no-color', base }
+
+    if head ~= nil then
+        table.insert(args, head)
+    end
+
+    table.insert(args, '--')
+
+    local out = git.run(args, { cwd = root, ignore_error = true })
 
     if out.exit_code ~= 0 then
         return nil, return_result(out)
@@ -1124,7 +1180,7 @@ end
 ---@param root string
 ---@return string? sha
 ---@return string? error
-local function empty_tree(root)
+function git.empty_tree(root)
     local empty = git.run(
         { 'hash-object', '-t', 'tree', '--stdin' },
         { cwd = root, ignore_error = true, stdin = '' }
@@ -1165,7 +1221,7 @@ function git.parent_of(root, sha)
         return parent
     end
 
-    return empty_tree(root)
+    return git.empty_tree(root)
 end
 
 ---@class IterBaseSpec what a review compares the worktree with
@@ -1241,7 +1297,7 @@ function git.resolve_base(root, spec)
         return parent
     end
 
-    return empty_tree(root)
+    return git.empty_tree(root)
 end
 
 --- Each ref in `refs` with the count of commits on HEAD and not on it, the

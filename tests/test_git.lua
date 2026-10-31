@@ -1095,6 +1095,44 @@ T['between commits']['stats() counts lines per file, a rename with both paths'] 
     eq(git.stats(repo, 'nope', second), nil)
 end
 
+T['between commits']['stats() without head counts against the worktree'] = function()
+    local _, second = create_commits()
+
+    eq(
+        git.stats(repo, second),
+        { { path = 'tracked.txt', added = 1, deleted = 0 } }
+    )
+end
+
+T['between commits']['messages_since() lists base..head newest first, at most limit'] = function()
+    local first, second = create_commits()
+
+    helpers.git(repo, { 'commit', '--quiet', '--allow-empty', '-m', 'third' })
+    helpers.git(repo, { 'commit', '--quiet', '--allow-empty', '-m', 'fourth' })
+
+    local subjects = function(messages)
+        return vim.tbl_map(function(m)
+            return m.message[1]
+        end, messages)
+    end
+
+    local messages, err, more = git.messages_since(repo, first, 'HEAD', 10)
+
+    eq(err, nil)
+    eq(subjects(messages), { 'fourth', 'third', 'second' })
+    eq(more, 0)
+
+    messages, err, more = git.messages_since(repo, first, 'HEAD', 2)
+
+    eq(subjects(messages), { 'fourth', 'third' })
+    eq(more, 1)
+
+    messages, err, more = git.messages_since(repo, second, second, 2)
+
+    eq({ messages, more }, { {}, 0 })
+    eq(git.messages_since(repo, 'nope', 'HEAD', 2), nil)
+end
+
 T['base refs'] = new_set()
 
 T['base refs']['branches() lists local then remote branches, no symrefs'] = function()

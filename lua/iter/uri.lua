@@ -12,7 +12,7 @@ local M = {}
 ---@field kind 'status'|'review'|'commits'|'annotation'|'annotate'
 ---@field path? string repository-relative path, for `status` too
 ---@field line? integer new-side line, from `#L<n>`
----@field view? 'all'|'annotations' the review's view, from `#all` or `#annotations`
+---@field view? 'all'|'annotations'|'base' the review's view, from `#all`, `#annotations` or `#base`
 
 ---@class IterUriOwner
 ---@field owns fun(win: integer): boolean the windows iter shows the buffer in
@@ -50,11 +50,19 @@ function M.of(kind, path, line)
     return name
 end
 
-local FRAGMENTS = { L = true, all = true, annotations = true, old = true }
+local FRAGMENTS = {
+    L = true,
+    all = true,
+    annotations = true,
+    base = true,
+    old = true,
+    preview = true,
+}
 
 --- What `name` addresses, nil when it isn't an iter URI. Known fragments
---- come off the end: `#L<n>` gives the line, `#all` and `#annotations` the
---- view, `#old` nothing; any other `#` belongs to the path.
+--- come off the end: `#L<n>` gives the line, `#all`, `#annotations` and
+--- `#base` the view, `#old` and `#preview` nothing; any other `#` belongs to
+--- the path.
 ---@param name string
 ---@return IterUriTarget?
 function M.parse(name)
@@ -76,7 +84,11 @@ function M.parse(name)
         rest = base
         line = line or tonumber(fragment:match('^L(%d+)$'))
 
-        if fragment == 'all' or fragment == 'annotations' then
+        if
+            fragment == 'all'
+            or fragment == 'annotations'
+            or fragment == 'base'
+        then
             view = view or fragment
         end
     end
@@ -180,6 +192,8 @@ local function route(target, name)
             review:reveal(target.path, target.line)
         elseif target.view == 'annotations' then
             review:focus_annotations()
+        elseif target.view == 'base' then
+            review:show_base_list()
         elseif target.view == 'all' and not review.preview.all_files then
             review:toggle_mode()
         end

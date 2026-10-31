@@ -21,12 +21,13 @@ local T = new_set({
 })
 
 --- Open a panel as `_G.panel` showing a base list of `one`, `two` under
---- `Branches` and `three` under `Commits` as `_G.page`; `_G.picked` and
---- `_G.closed` record the callbacks.
+--- `Branches` and `three` under `Commits` as `_G.page`; `_G.picked`,
+--- `_G.closed` and `_G.selected` record the callbacks.
 local function open_page()
     child.lua([[
         _G.picked = nil
         _G.closed = 0
+        _G.selected = {}
         _G.panel = require('iter.ui.panel').open({ width = 34 })
         _G.page = require('iter.ui.picker').page({
             title = 'Base of the review',
@@ -46,6 +47,9 @@ local function open_page()
             end,
             on_close = function()
                 _G.closed = _G.closed + 1
+            end,
+            on_select = function(index)
+                table.insert(_G.selected, index)
             end,
         })
         _G.panel:show(_G.page)
@@ -109,6 +113,17 @@ T['page()']['maps item lines to indexes, the cursor snaps to items'] = function(
     child.type_keys('k')
     eq(child.api.nvim_win_get_cursor(0)[1], 7)
     eq(child.lua_get('_G.page:line_of(3)'), 10)
+end
+
+T['page()']['on_select follows the item under the cursor'] = function()
+    open_page()
+    eq(child.lua_get('_G.selected'), { 1 })
+
+    child.type_keys('j', 'j', 'k')
+    eq(child.lua_get('_G.selected'), { 1, 2, 3, 2 })
+
+    child.type_keys('gg')
+    eq(child.lua_get('_G.selected'), { 1, 2, 3, 2, 1 })
 end
 
 T['page()']['<CR> passes the index under the cursor'] = function()

@@ -93,7 +93,9 @@ work that is already committed shows up too. To review a pull request, check
 out its branch (a worktree per pull request works well), then:
 
 - `b` in the file tree picks the base: working changes, the parent branch,
-  another branch, or a recent commit.
+  another branch, or a recent commit. The diff window previews the base under
+  the cursor: the commits since it, the working changes, and the lines each
+  file adds and deletes.
 - `:Iter review main` opens the review against `main` directly.
 
 A branch base means its merge-base with `HEAD`, read again on every refresh. A
@@ -383,6 +385,28 @@ tree's place (`/` searches it, `q` goes back to the tree unchanged):
 3. Local, then remote branches. A branch means its merge-base with `HEAD`.
 4. The last 20 commits, each as its short sha and subject. A commit means its
    parent, so the commit is included.
+
+While the list shows, the diff window previews the base under the cursor,
+the count of commits and files at the top:
+
+```
+ since main (b24bd9c)                    2 commits · 3 files
+ Committed on feat/file-tree since it left main
+
+ 5725be8 feat(review): a file tree beside the diff
+ 3e6c7d9 refactor(review): a list window at the tab's left edge
+
+  +11 −0  lua/iter/ui/tree.lua
+ +60 −11  lua/iter/review.lua
+  +40 −2  tests/test_tree.lua
+
+ What a pull request into main shows.
+```
+
+With working changes the summary adds `+ working changes in n files` under
+the commits and `+ n untracked` under the files, and the pull request line
+goes. A commit shows its message and every commit from it to `HEAD`; Working
+changes the files against `HEAD`. `<CR>` or `q` gives the window its diff back.
 
 The copied prompt names the base with the title's words after `Reviewed`, as in
 `Reviewed since main (a1b2c3d)`. The line under the title drops the sha:
@@ -801,6 +825,7 @@ what it names in the repository of the current directory:
 | `iter://review/<path>#L<n>` | The same, with the cursor on worktree line `n`, revealed if it is hidden |
 | `iter://review#all`         | The review tab in all-files mode                                         |
 | `iter://review#annotations` | The review tab with its annotations window focused                       |
+| `iter://review#base`        | The review tab with its base list; the list's buffer                     |
 | `iter://commits`            | The commits drawer, or focuses it                                        |
 | `iter://annotate`           | Opens the annotation sidebar, or focuses it                              |
 | `iter://annotation`         | The hidden annotation draft                                              |
@@ -868,10 +893,10 @@ event, so no colorscheme needs to define them.
 | `IterDrawerKey`              | Key hints                                               | link to `Special`                                                           |
 | `IterDrawerHint`             | Dimmed drawer and tree text, `○` in the tree            | link to `Comment`                                                           |
 | `IterDrawerCount`            | Counts in section titles, `✎n` in the tree              | link to `Special`                                                           |
-| `IterCommitSha`              | Commit sha in the base list                             | link to `Constant`                                                          |
-| `IterCommitDate`             | Commit date and time in the base picker                 | link to `Special`                                                           |
-| `IterCommitAuthor`           | Commit author in the base picker                        | link to `Identifier`                                                        |
-| `IterCommitBody`             | Commit body after the subject in the base picker        | link to `Comment`                                                           |
+| `IterCommitSha`              | Commit sha in the base list and its preview             | link to `Constant`                                                          |
+| `IterCommitDate`             | Commit date and time in the base preview                | link to `Special`                                                           |
+| `IterCommitAuthor`           | Commit author in the base preview                       | link to `Identifier`                                                        |
+| `IterCommitBody`             | Commit body after the subject in the commits drawer     | link to `Comment`                                                           |
 | `IterDiffAdd`                | Added line rows                                         | bg of `DiffAdd`, blended with `Normal`                                      |
 | `IterDiffDelete`             | Deleted line rows                                       | bg of `DiffDelete`, blended with `Normal`                                   |
 | `IterDiffAddText`            | Changed words in added lines                            | bg of `DiffAdd`                                                             |

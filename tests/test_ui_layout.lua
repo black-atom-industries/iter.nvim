@@ -301,6 +301,129 @@ T['commit_summary()']['messages, then the files with their counts'] = function()
     eq(lines[3].highlights[1].group, 'IterDrawerTitle')
 end
 
+T['base_summary()'] = new_set()
+
+---@param subject string
+---@param sha string
+---@return GitMessage
+local function message(subject, sha)
+    return {
+        sha = sha,
+        time = 1767225600,
+        author = 'Nik',
+        message = { subject },
+    }
+end
+
+T['base_summary()']['a branch: commits since it, working changes, stats'] = function()
+    local lines = layout.base_summary({
+        kind = 'branch',
+        label = 'main',
+        sha = 'b24bd9c1234',
+        head = 'feat',
+        commits = {
+            message('feat(tree): a tree', 'a1b2c3d'),
+            message('fix(tree): sort the directories first', 'e4f5a6b'),
+        },
+        more = 3,
+        working = 2,
+        untracked = 1,
+        stats = {
+            { path = 'a.lua', added = 12, deleted = 3 },
+            { path = 'b.lua', added = 1, deleted = 0 },
+        },
+    }, 40)
+
+    eq(render.text_lines(lines), {
+        ' since main (b24bd9c)  5 commits · 3 files',
+        ' Committed on feat since it left main',
+        '',
+        ' a1b2c3d feat(tree): a tree',
+        ' e4f5a6b fix(tree): sort the directorie…',
+        ' … 3 more',
+        ' + working changes in 2 files',
+        '',
+        ' +12 −3  a.lua',
+        '  +1 −0  b.lua',
+        ' + 1 untracked',
+    })
+    eq(lines[1].highlights[1].group, 'IterDrawerTitle')
+end
+
+T['base_summary()']['without working changes: the count at the right edge, the pull request line'] = function()
+    local lines = layout.base_summary({
+        kind = 'branch',
+        label = 'main',
+        sha = 'b24bd9c',
+        commits = { message('one', 'a1b2c3d') },
+        more = 0,
+        working = 0,
+        untracked = 0,
+        stats = { { path = 'a.lua', added = 1, deleted = 1 } },
+    }, 50)
+
+    eq(
+        lines[1].text,
+        ' since main (b24bd9c)' .. string.rep(' ', 12) .. '1 commit · 1 file'
+    )
+    eq(lines[2].text, ' Committed since it left main')
+    eq(lines[#lines].text, ' What a pull request into main shows.')
+end
+
+T['base_summary()']['a commit: its message, then it and every one after it'] = function()
+    local date = os.date('%Y-%m-%d %H:%M', 1767225600)
+    local lines = layout.base_summary({
+        kind = 'commit',
+        label = 'e4f5a6b',
+        commit = {
+            sha = 'e4f5a6b',
+            time = 1767225600,
+            author = 'Nik',
+            message = { 'fix it', '', 'why' },
+        },
+        commits = { message('later', 'a1b2c3d'), message('fix it', 'e4f5a6b') },
+        more = 0,
+        working = 0,
+        untracked = 0,
+        stats = { { path = 'a.lua', added = 2, deleted = 1 } },
+    }, 30)
+
+    eq(render.text_lines(lines), {
+        ' from e4f5a6b  2 commits · 1 file',
+        '',
+        ' e4f5a6b  ' .. date .. '  Nik',
+        '',
+        ' fix it',
+        '',
+        ' why',
+        '',
+        ' The review includes this commit and every one after it:',
+        ' a1b2c3d later',
+        ' e4f5a6b fix it',
+        '',
+        ' +2 −1  a.lua',
+    })
+end
+
+T['base_summary()']['working changes: the files against HEAD and the untracked'] = function()
+    local lines = layout.base_summary({
+        kind = 'working',
+        label = 'Working changes',
+        commits = {},
+        more = 0,
+        working = 3,
+        untracked = 2,
+        stats = { { path = 'a.lua', added = 2, deleted = 1 } },
+    }, 25)
+
+    eq(render.text_lines(lines), {
+        ' Working changes  3 files',
+        '',
+        ' +2 −1  a.lua',
+        ' + 2 untracked',
+    })
+end
+
 T['commits()'] = new_set()
 
 local NOW = 1767225600

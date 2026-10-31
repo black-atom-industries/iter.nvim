@@ -37,10 +37,15 @@ local watch = require('iter.watch')
 ---@field panel IterPanel the window at the tab's left edge
 ---@field tree IterReviewTree the file tree page of the panel
 ---@field picker? IterPickerPage the base list page, while the panel shows it
+---@field choices? IterBaseChoice[] the items of the base list
+---@field summaries? table<integer, IterBaseSummary|false> the base list's summaries read so far, by item, false when the read failed
+---@field summary? IterBaseSummary|false the summary the diff window shows, false when its read failed
+---@field summary_buf? integer the summary's buffer, while the base list shows
+---@field summary_winopts? table<string, any> the diff window's options from before the summary
 ---@field preview IterPreview the diff of the selected file
 ---@field view IterDiffView the preview's view in the diff window
 ---@field watch? IterWatch refreshes the review on external changes
----@field preview_timer? uv.uv_timer_t runs the last scheduled preview
+---@field preview_timer? uv.uv_timer_t runs the last scheduled preview of a file or a base
 ---@field changes IterChanges the files of the review, read on every load
 ---@field annotations IterAnnotation[] stored annotations
 ---@field records table<string, IterReviewed> stored reviewed records against the current base
@@ -65,6 +70,26 @@ Review.__index = Review
 local PICKER_COMMITS = 20
 
 local PREVIEW_DELAY_MS = 50
+
+local BASE_PREVIEW_DELAY_MS = 150
+
+-- Commits since a branch the base summary lists at most.
+local BASE_COMMITS = 100
+
+-- Window options of the diff window while it shows a base summary.
+local SUMMARY_WINOPTS = {
+    number = false,
+    relativenumber = false,
+    signcolumn = 'no',
+    foldcolumn = '0',
+    statuscolumn = '',
+    list = false,
+    spell = false,
+    cursorline = false,
+    wrap = true,
+    linebreak = true,
+    breakindent = true,
+}
 
 -- Glyph and group per staging state in a tree row of working changes.
 local STAGE_ICONS = {
@@ -988,9 +1013,12 @@ function Review:select_path(path)
     return true
 end
 
---- Preview the tree's file after `PREVIEW_DELAY_MS`, replacing a preview
---- scheduled before that still waits.
-function Review:schedule_preview()
+--- Run `fn` after `delay` ms, replacing a preview scheduled before that
+--- still waits.
+---@param self IterReview
+---@param delay integer
+---@param fn fun()
+local function schedule(self, delay, fn)
     if self.closed then
         return
     end
@@ -998,23 +1026,41 @@ function Review:schedule_preview()
     self.preview_timer = self.preview_timer or assert(vim.uv.new_timer())
     self.preview_timer:stop()
     self.preview_timer:start(
-        PREVIEW_DELAY_MS,
+        delay,
         0,
         vim.schedule_wrap(function()
             if not self.closed then
-                self:show_selection(false)
+                fn()
             end
         end)
     )
 end
 
+--- Preview the tree's file after `PREVIEW_DELAY_MS`, replacing a preview
+--- scheduled before that still waits.
+function Review:schedule_preview()
+    schedule(self, PREVIEW_DELAY_MS, function()
+        self:show_selection(false)
+    end)
+end
+
 --- Show the diff of the tree's file, all its changes. A directory leaves
 --- the diff as it is; an empty tree gives the diff window its own buffer
---- back.
+--- back. While the base list shows, the diff window keeps its summary,
+--- read again when `force`.
 ---@param force boolean also when the view shows the file already
 ---@param keep_focus? boolean keep the focused annotation, as a refresh does
 function Review:show_selection(force, keep_focus)
     if not self:is_open() then
+        return
+    end
+
+    if self.picker ~= nil then
+        if force then
+            self.summaries = {}
+            self:preview_base(self.picker:index())
+        end
+
         return
     end
 
@@ -1576,7 +1622,13 @@ function Review:pick_base()
     local function back()
         local page = self.picker
 
-        self.picker = nil
+        self.picker, self.choices, self.summaries = nil, nil, nil
+
+        if self.preview_timer ~= nil then
+            self.preview_timer:stop()
+        end
+
+        self:hide_summary()
 
         if not self.closed and self.panel:is_open() then
             self:show_tree()
@@ -1592,14 +1644,26 @@ function Review:pick_base()
         self.picker:close()
     end
 
-    self.picker = picker.page({
+    ---@type IterPickerPage
+    local page
+    page = picker.page({
         title = 'Base of the review',
         items = vim.tbl_map(function(choice)
             return choice.item
         end, choices),
         sections = sections,
         keys = self.config.keys.picker,
-        on_close = back,
+        on_close = function()
+            back()
+            self:show_selection(true)
+        end,
+        on_select = function(index)
+            schedule(self, BASE_PREVIEW_DELAY_MS, function()
+                if self.picker == page then
+                    self:preview_base(index)
+                end
+            end)
+        end,
         on_pick = function(index)
             if self.closed then
                 return
@@ -1623,9 +1687,294 @@ function Review:pick_base()
             self:set_base(spec)
         end,
     })
-    self:guard_page(self.picker.buf)
-    self.panel:show(self.picker)
+    self.picker, self.choices, self.summaries = page, choices, {}
+    util.name_buf(page.buf, uri.of('review') .. '#base')
+    uri.own(page.buf, {
+        owns = function(win)
+            return win == self.panel.win
+        end,
+        reload = function()
+            if self.panel.page == page then
+                self.panel:render()
+            end
+        end,
+    })
+    self:guard_page(page.buf)
+    self.panel:show(page)
     self.panel:focus()
+end
+
+--- Open the base list, or focus it while it shows.
+function Review:show_base_list()
+    if self.picker ~= nil and self.panel.page == self.picker then
+        self.panel:focus()
+    else
+        self:pick_base()
+    end
+end
+
+--- The working changes' paths and their untracked ones.
+---@param changes IterChanges
+---@return integer working
+---@return integer untracked
+local function working_counts(changes)
+    local paths, untracked = {}, 0
+
+    for _, list in ipairs({ changes.unstaged, changes.staged }) do
+        for _, item in ipairs(list) do
+            paths[item.path] = true
+
+            if item.code == '?' then
+                untracked = untracked + 1
+            end
+        end
+    end
+
+    return vim.tbl_count(paths), untracked
+end
+
+--- What the review brings in against `choice`, read from git.
+---@param choice IterBaseChoice
+---@return IterBaseSummary?
+---@return string? error
+function Review:base_summary(choice)
+    local root = self.changes.root
+    local working, untracked = working_counts(self.changes)
+    ---@type IterBaseSummary
+    local summary = {
+        kind = 'working',
+        label = 'Working changes',
+        head = git.head_branch(root),
+        commits = {},
+        more = 0,
+        working = working,
+        untracked = untracked,
+        stats = {},
+    }
+    local base, err, stats
+
+    if choice.commit ~= nil then
+        local sha
+        sha, err = git.commit_sha(root, choice.commit)
+
+        if sha == nil then
+            return nil, err
+        end
+
+        base, err = git.parent_of(root, sha)
+
+        if base == nil then
+            return nil, err
+        end
+
+        local commits
+        commits, err = git.messages(root, sha, 'HEAD')
+
+        if commits == nil then
+            return nil, err
+        end
+
+        summary.kind, summary.label = 'commit', choice.commit
+        summary.commits, summary.commit = commits, commits[#commits]
+    elseif choice.spec ~= nil then
+        base, err = git.resolve_base(root, choice.spec)
+
+        if base == nil then
+            return nil, err
+        end
+
+        local commits, more
+        commits, err, more =
+            git.messages_since(root, base, 'HEAD', BASE_COMMITS)
+
+        if commits == nil then
+            return nil, err
+        end
+
+        summary.kind, summary.label, summary.sha =
+            'branch', choice.spec.ref, base
+        summary.commits, summary.more = commits, more
+    end
+
+    -- Before the first commit the working changes are all additions.
+    base = base or git.commit_sha(root, 'HEAD') or git.empty_tree(root)
+
+    if base == nil then
+        return nil, 'Cannot read the empty tree'
+    end
+
+    stats, err = git.stats(root, base)
+
+    if stats == nil then
+        return nil, err
+    end
+
+    summary.stats = stats
+
+    return summary
+end
+
+--- Show what base list item `index` brings in, in the diff window. Each
+--- item is read once while the list shows; a refresh reads them again.
+---@param index? integer
+function Review:preview_base(index)
+    if index == nil or self.choices == nil then
+        return
+    end
+
+    local summary = self.summaries[index]
+
+    if summary == nil then
+        local read, err = self:base_summary(self.choices[index])
+
+        if read == nil then
+            util.error(err, 'Cannot read the base')
+        end
+
+        summary = read or false
+        self.summaries[index] = summary
+    end
+
+    if not util.is_valid_win(self.diff_win) then
+        return
+    end
+
+    self.summary = summary
+    self:render_summary()
+    vim.api.nvim_win_set_cursor(self.diff_win, { 1, 0 })
+end
+
+--- Draw the summary for the diff window's width and show it there, in the
+--- view's place.
+function Review:render_summary()
+    local buf = self.summary_buf
+
+    if buf == nil or not vim.api.nvim_buf_is_valid(buf) then
+        buf = vim.api.nvim_create_buf(false, true)
+        vim.bo[buf].bufhidden = 'hide'
+        vim.bo[buf].modifiable = false
+        vim.bo[buf].filetype = 'iter'
+        util.name_buf(buf, uri.of('review') .. '#base#preview')
+        uri.own(buf, {
+            owns = function(win)
+                return win == self.diff_win
+            end,
+            reload = function()
+                if self.summary_buf == buf then
+                    self:render_summary()
+                end
+            end,
+        })
+        vim.api.nvim_create_autocmd('BufWinLeave', {
+            group = self.group,
+            buffer = buf,
+            callback = function()
+                if vim.api.nvim_get_current_win() == self.diff_win then
+                    vim.schedule(function()
+                        self:take_back_summary(buf)
+                    end)
+                end
+            end,
+        })
+        self.summary_buf = buf
+    end
+
+    local lines = self.summary
+            and layout.base_summary(
+                self.summary,
+                vim.api.nvim_win_get_width(self.diff_win)
+            )
+        or {
+            render.chunks_line({
+                { ' Cannot read this base', 'IterDrawerHint' },
+            }),
+        }
+
+    vim.bo[buf].modifiable = true
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, render.text_lines(lines))
+    vim.bo[buf].modifiable = false
+    render.apply(buf, lines)
+
+    if vim.api.nvim_win_get_buf(self.diff_win) ~= buf then
+        self.view:hide()
+        self.summary_winopts = self.summary_winopts or {}
+
+        for name in pairs(SUMMARY_WINOPTS) do
+            self.summary_winopts[name] = vim.api.nvim_get_option_value(
+                name,
+                { scope = 'local', win = self.diff_win }
+            )
+        end
+
+        vim.api.nvim_win_set_buf(self.diff_win, buf)
+    end
+
+    for name, value in pairs(SUMMARY_WINOPTS) do
+        vim.api.nvim_set_option_value(
+            name,
+            value,
+            { scope = 'local', win = self.diff_win }
+        )
+    end
+end
+
+--- Give the diff window its own buffer and options back from the summary,
+--- and wipe the summary.
+function Review:hide_summary()
+    local buf = self.summary_buf
+
+    self.summary_buf, self.summary = nil, nil
+
+    if buf == nil then
+        return
+    end
+
+    if
+        util.is_valid_win(self.diff_win)
+        and vim.api.nvim_win_get_buf(self.diff_win) == buf
+    then
+        vim.api.nvim_win_set_buf(self.diff_win, self.buf)
+
+        for name, value in pairs(self.summary_winopts or {}) do
+            vim.api.nvim_set_option_value(
+                name,
+                value,
+                { scope = 'local', win = self.diff_win }
+            )
+        end
+    end
+
+    self.summary_winopts = nil
+
+    if vim.api.nvim_buf_is_valid(buf) then
+        vim.api.nvim_buf_delete(buf, { force = true })
+    end
+end
+
+--- Show the summary `buf` in the diff window again after another buffer
+--- took its place, and open a file buffer in the tab the review came from.
+---@param buf integer
+function Review:take_back_summary(buf)
+    if
+        self.closed
+        or self.summary_buf ~= buf
+        or not util.is_valid_win(self.diff_win)
+        or vim.api.nvim_win_get_buf(self.diff_win) == buf
+    then
+        return
+    end
+
+    local path, line = self:file_in(self.diff_win)
+
+    vim.api.nvim_win_set_buf(self.diff_win, buf)
+    self:render_summary()
+    vim.api.nvim_win_call(self.diff_win, function()
+        vim.cmd.clearjumps()
+    end)
+
+    if path ~= nil then
+        self:open_file(path, line)
+    end
 end
 
 --- The paths of `files`, a renamed file's original path after its new one.
@@ -1779,6 +2128,10 @@ end
 ---@param item IterReviewRow
 ---@param force boolean
 function Review:preview_annotation(item, force)
+    if self.picker ~= nil then
+        return
+    end
+
     local annotation = item.annotation
     local files = annotation and annotation_files(self.changes, annotation)
         or {}
@@ -1868,7 +2221,7 @@ end
 function Review:jump_to(item, previewed)
     local annotation = item.annotation
 
-    if annotation == nil then
+    if annotation == nil or self.picker ~= nil then
         return
     end
 
@@ -2467,6 +2820,13 @@ function Review:resized()
     self:render()
     self.view:even_widths()
     self.view:rewrap()
+
+    if
+        self.summary ~= nil
+        and vim.api.nvim_win_get_buf(self.diff_win) == self.summary_buf
+    then
+        self:render_summary()
+    end
 end
 
 --- The file buffer that took the place of the tree or the diff, when
@@ -2491,6 +2851,7 @@ function Review:take_back(cursor)
 
     if
         self.closed
+        or self.picker ~= nil
         or not util.is_valid_win(self.diff_win)
         or self.preview.previewed == nil
         or #view.document.sections == 0
@@ -2622,6 +2983,7 @@ function Review:close()
 
     -- With its windows gone, the view only wipes its buffer.
     self.preview:close()
+    self:hide_summary()
 
     for _, page in ipairs({ self.tree, self.picker }) do
         page:close()
