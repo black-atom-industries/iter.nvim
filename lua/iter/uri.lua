@@ -115,7 +115,7 @@ local function elsewhere(kind)
     local open_root = kind == 'review'
             and review ~= nil
             and review:is_open()
-            and review.drawer.changes.root
+            and review.changes.root
         or kind == 'status' and iter.drawer ~= nil and iter.drawer:is_open() and iter.drawer.changes.root
         or kind == 'commits' and commits ~= nil and commits:is_open() and commits.root
         or nil
@@ -180,7 +180,7 @@ local function route(target, name)
             review:reveal(target.path, target.line)
         elseif target.view == 'annotations' then
             review:focus_annotations()
-        elseif target.view == 'all' and not review.drawer.all_files then
+        elseif target.view == 'all' and not review.preview.all_files then
             review:toggle_mode()
         end
     end

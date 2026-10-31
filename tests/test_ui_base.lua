@@ -1,4 +1,5 @@
 local helpers = dofile('tests/helpers.lua')
+local H = dofile('tests/helpers_review.lua')
 
 local new_set = MiniTest.new_set
 local eq = MiniTest.expect.equality
@@ -7,7 +8,7 @@ local child = MiniTest.new_child_neovim()
 ---@type string
 local repo
 
-local R = [[require('iter').current_review]]
+local R = H.R
 
 ---@param prefix string
 ---@param from integer
@@ -77,34 +78,6 @@ local function setup(options)
     child.lua('require("iter").setup(' .. options .. ')')
 end
 
---- Run `command` and wait for the review drawer.
----@param command? string
-local function open_review(command)
-    child.cmd(command or 'Iter review')
-    helpers.wait_until(
-        child,
-        R .. [[ ~= nil and ]] .. R .. [[.drawer.win ~= nil]]
-    )
-end
-
---- Wait until the review's diff pane shows `expected` (`side path`).
----@param expected string
-local function wait_diff(expected)
-    helpers.wait_until(
-        child,
-        string.format(
-            [[(function()
-                local r = %s
-                local f = r and r.drawer.view.files[1]
-                return f ~= nil and f.side .. ' ' .. f.path == %q
-                    and r.drawer.view:is_shown()
-            end)()]],
-            R,
-            expected
-        )
-    )
-end
-
 --- The file columns of the review drawer: title and `code path` of each
 --- item.
 ---@return { title: string, items: string[] }[]
@@ -122,27 +95,6 @@ local function file_columns()
     end)()]])
 end
 
---- Select the `side` item with `path` in the review drawer.
----@param side string
----@param path string
-local function select_item(side, path)
-    child.lua(
-        [[
-        local side, path = ...
-        local d = require('iter').current_review.drawer
-        for lnum, row in ipairs(d.rows) do
-            if row[side] ~= nil and row[side].path == path then
-                vim.api.nvim_win_set_cursor(d.win, { lnum, 0 })
-                d:select(lnum, side)
-                return
-            end
-        end
-        error('no row for ' .. side .. ' ' .. path)
-    ]],
-        { side, path }
-    )
-end
-
 --- Focus the diff pane and put its cursor on the first row whose text is
 --- `text`.
 ---@param text string
@@ -152,7 +104,7 @@ local function cursor_on(text)
         local text = ...
         local r = require('iter').current_review
         vim.api.nvim_set_current_win(r.diff_win)
-        for lnum, row in ipairs(r.drawer.view.rows) do
+        for lnum, row in ipairs(r.view.rows) do
             if row.text == text then
                 vim.api.nvim_win_set_cursor(r.diff_win, { lnum, 0 })
                 return
@@ -249,8 +201,8 @@ local T = new_set({
 T['open'] = new_set()
 
 T['open'][':Iter review main lists the changes since main in one column'] = function()
-    open_review('Iter review main')
-    wait_diff('base a.txt')
+    H.open(child, 'Iter review main')
+    H.wait_diff(child, 'base a.txt')
 
     eq(file_columns(), {
         {
@@ -265,16 +217,16 @@ end
 T['open']['from the wide breakpoint the column sits beside Annotations'] = function()
     setup([[{ annotate = { review_breakpoint = 1000 } }]])
     child.o.columns = 180
-    open_review('Iter review main')
-    wait_diff('base a.txt')
+    H.open(child, 'Iter review main')
+    H.wait_diff(child, 'base a.txt')
 
     helpers.expect_screenshot(child, 'base-review-wide')
 end
 
 T['open']['in a narrow drawer the header keeps the file count'] = function()
     child.o.columns = 40
-    open_review('Iter review main')
-    wait_diff('base a.txt')
+    H.open(child, 'Iter review main')
+    H.wait_diff(child, 'base a.txt')
 
     local header = child
         .lua_get('vim.wo[' .. R .. '.drawer.win].winbar')
@@ -286,7 +238,7 @@ T['open']['in a narrow drawer the header keeps the file count'] = function()
 end
 
 T['open']['without a base the review shows working changes'] = function()
-    open_review()
+    H.open(child)
 
     eq(file_columns(), {
         { title = 'Unstaged', items = { 'M b.txt', '? d.txt' } },
@@ -296,10 +248,10 @@ T['open']['without a base the review shows working changes'] = function()
 end
 
 T['open'][':Iter review on an open review switches its base'] = function()
-    open_review()
+    H.open(child)
     child.cmd('Iter review main')
 
-    helpers.wait_until(child, R .. '.drawer.changes.since ~= nil')
+    helpers.wait_until(child, R .. '.changes.since ~= nil')
     eq(file_columns()[1].title, 'Since main')
     eq(stored_base(), { kind = 'branch', ref = 'main' })
 end
@@ -341,8 +293,8 @@ end
 T['open'][':Iter review with a typed ref names it in the header'] = function()
     local add = rev({ 'rev-parse', 'feat~1' })
 
-    open_review('Iter review feat~1')
-    wait_diff('base a.txt')
+    H.open(child, 'Iter review feat~1')
+    H.wait_diff(child, 'base a.txt')
 
     eq(file_columns(), {
         { title = 'Since feat~1', items = { 'M a.txt', 'M b.txt', '? d.txt' } },
@@ -369,15 +321,15 @@ end
 T['diff'] = new_set()
 
 T['diff']['= shows every file since the base in one scroll'] = function()
-    open_review('Iter review main')
-    wait_diff('base a.txt')
+    H.open(child, 'Iter review main')
+    H.wait_diff(child, 'base a.txt')
     child.type_keys('=')
-    helpers.wait_until(child, R .. '.drawer.all_shown')
+    helpers.wait_until(child, R .. '.preview.all_shown')
 
     eq(
         child.lua_get([[vim.tbl_map(function(section)
             return section.key
-        end, ]] .. R .. [[.drawer.view.document.sections)]]),
+        end, ]] .. R .. [[.view.document.sections)]]),
         { 'base\0a.txt', 'base\0b.txt', 'base\0c.txt', 'base\0d.txt' }
     )
     helpers.expect_screenshot(child, 'base-all-files')
@@ -385,17 +337,17 @@ end
 
 T['diff']['| shows the diff side by side, the base on the left'] = function()
     child.o.columns = 120
-    open_review('Iter review main')
-    wait_diff('base a.txt')
+    H.open(child, 'Iter review main')
+    H.wait_diff(child, 'base a.txt')
     child.type_keys('|')
-    helpers.wait_until(child, R .. '.drawer.view.layout == "split"')
+    helpers.wait_until(child, R .. '.view.layout == "split"')
 
     helpers.expect_screenshot(child, 'base-split')
 end
 
 T['diff']['the footer offers b in place of the staging keys'] = function()
-    open_review('Iter review main')
-    wait_diff('base a.txt')
+    H.open(child, 'Iter review main')
+    H.wait_diff(child, 'base a.txt')
 
     local footer = child.lua_get([[(function()
         local text = {}
@@ -414,14 +366,14 @@ T['refusals'] = new_set()
 
 T['refusals']['s, u, d and I on a base row warn and change nothing'] = function()
     setup([[{ confirm = { discard = false, ignore = false } }]])
-    open_review('Iter review main')
-    wait_diff('base a.txt')
+    H.open(child, 'Iter review main')
+    H.wait_diff(child, 'base a.txt')
 
     local before = index_state()
 
-    select_item('base', 'b.txt')
+    H.select(child, 'base', 'b.txt')
     child.type_keys('s', 'u', 'd')
-    select_item('base', 'd.txt')
+    H.select(child, 'base', 'd.txt')
     child.type_keys('d', 'I')
 
     eq(child.lua_get('_G.notes'), {
@@ -441,9 +393,9 @@ T['refusals']['s, u, d and I on a base row warn and change nothing'] = function(
 end
 
 T['refusals']['hunk and line staging in the diff warn and change nothing'] = function()
-    open_review('Iter review main')
-    select_item('base', 'b.txt')
-    wait_diff('base b.txt')
+    H.open(child, 'Iter review main')
+    H.select(child, 'base', 'b.txt')
+    H.wait_diff(child, 'base b.txt')
 
     local before = index_state()
 
@@ -473,7 +425,7 @@ end
 T['picker'] = new_set()
 
 T['picker']['b offers the parent first, working changes, branches and commits'] = function()
-    open_review()
+    H.open(child)
     child.type_keys('b')
 
     local items = picker_items()
@@ -512,7 +464,7 @@ end
 
 T['picker']['sections title the branches and the commits'] = function()
     helpers.git(repo, { 'branch', 'other', 'main' })
-    open_review()
+    H.open(child)
     child.type_keys('b')
 
     eq(picker_items()[3], 'other')
@@ -527,7 +479,7 @@ T['picker']['on the default branch the upstream merge base follows working chang
 
     local pushed = rev({ 'rev-parse', '--short', 'origin/main' })
 
-    open_review()
+    H.open(child)
     child.type_keys('b')
 
     local items = picker_items()
@@ -537,13 +489,13 @@ T['picker']['on the default branch the upstream merge base follows working chang
     eq(vim.tbl_contains(items, 'main'), false)
 
     pick('Merge base with origin/main')
-    helpers.wait_until(child, R .. '.drawer.changes.since ~= nil')
+    helpers.wait_until(child, R .. '.changes.since ~= nil')
     eq(file_columns()[1].title, 'Since origin/main')
     eq(file_columns()[1].items, { 'M b.txt', '? d.txt', 'M main.txt' })
 end
 
 T['picker']['b opens over the drawer, q goes back without a change'] = function()
-    open_review()
+    H.open(child)
     child.type_keys('b')
     picker_items()
 
@@ -572,7 +524,7 @@ end
 T['picker']['b in the Annotations column opens over the whole drawer'] = function()
     setup([[{ annotate = { review_breakpoint = 1000 } }]])
     child.o.columns = 200
-    open_review()
+    H.open(child)
     child.type_keys('l')
     helpers.wait_until(
         child,
@@ -596,7 +548,7 @@ end
 
 T['picker']['a refresh keeps the picker open and focused'] = function()
     setup([[{ refresh = { poll_ms = 100 } }]])
-    open_review()
+    H.open(child)
     child.type_keys('b')
     picker_items()
 
@@ -615,21 +567,21 @@ T['picker']['a refresh keeps the picker open and focused'] = function()
 end
 
 T['picker']['a picked branch shows and is remembered for the branch'] = function()
-    open_review()
+    H.open(child)
     pick('Merge base with main')
 
-    helpers.wait_until(child, R .. '.drawer.changes.since ~= nil')
+    helpers.wait_until(child, R .. '.changes.since ~= nil')
     eq(file_columns()[1].title, 'Since main')
     eq(child.lua_get(R .. '.drawer:selected().path'), 'a.txt')
 
     child.type_keys('q')
-    open_review()
+    H.open(child)
 
     eq(file_columns()[1].title, 'Since main')
 
     pick('Working changes')
 
-    helpers.wait_until(child, R .. '.drawer.changes.since == nil')
+    helpers.wait_until(child, R .. '.changes.since == nil')
     eq(file_columns()[1].title, 'Unstaged')
     eq(stored_base(), vim.NIL)
 end
@@ -637,10 +589,10 @@ end
 T['picker']['a picked commit is part of the review'] = function()
     local edit = rev({ 'rev-parse', 'feat' })
 
-    open_review()
+    H.open(child)
     pick(edit:sub(1, 7))
 
-    helpers.wait_until(child, R .. '.drawer.changes.since ~= nil')
+    helpers.wait_until(child, R .. '.changes.since ~= nil')
     eq(file_columns(), {
         {
             title = 'From ' .. edit:sub(1, 7),
@@ -656,20 +608,20 @@ end
 
 T['picker']['on a detached HEAD a pick applies to the open review only'] = function()
     helpers.git(repo, { 'switch', '--quiet', '--detach' })
-    open_review()
+    H.open(child)
     pick('Merge base with main')
 
-    helpers.wait_until(child, R .. '.drawer.changes.since ~= nil')
+    helpers.wait_until(child, R .. '.changes.since ~= nil')
     eq(file_columns()[1].title, 'Since main')
     eq(stored_base(), vim.NIL)
 
     child.cmd('Iter review feat~1')
-    helpers.wait_until(child, R .. '.drawer.changes.since.label == "feat~1"')
+    helpers.wait_until(child, R .. '.changes.since.label == "feat~1"')
     eq(stored_base(), vim.NIL)
 end
 
 T['picker']['? lists b'] = function()
-    open_review()
+    H.open(child)
     child.type_keys('?')
 
     local lines = child.api.nvim_buf_get_lines(0, 0, -1, false)
@@ -705,7 +657,7 @@ end
 ---@param side string
 ---@param path string
 local function mark(side, path)
-    select_item(side, path)
+    H.select(child, side, path)
     child.type_keys('r')
     helpers.wait_until(
         child,
@@ -721,12 +673,12 @@ local function switch(label, since)
     pick(label)
     helpers.wait_until(
         child,
-        R .. '.drawer.changes.since ' .. (since and '~=' or '==') .. ' nil'
+        R .. '.changes.since ' .. (since and '~=' or '==') .. ' nil'
     )
 end
 
 T['reviewed']['a mark in working changes does not show since main'] = function()
-    open_review()
+    H.open(child)
     mark('unstaged', 'b.txt')
     eq(row_line('unstaged', 'b.txt'):find('✓', 1, true) ~= nil, true)
 
@@ -739,7 +691,7 @@ T['reviewed']['a mark in working changes does not show since main'] = function()
 end
 
 T['reviewed']['a mark since main does not show in working changes'] = function()
-    open_review('Iter review main')
+    H.open(child, 'Iter review main')
     mark('base', 'b.txt')
     eq(row_line('base', 'b.txt'):find('✓', 1, true) ~= nil, true)
 
@@ -767,7 +719,7 @@ T['base']['a remembered branch that is gone falls back to working changes'] = fu
     )
     helpers.git(repo, { 'branch', '-D', 'old' })
 
-    open_review()
+    H.open(child)
 
     eq(file_columns()[1].title, 'Unstaged')
     eq(#child.lua_get('_G.notes'), 1)
@@ -790,7 +742,7 @@ T['base']['a remembered commit no longer in the history of HEAD falls back to wo
     )
     helpers.git(repo, { 'commit', '--quiet', '--amend', '-m', 'edit a again' })
 
-    open_review()
+    H.open(child)
 
     eq(file_columns()[1].title, 'Unstaged')
     eq(child.lua_get('_G.notes'), {
@@ -806,8 +758,8 @@ end
 
 T['base']['a refresh resolves the base again'] = function()
     setup([[{ refresh = { poll_ms = 100 } }]])
-    open_review('Iter review main')
-    wait_diff('base a.txt')
+    H.open(child, 'Iter review main')
+    H.wait_diff(child, 'base a.txt')
 
     helpers.git(repo, { 'merge', '--quiet', '--no-edit', 'main' })
 
@@ -815,7 +767,7 @@ T['base']['a refresh resolves the base again'] = function()
 
     helpers.wait_until(
         child,
-        string.format('%s.drawer.changes.since.sha == %q', R, main)
+        string.format('%s.changes.since.sha == %q', R, main)
     )
     eq(file_columns()[1].items, { 'M a.txt', 'M b.txt', 'A c.txt', '? d.txt' })
 end
@@ -837,14 +789,14 @@ T['base']['a checkout switches to the base the new branch remembers'] = function
 
     other_with_base({ kind = 'commit', sha = main })
     setup([[{ refresh = { poll_ms = 100 } }]])
-    open_review('Iter review main')
-    wait_diff('base a.txt')
+    H.open(child, 'Iter review main')
+    H.wait_diff(child, 'base a.txt')
 
     helpers.git(repo, { 'switch', '--quiet', 'other' })
     helpers.wait_until(
         child,
         string.format(
-            '%s.drawer.changes.since ~= nil and %s.drawer.changes.since.label == %q',
+            '%s.changes.since ~= nil and %s.changes.since.label == %q',
             R,
             R,
             main:sub(1, 7)
@@ -858,9 +810,9 @@ T['base']['a checkout switches to the base the new branch remembers'] = function
     helpers.wait_until(
         child,
         R
-            .. '.drawer.changes.since ~= nil and '
+            .. '.changes.since ~= nil and '
             .. R
-            .. '.drawer.changes.since.label == "main"'
+            .. '.changes.since.label == "main"'
     )
     eq(stored_base(), { kind = 'branch', ref = 'main' })
 end
@@ -868,11 +820,11 @@ end
 T['base']['a checkout to a branch whose base is gone keeps its store'] = function()
     other_with_base({ kind = 'branch', ref = 'gone' })
     setup([[{ refresh = { poll_ms = 100 } }]])
-    open_review('Iter review main')
-    wait_diff('base a.txt')
+    H.open(child, 'Iter review main')
+    H.wait_diff(child, 'base a.txt')
 
     helpers.git(repo, { 'switch', '--quiet', 'other' })
-    helpers.wait_until(child, R .. '.drawer.changes.since == nil')
+    helpers.wait_until(child, R .. '.changes.since == nil')
 
     eq(file_columns()[1].title, 'Unstaged')
     eq(
@@ -894,15 +846,15 @@ T['annotations'] = new_set()
 ---@return table
 local function annotate_deleted(body, split)
     child.o.columns = 120
-    open_review('Iter review main')
-    wait_diff('base a.txt')
+    H.open(child, 'Iter review main')
+    H.wait_diff(child, 'base a.txt')
 
     if split then
         child.lua([[vim.api.nvim_set_current_win(]] .. R .. [[.diff_win)]])
         child.type_keys('|')
-        helpers.wait_until(child, R .. '.drawer.view.old ~= nil')
+        helpers.wait_until(child, R .. '.view.old ~= nil')
         child.lua([[
-            local v = require('iter').current_review.drawer.view
+            local v = require('iter').current_review.view
             vim.api.nvim_set_current_win(v.old.win)
             for lnum, line in ipairs(
                 vim.api.nvim_buf_get_lines(v.old.buf, 0, -1, false)
@@ -930,10 +882,10 @@ end
 --- row it sits on in the old version's pane.
 ---@return table
 local function deleted_mark()
-    helpers.wait_until(child, R .. '.drawer.view.marks[1] ~= nil')
+    helpers.wait_until(child, R .. '.view.marks[1] ~= nil')
 
     return child.lua_get([[(function()
-        local v = ]] .. R .. [[.drawer.view
+        local v = ]] .. R .. [[.view
         local mark = v.marks[1]
         local rows = v.old and v.old.rows or v.rows
         local row = rows[mark.lnum]
@@ -999,10 +951,10 @@ end
 T['annotations']['a deleted line from a picked commit keeps its parent and sits on its del row'] = function()
     local edit = rev({ 'rev-parse', 'feat' })
 
-    open_review()
+    H.open(child)
     pick(edit:sub(1, 7))
-    helpers.wait_until(child, R .. '.drawer.changes.since ~= nil')
-    wait_diff('base a.txt')
+    helpers.wait_until(child, R .. '.changes.since ~= nil')
+    H.wait_diff(child, 'base a.txt')
     cursor_on('a3')
     child.type_keys('a')
     helpers.wait_until(child, [[require('iter.annotations.editor').is_shown()]])

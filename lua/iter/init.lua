@@ -279,12 +279,11 @@ end
 ---@return IterChangesBase? since
 local function annotation_scope()
     local review = open_review()
-    local root = review and review.drawer.changes.root
-        or require('iter.git').root()
+    local root = review and review.changes.root or require('iter.git').root()
     local order = {}
 
     if review ~= nil then
-        for _, item in ipairs(review.drawer:files()) do
+        for _, item in ipairs(review:files()) do
             table.insert(order, item.path)
 
             if item.orig_path ~= nil then

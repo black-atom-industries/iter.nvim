@@ -1,4 +1,5 @@
 local helpers = dofile('tests/helpers.lua')
+local H = dofile('tests/helpers_review.lua')
 
 local new_set = MiniTest.new_set
 local eq = MiniTest.expect.equality
@@ -7,7 +8,7 @@ local child = MiniTest.new_child_neovim()
 ---@type string
 local repo
 
-local R = [[require('iter').current_review]]
+local R = H.R
 
 ---@param prefix string
 ---@param from integer
@@ -63,27 +64,25 @@ local function open_all()
     child.cmd('Iter review')
     helpers.wait_until(
         child,
-        R .. [[ ~= nil and ]] .. R .. [[.drawer.view:is_shown()]]
+        R .. [[ ~= nil and ]] .. R .. [[.view:is_shown()]]
     )
     child.type_keys('=')
-    helpers.wait_until(child, R .. [[.drawer.view.document.sections[3] ~= nil]])
+    helpers.wait_until(child, R .. [[.view.document.sections[3] ~= nil]])
 end
 
 ---@return string[]
 local function pane_lines()
     return child.lua_get(
-        [[vim.api.nvim_buf_get_lines(]]
-            .. R
-            .. [[.drawer.view.buf, 0, -1, false)]]
+        [[vim.api.nvim_buf_get_lines(]] .. R .. [[.view.buf, 0, -1, false)]]
     )
 end
 
----@return string? side and path of the drawer selection
-local function selected()
-    return child.lua_get([[(function()
-        local item = ]] .. R .. [[.drawer:selected()
-        return item and (item.side .. ' ' .. item.path) or vim.NIL
-    end)()]])
+--- Focus the file list and select the `side` item with `path` there.
+---@param side string
+---@param path string
+local function select_item(side, path)
+    H.focus_list(child)
+    H.select(child, side, path)
 end
 
 --- Focus the diff pane and put its cursor on the first row whose text is
@@ -96,7 +95,7 @@ local function cursor_on(text, kind)
         local text, kind = ...
         local r = require('iter').current_review
         vim.api.nvim_set_current_win(r.diff_win)
-        for lnum, row in ipairs(r.drawer.view.rows) do
+        for lnum, row in ipairs(r.view.rows) do
             if row.text == text and (kind == nil or row.kind == kind) then
                 vim.api.nvim_win_set_cursor(r.diff_win, { lnum, 0 })
                 return
@@ -113,31 +112,9 @@ local function cursor_row()
     return child.lua_get([[(function()
         local r = require('iter').current_review
         local lnum = vim.api.nvim_win_get_cursor(r.diff_win)[1]
-        local row = r.drawer.view.rows[lnum]
+        local row = r.view.rows[lnum]
         return row.kind .. ' ' .. row.text
     end)()]])
-end
-
---- Select the `side` item with `path` in the review drawer.
----@param side string
----@param path string
-local function select_item(side, path)
-    child.lua(
-        [[
-        local side, path = ...
-        local d = require('iter').current_review.drawer
-        vim.api.nvim_set_current_win(d.win)
-        for lnum, row in ipairs(d.rows) do
-            if row[side] ~= nil and row[side].path == path then
-                vim.api.nvim_win_set_cursor(d.win, { lnum, 0 })
-                d:select(lnum, side)
-                return
-            end
-        end
-        error('no row ' .. side .. ' ' .. path)
-    ]],
-        { side, path }
-    )
 end
 
 ---@return string
@@ -206,7 +183,7 @@ T['mode']['m toggles back to the selected file'] = function()
 
     child.type_keys('=')
 
-    eq(child.lua_get(R .. [[.drawer.view.document.sections[2] == nil]]), true)
+    eq(child.lua_get(R .. [[.view.document.sections[2] == nil]]), true)
     eq(pane_lines(), { 'c.txt', '@@ -1 +1 @@', 'c', 'cx' })
     eq(cursor_row(), 'del c')
     eq(statusline(), 'review · c.txt · 3/3')
@@ -219,11 +196,11 @@ end
 T['mode']['an untracked header reads untracked and counts only annotations'] = function()
     helpers.write_file(vim.fs.joinpath(repo, 'd.txt'), { 'd1', 'd2' })
     open_all()
-    helpers.wait_until(child, R .. [[.drawer.view.document.sections[4] ~= nil]])
+    helpers.wait_until(child, R .. [[.view.document.sections[4] ~= nil]])
 
     local header = [[(function()
         local r = require('iter').current_review
-        local view = r.drawer.view
+        local view = r.view
         local result = {}
         for index, section in ipairs(view.document.sections) do
             local ns = vim.api.nvim_get_namespaces()['iter.diff']
@@ -259,7 +236,7 @@ T['mode']['the key hint line names the other mode'] = function()
     child.cmd('Iter review')
     helpers.wait_until(
         child,
-        R .. [[ ~= nil and ]] .. R .. [[.drawer.view:is_shown()]]
+        R .. [[ ~= nil and ]] .. R .. [[.view:is_shown()]]
     )
     eq(child.lua_get(footer):find('= all files', 1, true) ~= nil, true)
 
@@ -271,7 +248,7 @@ T['mode']['stays for the review tab until it closes'] = function()
     open_all()
     select_item('unstaged', 'b.txt')
     child.type_keys('<C-d>')
-    eq(child.lua_get(R .. [[.drawer.all_files]]), true)
+    eq(child.lua_get(R .. [[.preview.all_files]]), true)
     eq(#pane_lines() > 20, true)
 
     child.type_keys('q')
@@ -279,12 +256,12 @@ T['mode']['stays for the review tab until it closes'] = function()
     child.cmd('Iter review')
     helpers.wait_until(
         child,
-        R .. [[ ~= nil and ]] .. R .. [[.drawer.view:is_shown()]]
+        R .. [[ ~= nil and ]] .. R .. [[.view:is_shown()]]
     )
 
-    eq(child.lua_get(R .. [[.drawer.all_files]]), false)
+    eq(child.lua_get(R .. [[.preview.all_files]]), false)
     eq(pane_lines()[1], 'a.txt')
-    eq(child.lua_get(R .. [[.drawer.view.document.sections[2] == nil]]), true)
+    eq(child.lua_get(R .. [[.view.document.sections[2] == nil]]), true)
 end
 
 T['follow'] = new_set()
@@ -292,12 +269,12 @@ T['follow'] = new_set()
 T['follow']['the drawer selection follows the cursor across a file boundary'] = function()
     open_all()
     cursor_on('ax')
-    eq(selected(), 'unstaged a.txt')
+    eq(H.selected(child), 'unstaged a.txt')
 
-    local generation = child.lua_get(R .. [[.drawer.view.generation]])
+    local generation = child.lua_get(R .. [[.view.generation]])
 
     child.type_keys('j')
-    eq(selected(), 'unstaged a.txt')
+    eq(H.selected(child), 'unstaged a.txt')
     child.type_keys('j')
     helpers.wait_until(child, R .. [[.drawer:selected().path == 'b.txt']])
     eq(cursor_row(), 'header b.txt')
@@ -312,7 +289,7 @@ T['follow']['the drawer selection follows the cursor across a file boundary'] = 
         true
     )
     child.lua('vim.wait(100)')
-    eq(child.lua_get(R .. [[.drawer.view.generation]]), generation)
+    eq(child.lua_get(R .. [[.view.generation]]), generation)
     eq(cursor_row(), 'add cx')
 end
 
@@ -326,7 +303,7 @@ T['follow']['selecting a file in the drawer puts its header on top'] = function(
             [[(function()
         local r = %s
         local lnum = vim.api.nvim_win_get_cursor(r.diff_win)[1]
-        return r.drawer.view.rows[lnum].text == 'c.txt'
+        return r.view.rows[lnum].text == 'c.txt'
     end)()]],
             R
         )
@@ -334,7 +311,7 @@ T['follow']['selecting a file in the drawer puts its header on top'] = function(
     eq(cursor_row(), 'header c.txt')
     eq(
         child.lua_get([[vim.fn.line('w0', ]] .. R .. [[.diff_win)]]),
-        child.lua_get(R .. [[.drawer.view.document.sections[3].first]])
+        child.lua_get(R .. [[.view.document.sections[3].first]])
     )
     eq(
         child.lua_get(
@@ -352,19 +329,19 @@ T['jumps'][']f and [f land on file headers'] = function()
 
     child.type_keys(']f')
     eq(cursor_row(), 'header b.txt')
-    eq(selected(), 'unstaged b.txt')
+    eq(H.selected(child), 'unstaged b.txt')
     child.type_keys(']f')
     eq(cursor_row(), 'header c.txt')
-    eq(selected(), 'unstaged c.txt')
+    eq(H.selected(child), 'unstaged c.txt')
     child.type_keys(']f')
     eq(cursor_row(), 'header c.txt')
 
     child.type_keys('[f')
     eq(cursor_row(), 'header b.txt')
-    eq(selected(), 'unstaged b.txt')
+    eq(H.selected(child), 'unstaged b.txt')
     child.type_keys('[f', '[f')
     eq(cursor_row(), 'header a.txt')
-    eq(selected(), 'unstaged a.txt')
+    eq(H.selected(child), 'unstaged a.txt')
 end
 
 T['jumps'][']c and [c move across files'] = function()
@@ -375,7 +352,7 @@ T['jumps'][']c and [c move across files'] = function()
     eq(cursor_row(), 'hunk @@ -1,4 +1,4 @@')
     child.type_keys(']c', ']c')
     eq(cursor_row(), 'hunk @@ -1 +1 @@')
-    eq(selected(), 'unstaged c.txt')
+    eq(H.selected(child), 'unstaged c.txt')
     child.type_keys('[c')
     eq(cursor_row(), 'hunk @@ -17,4 +17,4 @@ b16')
 end
@@ -390,7 +367,7 @@ T['jumps']['<CR> on a gap expands it and keeps the files below'] = function()
     eq(vim.list_contains(lines, 'b10'), true)
     eq(vim.list_slice(lines, #lines - 3), { 'c.txt', '@@ -1 +1 @@', 'c', 'cx' })
     cursor_on('cx')
-    eq(selected(), 'unstaged c.txt')
+    eq(H.selected(child), 'unstaged c.txt')
 end
 
 T['jumps']['an edit from outside redraws its file and keeps the others'] = function()
@@ -398,21 +375,21 @@ T['jumps']['an edit from outside redraws its file and keeps the others'] = funct
     cursor_on('', 'gap')
     child.type_keys('<CR>')
     cursor_on('b20x')
-    child.lua('_G.b = ' .. R .. '.drawer.view.document.sections[2].file')
+    child.lua('_G.b = ' .. R .. '.view.document.sections[2].file')
 
     helpers.write_file(vim.fs.joinpath(repo, 'c.txt'), { 'cy' })
     helpers.wait_until(
         child,
         'vim.list_contains(vim.api.nvim_buf_get_lines('
             .. R
-            .. ".drawer.view.buf, 0, -1, false), 'cy')",
+            .. ".view.buf, 0, -1, false), 'cy')",
         6000
     )
 
     eq(cursor_row(), 'add b20x')
     eq(
         child.lua_get(
-            'rawequal(_G.b, ' .. R .. '.drawer.view.document.sections[2].file)'
+            'rawequal(_G.b, ' .. R .. '.view.document.sections[2].file)'
         ),
         true
     )
@@ -426,7 +403,7 @@ T['staging']['s stages the hunk of the second file under the cursor'] = function
     cursor_on('b20x')
     child.type_keys('s')
 
-    helpers.wait_until(child, R .. [[.drawer.view.document.sections[4] ~= nil]])
+    helpers.wait_until(child, R .. [[.view.document.sections[4] ~= nil]])
     eq(git_out({ 'diff', '--cached', '--name-only' }), 'b.txt\n')
     eq(git_out({ 'diff', '--cached' }):find('+b20x', 1, true) ~= nil, true)
     eq(git_out({ 'diff', '--cached' }):find('+b1x', 1, true), nil)
@@ -437,13 +414,13 @@ T['staging']['s stages the hunk of the second file under the cursor'] = function
         child.lua_get(
             [[vim.tbl_map(function(s) return s.key:gsub('%z', ' ') end, ]]
                 .. R
-                .. [[.drawer.view.document.sections)]]
+                .. [[.view.document.sections)]]
         ),
         { 'unstaged a.txt', 'unstaged b.txt', 'unstaged c.txt', 'staged b.txt' }
     )
     eq(cursor_row(), 'hunk @@ -1,4 +1,4 @@')
-    eq(selected(), 'unstaged b.txt')
-    eq(child.lua_get(R .. [[.drawer.all_files]]), true)
+    eq(H.selected(child), 'unstaged b.txt')
+    eq(child.lua_get(R .. [[.preview.all_files]]), true)
     eq(child.lua_get('_G.notes'), {})
 end
 
@@ -451,7 +428,7 @@ end
 ---@return string
 local function cursor_section()
     return child.lua_get([[(function()
-        local section = ]] .. R .. [[.drawer.view:at()
+        local section = ]] .. R .. [[.view:at()
         return (section.key:gsub('%z', ' '))
     end)()]])
 end
@@ -465,12 +442,12 @@ T['staging']['the last hunk of a file follows it to the other side, and back'] =
         child,
         [[require('iter.diff.document').find(]]
             .. R
-            .. [[.drawer.view.document, 'staged\0a.txt') ~= nil]]
+            .. [[.view.document, 'staged\0a.txt') ~= nil]]
     )
     eq(git_out({ 'diff', '--cached', '--name-only' }), 'a.txt\n')
     eq(cursor_section(), 'staged a.txt')
     eq(cursor_row(), 'add ax')
-    eq(selected(), 'staged a.txt')
+    eq(H.selected(child), 'staged a.txt')
 
     cursor_on('ax')
     child.type_keys('u')
@@ -479,11 +456,11 @@ T['staging']['the last hunk of a file follows it to the other side, and back'] =
         child,
         [[require('iter.diff.document').find(]]
             .. R
-            .. [[.drawer.view.document, 'staged\0a.txt') == nil]]
+            .. [[.view.document, 'staged\0a.txt') == nil]]
     )
     eq(git_out({ 'diff', '--cached' }), '')
     eq(cursor_section(), 'unstaged a.txt')
-    eq(selected(), 'unstaged a.txt')
+    eq(H.selected(child), 'unstaged a.txt')
     eq(child.lua_get('_G.notes'), {})
 end
 
@@ -504,7 +481,7 @@ T['staging']['visual s stages lines within one file'] = function()
     cursor_on('b20', 'del')
     child.type_keys('V', 'j', 's')
 
-    helpers.wait_until(child, R .. [[.drawer.view.document.sections[4] ~= nil]])
+    helpers.wait_until(child, R .. [[.view.document.sections[4] ~= nil]])
     eq(git_out({ 'diff', '--cached' }):find('+b20x', 1, true) ~= nil, true)
     eq(git_out({ 'diff', '--cached' }):find('+b1x', 1, true), nil)
 end
@@ -518,7 +495,7 @@ T['annotations']['a annotates a line of the third file'] = function()
     child.type_keys('a')
     helpers.wait_until(child, [[require('iter.annotations.editor').is_shown()]])
     child.type_keys('Check c', '<C-s>')
-    helpers.wait_until(child, '#' .. R .. '.drawer.view.marks == 1')
+    helpers.wait_until(child, '#' .. R .. '.view.marks == 1')
 
     local stored = child.lua_get(
         [[require('iter.store').load(vim.fn.getcwd()).annotations]]
@@ -529,13 +506,13 @@ T['annotations']['a annotates a line of the third file'] = function()
 
     -- The mark sits below the row in the third file, and ]a finds it from the
     -- top of the first.
-    local lnum = child.lua_get(R .. [[.drawer.view.marks[1].lnum]])
-    eq(child.lua_get(R .. [[.drawer.view.rows[...].text]], { lnum }), 'cx')
+    local lnum = child.lua_get(R .. [[.view.marks[1].lnum]])
+    eq(child.lua_get(R .. [[.view.rows[...].text]], { lnum }), 'cx')
 
     cursor_on('ax')
     child.type_keys(']a')
     eq(cursor_row(), 'add cx')
-    eq(selected(), 'unstaged c.txt')
+    eq(H.selected(child), 'unstaged c.txt')
 end
 
 T['annotations']['the Annotations column shows its annotation in all files'] = function()
@@ -545,20 +522,20 @@ T['annotations']['the Annotations column shows its annotation in all files'] = f
     child.type_keys('a')
     helpers.wait_until(child, [[require('iter.annotations.editor').is_shown()]])
     child.type_keys('Check c', '<C-s>')
-    helpers.wait_until(child, '#' .. R .. '.drawer.view.marks == 1')
+    helpers.wait_until(child, '#' .. R .. '.view.marks == 1')
 
     cursor_on('ax')
     child.lua('vim.api.nvim_set_current_win(' .. R .. '.drawer.win)')
     child.type_keys('l')
 
-    local lnum = child.lua_get(R .. [[.drawer.view.marks[1].lnum]])
+    local lnum = child.lua_get(R .. [[.view.marks[1].lnum]])
 
     helpers.wait_until(
         child,
         'vim.api.nvim_win_get_cursor(' .. R .. '.diff_win)[1] == ' .. lnum
     )
-    eq(child.lua_get(R .. [[.drawer.all_files]]), true)
-    eq(child.lua_get('#' .. R .. [[.drawer.view.document.sections]]), 3)
+    eq(child.lua_get(R .. [[.preview.all_files]]), true)
+    eq(child.lua_get('#' .. R .. [[.view.document.sections]]), 3)
     eq(cursor_section(), 'unstaged c.txt')
     eq(cursor_row(), 'add cx')
 end
@@ -577,17 +554,17 @@ T['annotations']['<CR> in the column jumps to the side the preview showed'] = fu
     child.cmd('Iter review')
     helpers.wait_until(
         child,
-        R .. [[ ~= nil and ]] .. R .. [[.drawer.view:is_shown()]]
+        R .. [[ ~= nil and ]] .. R .. [[.view:is_shown()]]
     )
     child.type_keys('=')
-    helpers.wait_until(child, R .. [[.drawer.view.document.sections[4] ~= nil]])
+    helpers.wait_until(child, R .. [[.view.document.sections[4] ~= nil]])
 
     cursor_on('b1x', 'add')
     eq(cursor_section(), 'staged b.txt')
     child.type_keys('a')
     helpers.wait_until(child, [[require('iter.annotations.editor').is_shown()]])
     child.type_keys('Staged line', '<C-s>')
-    helpers.wait_until(child, '#' .. R .. '.drawer.view.marks == 2')
+    helpers.wait_until(child, '#' .. R .. '.view.marks == 2')
 
     cursor_on('ax')
     child.lua('vim.api.nvim_set_current_win(' .. R .. '.drawer.win)')
@@ -598,7 +575,7 @@ T['annotations']['<CR> in the column jumps to the side the preview showed'] = fu
             [[(function()
         local r = %s
         local lnum = vim.api.nvim_win_get_cursor(r.diff_win)[1]
-        return r.drawer.view.rows[lnum].text == 'b1x'
+        return r.view.rows[lnum].text == 'b1x'
     end)()]],
             R
         )
@@ -620,7 +597,7 @@ T['annotations']['A annotates the file under the cursor'] = function()
     child.type_keys('A')
     helpers.wait_until(child, [[require('iter.annotations.editor').is_shown()]])
     child.type_keys('About b', '<C-s>')
-    helpers.wait_until(child, '#' .. R .. '.drawer.view.marks == 1')
+    helpers.wait_until(child, '#' .. R .. '.view.marks == 1')
 
     local stored = child.lua_get(
         [[require('iter.store').load(vim.fn.getcwd()).annotations]]
@@ -637,7 +614,7 @@ T['reviewed']['r marks the file under the cursor'] = function()
 
     helpers.wait_until(child, R .. [[.reviewed['c.txt'] == 'reviewed']])
     eq(child.lua_get(R .. ".reviewed['a.txt']"), 'unreviewed')
-    eq(child.lua_get(R .. [[.drawer.all_files]]), true)
+    eq(child.lua_get(R .. [[.preview.all_files]]), true)
     eq(cursor_row(), 'header c.txt')
 end
 
@@ -691,16 +668,13 @@ T['viewport']['a large review decorates only around the lines in view'] = functi
     child.cmd('Iter review')
     helpers.wait_until(
         child,
-        R .. [[ ~= nil and ]] .. R .. [[.drawer.view:is_shown()]]
+        R .. [[ ~= nil and ]] .. R .. [[.view:is_shown()]]
     )
     child.type_keys('=')
-    helpers.wait_until(
-        child,
-        R .. [[.drawer.view.document.sections[40] ~= nil]]
-    )
+    helpers.wait_until(child, R .. [[.view.document.sections[40] ~= nil]])
 
     local words = [[(function()
-        local view = ]] .. R .. [[.drawer.view
+        local view = ]] .. R .. [[.view
         local ns = vim.api.nvim_get_namespaces()['iter.diff.words']
         local marks = vim.api.nvim_buf_get_extmarks(view.buf, ns, 0, -1, {})
         local first, last = math.huge, 0
@@ -728,7 +702,7 @@ T['viewport']['a large review decorates only around the lines in view'] = functi
     local after = child.lua_get(words)
     eq(after.first < 10, true)
     eq(after.count > before.count, true)
-    eq(selected(), 'unstaged f40.txt')
+    eq(H.selected(child), 'unstaged f40.txt')
 end
 
 T['collapse'] = new_set()
@@ -746,7 +720,7 @@ end
 ---@param index integer
 ---@return string
 local function collapsed(index)
-    return R .. '.drawer.view.document.sections[' .. index .. '].collapsed'
+    return R .. '.view.document.sections[' .. index .. '].collapsed'
 end
 
 --- The text at the right of the header row of section `index`.
@@ -755,7 +729,7 @@ end
 local function header_right(index)
     return child.lua_get(
         [[(function(index)
-        local view = require('iter').current_review.drawer.view
+        local view = require('iter').current_review.view
         local ns = vim.api.nvim_get_namespaces()['iter.diff']
         local lnum = view.document.sections[index].first - 1
         local text = ''
@@ -792,7 +766,7 @@ T['collapse']['r collapses the file to its header, R on the header expands it'] 
         'cx',
     })
     eq(cursor_row(), 'del c')
-    eq(selected(), 'unstaged c.txt')
+    eq(H.selected(child), 'unstaged c.txt')
     eq(header_right(2):find('✓ reviewed', 1, true) ~= nil, true)
 
     cursor_on('b.txt', 'header')
@@ -836,13 +810,13 @@ T['collapse']['entering all files collapses reviewed files, not changed ones'] =
     child.cmd('Iter review')
     helpers.wait_until(
         child,
-        R .. [[ ~= nil and ]] .. R .. [[.drawer.view:is_shown()]]
+        R .. [[ ~= nil and ]] .. R .. [[.view:is_shown()]]
     )
     -- One file alone stays whole.
     eq(pane_lines(), { 'a.txt', '@@ -1 +1 @@', 'a', 'ax' })
 
     child.type_keys('=')
-    helpers.wait_until(child, R .. [[.drawer.view.document.sections[3] ~= nil]])
+    helpers.wait_until(child, R .. [[.view.document.sections[3] ~= nil]])
 
     eq(child.lua_get(R .. ".reviewed['b.txt']"), 'changed')
     eq(child.lua_get(collapsed(1)), true)
@@ -859,13 +833,13 @@ T['collapse'][']f and [f stop on collapsed headers'] = function()
 
     child.type_keys(']f')
     eq(cursor_row(), 'header b.txt')
-    eq(selected(), 'unstaged b.txt')
+    eq(H.selected(child), 'unstaged b.txt')
     eq(child.lua_get(collapsed(2)), true)
     child.type_keys(']f')
     eq(cursor_row(), 'header c.txt')
     child.type_keys('[f')
     eq(cursor_row(), 'header b.txt')
-    eq(selected(), 'unstaged b.txt')
+    eq(H.selected(child), 'unstaged b.txt')
     eq(child.lua_get(collapsed(2)), true)
 end
 
@@ -901,10 +875,10 @@ T['collapse']['<CR> expands a file on both sides at once'] = function()
     child.cmd('Iter review')
     helpers.wait_until(
         child,
-        R .. [[ ~= nil and ]] .. R .. [[.drawer.view:is_shown()]]
+        R .. [[ ~= nil and ]] .. R .. [[.view:is_shown()]]
     )
     child.type_keys('=')
-    helpers.wait_until(child, R .. [[.drawer.view.document.sections[4] ~= nil]])
+    helpers.wait_until(child, R .. [[.view.document.sections[4] ~= nil]])
     eq(child.lua_get(collapsed(2)), true)
     eq(child.lua_get(collapsed(4)), true)
 
@@ -927,7 +901,7 @@ T['collapse']['an expanded file stays whole when its last hunk is staged'] = fun
     cursor_on('ax')
     child.type_keys('s')
     helpers.wait_until(child, [[(function()
-        local section = ]] .. R .. [[.drawer.view:at()
+        local section = ]] .. R .. [[.view:at()
         return section ~= nil and section.file.side == 'staged'
     end)()]])
 
@@ -943,9 +917,9 @@ T['collapse']['m into all files collapses an expanded reviewed file again'] = fu
     helpers.wait_until(child, 'not ' .. collapsed(2))
 
     child.type_keys('=')
-    helpers.wait_until(child, R .. [[.drawer.view.document.sections[2] == nil]])
+    helpers.wait_until(child, R .. [[.view.document.sections[2] == nil]])
     child.type_keys('=')
-    helpers.wait_until(child, R .. [[.drawer.view.document.sections[3] ~= nil]])
+    helpers.wait_until(child, R .. [[.view.document.sections[3] ~= nil]])
 
     eq(child.lua_get(collapsed(2)), true)
     eq(cursor_row(), 'header b.txt')
@@ -958,11 +932,11 @@ T['collapse']['the Annotations column shows a collapsed file, <CR> expands it'] 
     child.type_keys('a')
     helpers.wait_until(child, [[require('iter.annotations.editor').is_shown()]])
     child.type_keys('Check c', '<C-s>')
-    helpers.wait_until(child, '#' .. R .. '.drawer.view.marks == 1')
+    helpers.wait_until(child, '#' .. R .. '.view.marks == 1')
     child.type_keys('r')
     helpers.wait_until(child, collapsed(3))
 
-    eq(child.lua_get(R .. '.drawer.view.marks[1].hidden'), true)
+    eq(child.lua_get(R .. '.view.marks[1].hidden'), true)
     eq(header_right(3):find('1 annotation', 1, true) ~= nil, true)
 
     -- ]a skips the hidden annotation.
@@ -978,7 +952,7 @@ T['collapse']['the Annotations column shows a collapsed file, <CR> expands it'] 
             [[(function()
         local r = %s
         local lnum = vim.api.nvim_win_get_cursor(r.diff_win)[1]
-        return r.drawer.view.rows[lnum].text == 'c.txt'
+        return r.view.rows[lnum].text == 'c.txt'
     end)()]],
             R
         )
@@ -1000,13 +974,13 @@ T['collapse']['works side by side'] = function()
     mark_reviewed('b.txt')
     open_all()
     child.type_keys('|')
-    helpers.wait_until(child, R .. '.drawer.view.old ~= nil')
+    helpers.wait_until(child, R .. '.view.old ~= nil')
 
     local old = function()
         return child.lua_get(
             [[vim.api.nvim_buf_get_lines(]]
                 .. R
-                .. [[.drawer.view.old.buf, 0, -1, false)]]
+                .. [[.view.old.buf, 0, -1, false)]]
         )
     end
 

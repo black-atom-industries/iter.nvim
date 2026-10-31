@@ -1,4 +1,5 @@
 local helpers = dofile('tests/helpers.lua')
+local H = dofile('tests/helpers_review.lua')
 
 local new_set = MiniTest.new_set
 local eq = MiniTest.expect.equality
@@ -7,7 +8,7 @@ local child = MiniTest.new_child_neovim()
 ---@type string
 local repo
 
-local R = [[require('iter').current_review]]
+local R = H.R
 
 ---@param prefix string
 ---@param from integer
@@ -52,35 +53,28 @@ end
 
 --- Open the review on the first file and wait for its diff.
 local function open_review()
-    child.cmd('Iter review')
-    helpers.wait_until(
-        child,
-        R .. [[ ~= nil and ]] .. R .. [[.drawer.view:is_shown()]]
-    )
+    H.open(child)
+    helpers.wait_until(child, R .. [[.view:is_shown()]])
 end
 
 --- Move into the diff pane and press `|`.
 local function split()
     child.lua([[vim.api.nvim_set_current_win(]] .. R .. [[.diff_win)]])
     child.type_keys('|')
-    helpers.wait_until(child, R .. [[.drawer.view.old ~= nil]])
+    helpers.wait_until(child, R .. [[.view.old ~= nil]])
 end
 
 ---@return string[]
 local function left_lines()
     return child.lua_get(
-        [[vim.api.nvim_buf_get_lines(]]
-            .. R
-            .. [[.drawer.view.old.buf, 0, -1, false)]]
+        [[vim.api.nvim_buf_get_lines(]] .. R .. [[.view.old.buf, 0, -1, false)]]
     )
 end
 
 ---@return string[]
 local function right_lines()
     return child.lua_get(
-        [[vim.api.nvim_buf_get_lines(]]
-            .. R
-            .. [[.drawer.view.buf, 0, -1, false)]]
+        [[vim.api.nvim_buf_get_lines(]] .. R .. [[.view.buf, 0, -1, false)]]
     )
 end
 
@@ -88,7 +82,7 @@ end
 ---@return string[]
 local function kinds()
     return child.lua_get([[(function()
-        local v = ]] .. R .. [[.drawer.view
+        local v = ]] .. R .. [[.view
         local out = {}
         for lnum, row in ipairs(v.rows) do
             out[lnum] = v.old.rows[lnum].kind .. ' | ' .. row.kind
@@ -105,7 +99,7 @@ local function cursor_on(win, text)
     child.lua(
         [[
         local side, text = ...
-        local v = require('iter').current_review.drawer.view
+        local v = require('iter').current_review.view
         local pane = side == 'left' and v.old or v
         vim.api.nvim_set_current_win(pane.win)
         local lines = vim.api.nvim_buf_get_lines(pane.buf, 0, -1, false)
@@ -125,7 +119,7 @@ end
 ---@return integer[][]
 local function positions()
     return child.lua_get([[(function()
-        local v = ]] .. R .. [[.drawer.view
+        local v = ]] .. R .. [[.view
         local out = {}
         for _, win in ipairs({ v.old.win, v.win }) do
             local view = vim.api.nvim_win_call(win, vim.fn.winsaveview)
@@ -139,7 +133,7 @@ end
 ---@return integer[]
 local function heights()
     return child.lua_get([[(function()
-        local v = ]] .. R .. [[.drawer.view
+        local v = ]] .. R .. [[.view
         return {
             vim.api.nvim_win_text_height(v.old.win, {}).all,
             vim.api.nvim_win_text_height(v.win, {}).all,
@@ -164,7 +158,7 @@ local function add_annotation(annotation)
     child.lua(
         [[
         local annotation = ...
-        local root = require('iter').current_review.drawer.changes.root
+        local root = require('iter').current_review.changes.root
         assert(require('iter.store').put_annotation(root, annotation))
         require('iter').current_review:refresh_annotations()
     ]],
@@ -242,7 +236,7 @@ T['split']['| shows the old side left, aligned with fillers'] = function()
 
     local layout = child.lua_get([[(function()
         local r = ]] .. R .. [[
-        local v = r.drawer.view
+        local v = r.view
         return {
             vim.api.nvim_win_get_position(v.old.win)[2]
                 < vim.api.nvim_win_get_position(v.win)[2],
@@ -296,12 +290,12 @@ T['split']['| and - are idempotent and - restores one pane'] = function()
     )
 
     child.type_keys('-')
-    helpers.wait_until(child, R .. [[.drawer.view.old == nil]])
+    helpers.wait_until(child, R .. [[.view.old == nil]])
     child.type_keys('-')
 
     local after = child.lua_get([[(function()
         local r = ]] .. R .. [[
-        local v = r.drawer.view
+        local v = r.view
         return {
             #vim.api.nvim_tabpage_list_wins(r.tab),
             #vim.api.nvim_list_bufs(),
@@ -328,12 +322,12 @@ T['split']['- keeps the file header at the top of the window'] = function()
     child.lua([[vim.fn.winrestview({ topline = 1 })]])
 
     child.type_keys('-')
-    helpers.wait_until(child, R .. [[.drawer.view.old == nil]])
+    helpers.wait_until(child, R .. [[.view.old == nil]])
 
     local view = child.lua_get([[(function()
         local r = ]] .. R .. [[
         local v = vim.api.nvim_win_call(r.diff_win, vim.fn.winsaveview)
-        local line = vim.api.nvim_buf_get_lines(r.drawer.view.buf, v.lnum - 1, v.lnum, true)[1]
+        local line = vim.api.nvim_buf_get_lines(r.view.buf, v.lnum - 1, v.lnum, true)[1]
         return { v.topline, line }
     end)()]])
 
@@ -345,7 +339,7 @@ T['split']['- from the left window moves into the right one'] = function()
     split()
     cursor_on('left', 'local v = 5')
     child.type_keys('-')
-    helpers.wait_until(child, R .. [[.drawer.view.old == nil]])
+    helpers.wait_until(child, R .. [[.view.old == nil]])
 
     eq(
         child.lua_get(
@@ -355,7 +349,7 @@ T['split']['- from the left window moves into the right one'] = function()
     )
     eq(
         child.lua_get([[(function()
-            local v = ]] .. R .. [[.drawer.view
+            local v = ]] .. R .. [[.view
             local lnum = vim.api.nvim_win_get_cursor(v.win)[1]
             local row = v.rows[lnum]
             return row.kind .. ' ' .. row.text
@@ -367,15 +361,10 @@ end
 T['split']['closing the left window goes back to one pane'] = function()
     open_review()
     split()
-    child.lua(
-        [[vim.api.nvim_win_close(]] .. R .. [[.drawer.view.old.win, true)]]
-    )
+    child.lua([[vim.api.nvim_win_close(]] .. R .. [[.view.old.win, true)]])
     helpers.wait_until(
         child,
-        R
-            .. [[.drawer.view.layout == 'unified' and ]]
-            .. R
-            .. [[.drawer.view:is_shown()]]
+        R .. [[.view.layout == 'unified' and ]] .. R .. [[.view:is_shown()]]
     )
 
     eq(right_lines()[2], '@@ -1,11 +1,12 @@')
@@ -387,7 +376,7 @@ T['split']['closing the review leaves no window or buffer behind'] = function()
 
     open_review()
     split()
-    child.lua([[_G.old_buf = ]] .. R .. [[.drawer.view.old.buf]])
+    child.lua([[_G.old_buf = ]] .. R .. [[.view.old.buf]])
     child.type_keys('q')
     helpers.wait_until(child, [[require('iter').current_review == nil]])
 
@@ -412,7 +401,7 @@ T['split']['resizing keeps the panes the same width'] = function()
             child,
             string.format(
                 [[(function()
-            local v = %s.drawer.view
+            local v = %s.view
             local a = vim.api.nvim_win_get_width(v.old.win)
             local b = vim.api.nvim_win_get_width(v.win)
             return a + b + 1 == %d and math.abs(a - b) <= 1
@@ -425,7 +414,7 @@ T['split']['resizing keeps the panes the same width'] = function()
         table.insert(
             widths,
             child.lua_get([[(function()
-                local v = ]] .. R .. [[.drawer.view
+                local v = ]] .. R .. [[.view
                 return { v:text_width(v.old), v:text_width() }
             end)()]])
         )
@@ -442,11 +431,11 @@ T['sync']['scrolling one window scrolls the other'] = function()
     open_review()
     split()
     child.lua([[
-        local v = require('iter').current_review.drawer.view
+        local v = require('iter').current_review.view
         vim.api.nvim_set_current_win(v.win)
         v:expand(16)
     ]])
-    helpers.wait_until(child, R .. [[.drawer.view.rows[16].kind ~= 'gap']])
+    helpers.wait_until(child, R .. [[.view.rows[16].kind ~= 'gap']])
 
     child.type_keys('<C-d>')
     local p = positions()
@@ -482,7 +471,7 @@ T['sync']['the drawer scrolls both windows'] = function()
     open_review()
     split()
     child.lua([[
-        local v = require('iter').current_review.drawer.view
+        local v = require('iter').current_review.view
         v:expand(16)
         vim.api.nvim_set_current_win(require('iter').current_review.drawer.win)
     ]])
@@ -527,7 +516,7 @@ T['sync']['<CR> on a gap in the left window expands both sides'] = function()
     split()
     cursor_on('left', '')
     child.lua([[
-        local v = require('iter').current_review.drawer.view
+        local v = require('iter').current_review.view
         for lnum, row in ipairs(v.old.rows) do
             if row.kind == 'gap' then
                 vim.api.nvim_win_set_cursor(v.old.win, { lnum, 0 })
@@ -614,7 +603,7 @@ T['annotations']['virtual lines on one side get blank twins on the other'] = fun
             lines = { 'local v = 3 + 0' },
         },
     })
-    helpers.wait_until(child, '#' .. R .. '.drawer.view.marks == 2')
+    helpers.wait_until(child, '#' .. R .. '.view.marks == 2')
 
     local h = heights()
 
@@ -622,7 +611,7 @@ T['annotations']['virtual lines on one side get blank twins on the other'] = fun
     eq(h[1] > #left_lines() + 2, true)
 
     local virt = child.lua_get([[(function()
-        local v = ]] .. R .. [[.drawer.view
+        local v = ]] .. R .. [[.view
         local out = {}
         for _, buf in ipairs({ v.old.buf, v.buf }) do
             local per = {}
@@ -691,13 +680,13 @@ T['staging']['s in the left window stages the hunk'] = function()
     split()
     cursor_on('left', 'local v = 33')
     child.type_keys('s')
-    helpers.wait_until(child, [[#]] .. R .. [[.drawer.changes.staged == 1]])
+    helpers.wait_until(child, [[#]] .. R .. [[.changes.staged == 1]])
 
     eq(
         git_out({ 'diff', '--cached', '--unified=0' }):match('@@ [^@]+@@'),
         '@@ -36 +36 @@'
     )
-    eq(child.lua_get(R .. [[.drawer.view.old ~= nil]]), true)
+    eq(child.lua_get(R .. [[.view.old ~= nil]]), true)
 end
 
 T['staging']['visual s in the left window stages both sides of the lines'] = function()
@@ -705,7 +694,7 @@ T['staging']['visual s in the left window stages both sides of the lines'] = fun
     split()
     cursor_on('left', 'local v = 3')
     child.type_keys('V', 's')
-    helpers.wait_until(child, [[#]] .. R .. [[.drawer.changes.staged == 1]])
+    helpers.wait_until(child, [[#]] .. R .. [[.changes.staged == 1]])
 
     eq(
         git_out({ 'diff', '--cached', '--unified=0' }):match('@@.*'),
@@ -718,7 +707,7 @@ T['staging']['visual s over a filler stages the one side there'] = function()
     split()
     cursor_on('right', 'local w = 1')
     child.type_keys('V', 'j', 's')
-    helpers.wait_until(child, [[#]] .. R .. [[.drawer.changes.staged == 1]])
+    helpers.wait_until(child, [[#]] .. R .. [[.changes.staged == 1]])
 
     eq(
         git_out({ 'diff', '--cached', '--unified=0' }):match('@@.*'),
@@ -753,7 +742,7 @@ T['keys']['r in the left window toggles reviewed and keeps the split'] = functio
     child.type_keys('r')
 
     helpers.wait_until(child, R .. [[.reviewed['f.lua'] == 'reviewed']])
-    eq(child.lua_get(R .. [[.drawer.view.old ~= nil]]), true)
+    eq(child.lua_get(R .. [[.view.old ~= nil]]), true)
     eq(#left_lines(), #right_lines())
 end
 
@@ -774,7 +763,7 @@ T['keys']['the Annotations column shows an old-side annotation on both'] = funct
     })
     child.lua('vim.api.nvim_set_current_win(' .. R .. '.drawer.win)')
     child.type_keys('l')
-    helpers.wait_until(child, R .. [[.drawer.view.focus ~= nil]])
+    helpers.wait_until(child, R .. [[.view.focus ~= nil]])
 
     local p = positions()
 
@@ -794,21 +783,21 @@ T['keys'][':edit in the right window keeps both panes'] = function()
     split()
     child.lua([[vim.api.nvim_set_current_win(]] .. R .. [[.diff_win)]])
     child.cmd('edit f.lua')
-    helpers.wait_until(child, R .. [[.drawer.view:is_shown()]])
+    helpers.wait_until(child, R .. [[.view:is_shown()]])
     helpers.wait_until(
         child,
         [[vim.api.nvim_buf_get_name(0):match('f.lua$') ~= nil]]
     )
 
-    eq(child.lua_get(R .. [[.drawer.view.old ~= nil]]), true)
+    eq(child.lua_get(R .. [[.view.old ~= nil]]), true)
     eq(#left_lines(), #right_lines())
     eq(
         child.lua_get(
             [[vim.api.nvim_win_get_buf(]]
                 .. R
-                .. [[.drawer.view.old.win) == ]]
+                .. [[.view.old.win) == ]]
                 .. R
-                .. [[.drawer.view.old.buf]]
+                .. [[.view.old.buf]]
         ),
         true
     )
@@ -833,7 +822,7 @@ T['drawer']['| and - in the drawer switch the pane and keep the focus'] = functi
     eq(footer():find('| split', 1, true) ~= nil, true)
 
     child.type_keys('|')
-    helpers.wait_until(child, R .. [[.drawer.view.old ~= nil]])
+    helpers.wait_until(child, R .. [[.view.old ~= nil]])
     eq(
         child.lua_get(
             [[vim.api.nvim_get_current_win() == ]]
@@ -846,7 +835,7 @@ T['drawer']['| and - in the drawer switch the pane and keep the focus'] = functi
     eq(footer():find('- unified', 1, true) ~= nil, true)
 
     child.type_keys('-')
-    helpers.wait_until(child, R .. [[.drawer.view.old == nil]])
+    helpers.wait_until(child, R .. [[.view.old == nil]])
     eq(
         child.lua_get(
             [[vim.api.nvim_get_current_win() == ]]
@@ -862,8 +851,8 @@ T['drawer']['diff.layout split opens the review side by side'] = function()
     child.lua([[require('iter').setup({ diff = { layout = 'split' } })]])
     open_review()
 
-    helpers.wait_until(child, R .. [[.drawer.view.old ~= nil]])
-    eq(child.lua_get(R .. [[.drawer.view.layout]]), 'split')
+    helpers.wait_until(child, R .. [[.view.old ~= nil]])
+    eq(child.lua_get(R .. [[.view.layout]]), 'split')
     eq(#left_lines(), #right_lines())
 end
 
@@ -873,10 +862,7 @@ end
 ---@param layout IterDocLayout
 local function resize_to(columns, layout)
     child.o.columns = columns
-    helpers.wait_until(
-        child,
-        R .. [[.drawer.view.layout == ']] .. layout .. [[']]
-    )
+    helpers.wait_until(child, R .. [[.view.layout == ']] .. layout .. [[']])
 end
 
 T['drawer']['diff.layout auto follows the width of the diff'] = function()
@@ -886,14 +872,14 @@ T['drawer']['diff.layout auto follows the width of the diff'] = function()
     })]])
     open_review()
 
-    eq(child.lua_get(R .. [[.drawer.view.layout]]), 'unified')
+    eq(child.lua_get(R .. [[.view.layout]]), 'unified')
 
     resize_to(160, 'split')
-    helpers.wait_until(child, R .. [[.drawer.view.old ~= nil]])
+    helpers.wait_until(child, R .. [[.view.old ~= nil]])
     eq(#left_lines(), #right_lines())
 
     resize_to(100, 'unified')
-    eq(child.lua_get(R .. [[.drawer.view.old == nil]]), true)
+    eq(child.lua_get(R .. [[.view.old == nil]]), true)
 end
 
 T['drawer']['under diff.layout auto, - holds until a resize crosses'] = function()
@@ -903,16 +889,16 @@ T['drawer']['under diff.layout auto, - holds until a resize crosses'] = function
     })]])
     child.o.columns = 160
     open_review()
-    helpers.wait_until(child, R .. [[.drawer.view.layout == 'split']])
+    helpers.wait_until(child, R .. [[.view.layout == 'split']])
 
     split()
     child.type_keys('-')
-    eq(child.lua_get(R .. [[.drawer.view.layout]]), 'unified')
+    eq(child.lua_get(R .. [[.view.layout]]), 'unified')
 
     -- Still past the breakpoint: the pick holds.
     child.o.columns = 150
     helpers.wait_until(child, [[vim.o.columns == 150]])
-    eq(child.lua_get(R .. [[.drawer.view.layout]]), 'unified')
+    eq(child.lua_get(R .. [[.view.layout]]), 'unified')
 
     resize_to(100, 'unified')
     resize_to(160, 'split')
@@ -1030,8 +1016,8 @@ T['drawer']['| in the status drawer carries over to the review'] = function()
     helpers.wait_until(child, D .. [[.view.old ~= nil]])
     open_review()
 
-    helpers.wait_until(child, R .. [[.drawer.view.old ~= nil]])
-    eq(child.lua_get(R .. [[.drawer.view.layout]]), 'split')
+    helpers.wait_until(child, R .. [[.view.old ~= nil]])
+    eq(child.lua_get(R .. [[.view.layout]]), 'split')
     eq(#left_lines(), #right_lines())
 end
 
@@ -1039,7 +1025,7 @@ T['drawer']['- in the review carries over to the status drawer'] = function()
     local D = [[require('iter').drawer]]
     open_review()
     child.type_keys('|')
-    helpers.wait_until(child, R .. [[.drawer.view.old ~= nil]])
+    helpers.wait_until(child, R .. [[.view.old ~= nil]])
     child.type_keys('q')
     child.cmd('Iter')
     helpers.wait_until(
@@ -1052,8 +1038,8 @@ T['drawer']['- in the review carries over to the status drawer'] = function()
     child.type_keys('q')
     open_review()
 
-    eq(child.lua_get(R .. [[.drawer.view.layout]]), 'unified')
-    eq(child.lua_get(R .. [[.drawer.view.old == nil]]), true)
+    eq(child.lua_get(R .. [[.view.layout]]), 'unified')
+    eq(child.lua_get(R .. [[.view.old == nil]]), true)
 end
 
 T['drawer']['selecting another file shows it on both sides'] = function()
@@ -1067,10 +1053,10 @@ T['drawer']['selecting another file shows it on both sides'] = function()
 
     open_review()
     child.type_keys('|')
-    helpers.wait_until(child, R .. [[.drawer.view.old ~= nil]])
+    helpers.wait_until(child, R .. [[.view.old ~= nil]])
     child.type_keys('j')
     helpers.wait_until(child, [[(function()
-        local file = ]] .. R .. [[.drawer.view.files[1]
+        local file = ]] .. R .. [[.view.files[1]
         return file and file.path == 'g.lua'
     end)()]])
 
@@ -1112,7 +1098,7 @@ T['staging']['visual s on one pair of two keeps the line in place'] = function()
     split()
     cursor_on('left', 'l3')
     child.type_keys('V', 's')
-    helpers.wait_until(child, [[#]] .. R .. [[.drawer.changes.staged == 1]])
+    helpers.wait_until(child, [[#]] .. R .. [[.changes.staged == 1]])
 
     eq(
         index_lines(),
@@ -1126,7 +1112,7 @@ T['staging']['visual u on one pair of two keeps the line in place'] = function()
     split()
     cursor_on('right', 'l4 changed')
     child.type_keys('V', 'u')
-    helpers.wait_until(child, [[#]] .. R .. [[.drawer.changes.unstaged == 1]])
+    helpers.wait_until(child, [[#]] .. R .. [[.changes.unstaged == 1]])
 
     eq(
         index_lines(),
@@ -1140,19 +1126,19 @@ T['staging']['unified: the del, then its add, land in place'] = function()
     child.lua([[
         local r = require('iter').current_review
         vim.api.nvim_set_current_win(r.diff_win)
-        for lnum, row in ipairs(r.drawer.view.rows) do
+        for lnum, row in ipairs(r.view.rows) do
             if row.kind == 'del' and row.text == 'l3' then
                 vim.api.nvim_win_set_cursor(r.diff_win, { lnum, 0 })
             end
         end
     ]])
     child.type_keys('V', 's')
-    helpers.wait_until(child, [[#]] .. R .. [[.drawer.changes.staged == 1]])
+    helpers.wait_until(child, [[#]] .. R .. [[.changes.staged == 1]])
     child.lua([[
         local r = require('iter').current_review
         vim.api.nvim_set_current_win(r.diff_win)
         r.drawer:refresh()
-        for lnum, row in ipairs(r.drawer.view.rows) do
+        for lnum, row in ipairs(r.view.rows) do
             if row.kind == 'add' and row.text == 'l3 changed' then
                 vim.api.nvim_win_set_cursor(r.diff_win, { lnum, 0 })
             end
@@ -1162,7 +1148,7 @@ T['staging']['unified: the del, then its add, land in place'] = function()
         child.lua_get([[(function()
             local r = require('iter').current_review
             local lnum = vim.api.nvim_win_get_cursor(r.diff_win)[1]
-            return r.drawer.view.rows[lnum].text
+            return r.view.rows[lnum].text
         end)()]]),
         'l3 changed'
     )
@@ -1201,7 +1187,7 @@ T['keys'][':edit in the left window opens the file in the origin tab'] = functio
     eq(
         child.lua_get([[(function()
             local r = ]] .. R .. [[
-            local v = r.drawer.view
+            local v = r.view
             local names = {}
             for _, win in ipairs(vim.api.nvim_tabpage_list_wins(r.tab)) do
                 local name = vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(win))
@@ -1240,7 +1226,7 @@ T['all files']['m and | show every file on both sides'] = function()
     open_review()
     split()
     child.type_keys('=')
-    helpers.wait_until(child, R .. [[.drawer.view.document.sections[3] ~= nil]])
+    helpers.wait_until(child, R .. [[.view.document.sections[3] ~= nil]])
 
     local left, right = left_lines(), right_lines()
 
@@ -1286,7 +1272,7 @@ T['all files']['m and | show every file on both sides'] = function()
     end)()]])
 
     child.type_keys('=')
-    helpers.wait_until(child, R .. [[.drawer.view.document.sections[2] == nil]])
+    helpers.wait_until(child, R .. [[.view.document.sections[2] == nil]])
     eq(left_lines()[1], 'c.txt')
     eq(#left_lines(), #right_lines())
 end
@@ -1297,7 +1283,7 @@ T['wrap'] = new_set()
 ---@return boolean[]
 local function wraps()
     return child.lua_get([[(function()
-        local v = ]] .. R .. [[.drawer.view
+        local v = ]] .. R .. [[.view
         local out = { vim.wo[v.win].wrap }
         if v.old ~= nil then
             table.insert(out, vim.wo[v.old.win].wrap)
@@ -1321,11 +1307,11 @@ T['wrap']['gw wraps the unified layout only'] = function()
     eq(wraps(), { true })
 
     child.type_keys('|')
-    helpers.wait_until(child, R .. [[.drawer.view.old ~= nil]])
+    helpers.wait_until(child, R .. [[.view.old ~= nil]])
     eq(wraps(), { false, false })
 
     child.type_keys('-')
-    helpers.wait_until(child, R .. [[.drawer.view.old == nil]])
+    helpers.wait_until(child, R .. [[.view.old == nil]])
     eq(wraps(), { true })
 
     child.type_keys('gw')
@@ -1344,7 +1330,7 @@ T['wrap']['gw in the split layout warns and wraps back in unified'] = function()
     )
 
     child.type_keys('-')
-    helpers.wait_until(child, R .. [[.drawer.view.old == nil]])
+    helpers.wait_until(child, R .. [[.view.old == nil]])
     eq(wraps(), { true })
 end
 

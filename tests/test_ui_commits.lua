@@ -383,7 +383,7 @@ end
 local function reviewed_base()
     helpers.wait_until(
         child,
-        R .. ' ~= nil and ' .. R .. '.drawer.changes.since ~= nil'
+        R .. ' ~= nil and ' .. R .. '.changes.since ~= nil'
     )
 
     return child.lua_get([[require('iter.store').load(vim.fn.getcwd()).base]])

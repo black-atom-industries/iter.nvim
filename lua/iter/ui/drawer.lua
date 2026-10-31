@@ -1,16 +1,15 @@
 local changes = require('iter.changes')
-local document = require('iter.diff.document')
+local file_actions = require('iter.ui.file_actions')
 local float = require('iter.ui.float')
 local git = require('iter.git')
 local help = require('iter.ui.help')
 local highlight = require('iter.highlight')
 local keymap = require('iter.keymap')
 local layout = require('iter.ui.layout')
-local model = require('iter.diff.model')
+local Preview = require('iter.ui.preview')
 local render = require('iter.ui.render')
 local uri = require('iter.uri')
 local util = require('iter.util')
-local View = require('iter.diff.view')
 local watch = require('iter.watch')
 
 ---@alias IterDrawerRow table<string, any> buffer line → item per column id: an IterChange in a file column, the extras' items in their columns
@@ -52,12 +51,12 @@ local watch = require('iter.watch')
 ---@field win integer
 ---@field buf integer
 ---@field float IterFloat
----@field view IterDiffView diff of the selected file, shown in the pane
+---@field preview IterPreview diff of the selected file, shown in the pane
+---@field view IterDiffView the preview's view
 ---@field watch? IterWatch refreshes the drawer on external changes
 ---@field help? IterHelp
 ---@field handlers table<string, fun()> drawer actions by name
 ---@field config IterConfig
----@field auto? IterDocLayout the layout 'auto' picked for the last width, nil under any other `diff.layout`
 ---@field changes IterChanges
 ---@field recent? GitRecent the status drawer's recent commits, nil in the review or without a commit
 ---@field ages string the commit ages of the last render
@@ -74,11 +73,6 @@ local watch = require('iter.watch')
 ---@field layout IterLayoutMode
 ---@field wide boolean whether the width reaches `drawer.wide_breakpoint` in the columns layout
 ---@field recall table<string, IterDrawerMark> per stop, by its first column id, the selection it had when left
----@field previewed? string key of the item the view shows, or of the extras' item that showed it
----@field previewed_stat? string worktree stat of that item when it was read, of every file in all-files mode
----@field all_files boolean the view shows every file, in the review
----@field all_shown boolean the view's document is the all-files one
----@field diff_ids? table<string, string> per file key, the blob ids and worktree stat its shown diff was read with
 ---@field preview_timer? uv.uv_timer_t runs the last scheduled preview; closed with the drawer
 ---@field group integer
 ---@field closed boolean
@@ -91,29 +85,7 @@ Drawer.MIN_LINES = 5
 
 local SELECTED_NS = vim.api.nvim_create_namespace('iter.drawer.selected')
 
---- The layout `diff.layout` 'auto' picks for `width` columns of diff, nil
---- under any other `diff.layout`.
----@param diff { layout: IterLayoutOption, split_breakpoint: integer }
----@param width integer
----@return IterDocLayout?
-local function auto_layout(diff, width)
-    if diff.layout ~= 'auto' then
-        return nil
-    end
-
-    return width >= diff.split_breakpoint and 'split' or 'unified'
-end
 local PREVIEW_DELAY_MS = 50
--- The diff layout chosen last in any drawer; a new drawer starts in it, so
--- the choice holds for the Neovim session. Before any choice, a drawer starts
--- in `diff.layout`. Under 'auto' a resize that crosses
--- `diff.split_breakpoint` drops the choice.
----@type IterDocLayout?
-local diff_layout = nil
--- Whether diffs wrap, chosen last in any drawer and held for the session
--- like the layout. Before any choice, a drawer starts with `diff.wrap`.
----@type boolean?
-local diff_wrap = nil
 -- Width share of the stacked file columns beside the extras' columns.
 local FILES_WEIGHT = 3
 -- Diff rows that stand for a line of the file.
@@ -139,11 +111,7 @@ local STAGING_HINTS =
     { stage = true, unstage = true, discard = true, ignore = true }
 local BASE_HINTS = { base = true }
 
----@param item IterChange|IterFileDiff
----@return string
-local function key(item)
-    return item.side .. '\0' .. item.path
-end
+local key = Preview.key
 
 --- The key of an item of any column: an extras' item carries its own.
 ---@param item any
@@ -442,10 +410,6 @@ function Drawer.open(opts)
     local keys_view = context == 'review' and 'review_drawer' or 'drawer'
 
     local self = setmetatable({
-        auto = auto_layout(
-            opts.config.options.diff,
-            vim.api.nvim_win_get_width(view_win)
-        ),
         context = context,
         extras = opts.extras,
         keys_view = keys_view,
@@ -465,8 +429,6 @@ function Drawer.open(opts)
         layout = 'columns',
         wide = false,
         recall = {},
-        all_files = false,
-        all_shown = false,
         closed = false,
         on_close = opts.on_close,
     }, Drawer)
@@ -502,39 +464,41 @@ function Drawer.open(opts)
             self:open_row()
         end
         view_handlers.mode = function()
-            self:set_all_files(not self.all_files)
+            self:set_all_files(not self.preview.all_files)
         end
         view_handlers.split = function()
-            self:set_layout('split')
+            self.preview:set_layout('split')
         end
         view_handlers.unified = function()
-            self:set_layout('unified')
+            self.preview:set_layout('unified')
         end
         view_handlers.wrap = function()
-            self:toggle_wrap()
+            self.preview:toggle_wrap()
         end
-    end
-
-    local wrap = diff_wrap
-
-    if wrap == nil then
-        wrap = opts.config.options.diff.wrap
     end
 
     -- The review's diff pane belongs to the view, so a buffer that takes its
     -- place only hides it, and the review puts it back.
-    self.view = View.new({
+    self.preview = Preview.new({
         win = view_win,
-        keys = opts.config.keys.diff,
-        expand_step = opts.config.options.diff.expand_step,
-        syntax_max_lines = opts.config.options.diff.syntax_max_lines,
-        word_diff = opts.config.options.diff.word_diff,
-        icon = opts.config.options.icons.annotation,
+        config = opts.config,
         handlers = view_handlers,
         bufhidden = review and 'hide' or nil,
-        -- Under 'auto' `self.auto` is set, so the option is a layout here.
-        layout = diff_layout or self.auto or opts.config.options.diff.layout --[[@as IterDocLayout]],
-        wrap = wrap,
+        source = {
+            changes = function()
+                return self.changes
+            end,
+            files = function()
+                return self:files()
+            end,
+            collapsed = function(item)
+                return self.extras ~= nil
+                    and self.extras:drawer_collapsed(self, item)
+            end,
+            shown = function()
+                self:shown()
+            end,
+        },
         on_cursor = function()
             self:follow_view()
         end,
@@ -547,9 +511,10 @@ function Drawer.open(opts)
             end
         end,
     })
+    self.view = self.preview.view
 
     if not self:load() then
-        self.view:close()
+        self.preview:close()
 
         for _, b in pairs({ buf, self.side_buf }) do
             vim.api.nvim_buf_delete(b, { force = true })
@@ -581,7 +546,7 @@ function Drawer.open(opts)
     self:render()
     self:restore_selection(self:find_path(opts.path, opts.side))
     self:attach()
-    self:preview(true)
+    self:show_selection(true)
     self.watch = watch.start({
         root = self.changes.root,
         poll_ms = opts.config.options.refresh.poll_ms,
@@ -629,15 +594,17 @@ function Drawer:make_handlers()
         discard = act('discard'),
         ignore = act('ignore'),
         mode = function()
-            self:set_all_files(not self.all_files)
+            self:set_all_files(not self.preview.all_files)
         end,
         split = function()
-            self:set_layout('split')
+            self.preview:set_layout('split')
         end,
         unified = function()
-            self:set_layout('unified')
+            self.preview:set_layout('unified')
         end,
-        wrap = act('toggle_wrap'),
+        wrap = function()
+            self.preview:toggle_wrap()
+        end,
         close = act('close'),
         help = act('toggle_help'),
         scroll_down = function()
@@ -976,7 +943,7 @@ function Drawer:footer()
     local hints = column and column.hints
         or vim.tbl_map(
             function(hint)
-                if hint[1] == 'mode' and self.all_files then
+                if hint[1] == 'mode' and self.preview.all_files then
                     return { 'mode', 'one file' }
                 elseif hint[1] == 'split' and self.view.layout == 'split' then
                     return { 'unified', 'unified' }
@@ -1044,7 +1011,7 @@ end
 function Drawer:shown()
     local file = self.view.files[1]
 
-    if self.all_files then
+    if self.preview.all_files then
         self.view:set_name(uri.of(self.context) .. '#all')
     elseif file ~= nil then
         self.view:set_name(uri.of(self.context, file.path))
@@ -1228,7 +1195,7 @@ function Drawer:select(lnum, column)
 
     local item = self:item()
 
-    if item ~= nil and item_key(item) ~= self.previewed then
+    if item ~= nil and item_key(item) ~= self.preview.previewed then
         self:schedule_preview()
     end
 end
@@ -1418,13 +1385,7 @@ function Drawer:resized()
         return
     end
 
-    local auto = auto_layout(self.config.options.diff, self:diff_width())
-
-    if auto ~= nil and auto ~= self.auto then
-        self.auto = auto
-        diff_layout = nil
-        self.view:set_layout(auto)
-    end
+    self.preview:resized()
 
     local mark = self:mark()
     self:render()
@@ -1472,10 +1433,10 @@ function Drawer:refresh(reason, target)
         if
             self.context == 'review'
             and item ~= nil
-            and key(item) == self.previewed
-            and self:stat(item) ~= self.previewed_stat
+            and key(item) == self.preview.previewed
+            and self.preview:stat(item) ~= self.preview.previewed_stat
         then
-            self:preview(true)
+            self:show_selection(true)
         end
 
         return
@@ -1485,7 +1446,7 @@ function Drawer:refresh(reason, target)
     self:restore_selection(
         target and self:find_path(target.path, target.side) or mark
     )
-    self:preview(true)
+    self:show_selection(true)
 
     if reason == nil or not same then
         util.emit('IterRefresh', {
@@ -1502,12 +1463,12 @@ function Drawer:relist()
         return
     end
 
-    self.recall, self.diff_ids = {}, nil
-    self.previewed, self.all_shown = nil, false
+    self.recall, self.preview.diff_ids = {}, nil
+    self.preview.previewed, self.preview.all_shown = nil, false
     self.column, self.lnum = self:columns()[1].id, 1
     self:render()
     self:restore_selection({ column = self.column, index = 1 })
-    self:preview(true)
+    self:show_selection(true)
     util.emit('IterRefresh', {
         root = self.changes.root,
         paths = changes.paths(self.changes),
@@ -1540,7 +1501,7 @@ function Drawer:schedule_preview()
         0,
         vim.schedule_wrap(function()
             if not self.closed then
-                self:preview(false)
+                self:show_selection(false)
             end
         end)
     )
@@ -1550,7 +1511,7 @@ end
 --- item of their columns. Directories leave the pane as it is; without a
 --- selection the pane gets its own buffer back.
 ---@param force boolean also when the view already shows the item
-function Drawer:preview(force)
+function Drawer:show_selection(force)
     local item = self:item()
 
     if not self:is_open() then
@@ -1558,281 +1519,36 @@ function Drawer:preview(force)
     end
 
     if item ~= nil and self:extra_column(self.column) ~= nil then
-        if force or item.key ~= self.previewed then
+        if force or item.key ~= self.preview.previewed then
             self.extras:drawer_preview(self, item, force)
-            self.previewed = item.key
+            self.preview.previewed = item.key
         end
 
         return
     end
 
     if item == nil then
-        self.previewed = nil
+        self.preview.previewed = nil
         self.view:hide()
         return
     end
 
     self.view:set_focus(nil)
-    self:show(item, force)
-end
-
---- Show the diff of `item`, a file of the changes, in the pane, whether it
---- is selected or not.
----@param item IterChange
----@param force boolean also when the view already shows the item
-function Drawer:show(item, force)
-    if item.dir then
-        return
-    end
-
-    if not force and key(item) == self.previewed then
-        return
-    end
-
-    if self.all_files then
-        self:show_all(item, force)
-        return
-    end
-
-    local stat = self:stat(item)
-    local source, err =
-        git.file_diff(self.changes.root, item, self.config.options.diff.args)
-
-    if source == nil then
-        util.error(err, 'Cannot read the diff of ' .. item.path)
-        return
-    end
-
-    self.previewed_stat = stat
-    self.all_shown = false
-    self.view:set_new_follows(self:new_follows(item))
-
-    -- The same diff again keeps the view as it is, expanded gaps included.
-    local shown = #self.view.files == 1 and self.view.files[1] or nil
-
-    if
-        self.view:is_shown()
-        and shown ~= nil
-        and shown.side == item.side
-        and shown.path == item.path
-        and shown.code == item.code
-        and shown.base == item.base
-        and vim.deep_equal(shown.raw, source.raw)
-    then
-        self.previewed = key(item)
-        self:shown()
-        return
-    end
-
-    self.previewed = key(item)
-    self.view:show(model.build(item, source))
-    self:shown()
-end
-
---- The worktree stat of `item`, of every file in all-files mode, to tell a
---- write from outside.
----@param item IterChange
----@return string
-function Drawer:stat(item)
-    local items = self.all_files and self:files() or { item }
-
-    return table.concat(
-        vim.tbl_map(function(file)
-            return util.stat_key(vim.fs.joinpath(self.changes.root, file.path))
-                or ''
-        end, items),
-        '\0'
-    )
-end
-
---- Read the diff of every file and show them in drawer order, a file the
---- extras collapse as its header row alone. A file whose
---- blob ids and worktree stat are the ones read before keeps its rows
---- without a read, as does one whose diff text is the one shown, expanded
---- gaps included; when every file does, the view stays as it is.
-function Drawer:load_all()
-    local view = self.view
-    local root = self.changes.root
-    local files = self:files()
-    local before = {}
-
-    if self.all_shown then
-        for _, section in ipairs(view.document.sections) do
-            before[section.key] = section
-        end
-    end
-
-    self.previewed_stat = self:stat(files[1])
-
-    local since = self.changes.since
-    local ids = git.diff_ids(root, since and since.sha) or {}
-    local known = self.diff_ids or {}
-
-    self.diff_ids = {}
-
-    ---@type IterDocEntry[]
-    local entries = {}
-    local same = self.all_shown
-        and view:is_shown()
-        and #files == #view.document.sections
-
-    for _, item in ipairs(files) do
-        local k = key(item)
-        local shown = before[k]
-        local id = (ids[k] or '')
-            .. '\0'
-            .. (
-                item.side ~= 'staged'
-                    and util.stat_key(vim.fs.joinpath(root, item.path))
-                or ''
-            )
-        ---@type IterFileDiff?
-        local file = shown ~= nil
-                and shown.file.code == item.code
-                and shown.file.base == item.base
-                and known[k] == id
-                and shown.file
-            or nil
-
-        if not file then
-            local source, err =
-                git.file_diff(root, item, self.config.options.diff.args)
-
-            if source == nil then
-                util.error(err, 'Cannot read the diff of ' .. item.path)
-            else
-                file = shown ~= nil
-                        and shown.file.code == item.code
-                        and shown.file.base == item.base
-                        and vim.deep_equal(shown.file.raw, source.raw)
-                        and shown.file
-                    or model.build(item, source)
-            end
-        end
-
-        if file then
-            local new_follows = self:new_follows(item)
-            local collapsed = self.extras ~= nil
-                    and self.extras:drawer_collapsed(self, item)
-                or nil
-            local section = view.document.sections[#entries + 1]
-
-            same = same
-                and section ~= nil
-                and section.file == file
-                and section.new_follows == new_follows
-                and section.collapsed == collapsed
-            self.diff_ids[k] = id
-            table.insert(entries, {
-                file = file,
-                new_follows = new_follows,
-                collapsed = collapsed,
-            })
-        else
-            same = false
-        end
-    end
-
-    self.all_shown = true
-
-    if #entries == 0 then
-        view:hide()
-    elseif not same then
-        view:show_all(entries)
-    end
-end
-
---- In all-files mode: show every file, read again with `force` or when the
---- view shows something else, then put `item`'s header at the top of the
---- pane, unless a forced read finds the cursor in `item` already.
----@param item IterChange
----@param force boolean
-function Drawer:show_all(item, force)
-    local view = self.view
-
-    if force or not self.all_shown then
-        self:load_all()
-    elseif not view:is_shown() and #view.document.sections > 0 then
-        view:show_document(view.document)
-    end
-
-    self.previewed = key(item)
-
-    local index = document.find(view.document, key(item))
-    local _, _, at = view:at()
-
-    if index ~= nil and (not force or at ~= index) then
-        view:reveal(view.document.sections[index].first, 'top')
-    end
-
-    self:shown()
+    self.preview:show(item, force)
 end
 
 --- Show every file in one buffer (`on`), or the selected one alone. The
 --- file under the cursor stays under it, near its row.
 ---@param on boolean
 function Drawer:set_all_files(on)
-    if on == self.all_files then
+    if on == self.preview.all_files then
         return
     end
 
-    local target = self:selected()
-    local shown = self.view:is_shown() and self.view:file() or nil
-
-    if (target == nil or target.dir) and shown ~= nil then
-        target = nil
-
-        for _, item in ipairs(self:files()) do
-            if key(item) == key(shown) then
-                target = item
-            end
-        end
-    end
-
-    self.all_files = on
-    self.all_shown = false
+    self.preview:set_all_files(on, self:selected())
 
     if self.float ~= nil then
         self.float:reposition({ footer = self:footer() })
-    end
-
-    if target ~= nil then
-        self:show(target, true)
-    elseif on then
-        self:load_all()
-        self:shown()
-    end
-end
-
---- Columns of the diff: the view's window, and in the split layout the old
---- side's window and the separator between them.
----@return integer
-function Drawer:diff_width()
-    local width = vim.api.nvim_win_get_width(self.view.win)
-    local old = self.view.old
-
-    if old ~= nil and util.is_valid_win(old.win) then
-        width = width + vim.api.nvim_win_get_width(old.win) + 1
-    end
-
-    return width
-end
-
---- Show diffs in `doc_layout`, here and in every drawer opened after.
----@param doc_layout IterDocLayout
-function Drawer:set_layout(doc_layout)
-    diff_layout = doc_layout
-    self.view:set_layout(doc_layout)
-end
-
---- Wrap long lines of the diff, or stop, here and in every drawer opened
---- after. The split layout shows them unwrapped either way.
-function Drawer:toggle_wrap()
-    diff_wrap = not self.view.wrap
-    self.view:set_wrap(diff_wrap)
-
-    if diff_wrap and self.view.layout == 'split' then
-        util.warn('Wrap shows in the unified layout')
     end
 end
 
@@ -1840,7 +1556,7 @@ end
 --- without showing it again. With an extras' column selected, the file
 --- columns remember it for when they are selected again.
 function Drawer:follow_view()
-    if not self.all_files or not self:is_open() then
+    if not self.preview.all_files or not self:is_open() then
         return
     end
 
@@ -1868,160 +1584,56 @@ function Drawer:follow_view()
         local candidate = row[file.side]
 
         if candidate ~= nil and key(candidate) == k then
-            self.previewed = k
+            self.preview.previewed = k
             self:select(lnum, file.side)
             return
         end
     end
 end
 
---- Whether the new side of `item`'s diff shows the worktree's content: a
---- change against a base, else a staged file without unstaged changes.
----@param item IterChange
----@return boolean
-function Drawer:new_follows(item)
-    return item.side == 'base'
-        or item.side == 'staged' and not self:has_unstaged(item.path)
+--- What the file actions work on.
+---@return IterFileActionContext
+function Drawer:action_context()
+    return { changes = self.changes, config = self.config }
 end
 
----@param path string
----@return boolean
-function Drawer:has_unstaged(path)
-    for _, item in ipairs(self.changes.unstaged) do
-        if item.path == path then
-            return true
-        end
+--- Refresh after `result`, an action's, and fire `User IterStage` for it.
+---@param result? IterFileActionResult
+function Drawer:after_action(result)
+    if result == nil then
+        return
     end
 
-    return false
-end
+    self:refresh_after(result.ok, result.err, result.fallback)
 
---- The files an action on `item` touches. A nested repository is left out.
----@param item IterChange
----@return string[]
-function Drawer:paths(item)
-    if item.dir then
-        util.warn('Skipped the nested repository ' .. item.path)
-        return {}
+    if result.action ~= nil then
+        self:staged(result.ok, result.action, result.paths)
     end
-
-    return { item.path }
-end
-
---- Whether `item` is a change against a base, where `action` doesn't
---- apply; says so when it is.
----@param item IterChange
----@param action string
----@return boolean
-local function against_base(item, action)
-    if item.side ~= 'base' then
-        return false
-    end
-
-    util.warn(action .. ' does not apply against a base')
-    return true
 end
 
 function Drawer:stage()
     local item = self:selected()
 
-    if item == nil or against_base(item, 'Staging') then
-        return
+    if item ~= nil then
+        self:after_action(file_actions.stage(self:action_context(), { item }))
     end
-
-    if item.side == 'staged' then
-        return self:unstage()
-    end
-
-    local paths = self:paths(item)
-
-    if #paths == 0 then
-        return
-    end
-
-    local ok, err = git.stage(self.changes.root, paths)
-    self:refresh_after(ok, err, 'Cannot stage ' .. item.path)
-    self:staged(ok, 'stage', paths)
 end
 
 function Drawer:unstage()
     local item = self:selected()
 
-    if item == nil or against_base(item, 'Unstaging') then
-        return
+    if item ~= nil then
+        self:after_action(file_actions.unstage(self:action_context(), { item }))
     end
-
-    local target = item.side == 'staged' and item or nil
-
-    if target == nil then
-        for _, staged in ipairs(self.changes.staged) do
-            if staged.path == item.path then
-                target = staged
-            end
-        end
-    end
-
-    if target == nil then
-        util.warn('Nothing to unstage')
-        return
-    end
-
-    local paths = { target.path }
-
-    if target.orig_path ~= nil then
-        table.insert(paths, 1, target.orig_path)
-    end
-
-    local ok, err = git.unstage(self.changes.root, paths)
-    self:refresh_after(ok, err, 'Cannot unstage ' .. item.path)
-    self:staged(ok, 'unstage', paths)
 end
 
---- Discard the unstaged changes of the selection after a confirm that names
---- every path: a tracked file goes back to its index version, untracked
---- files are deleted.
+--- Discard the unstaged changes of the selection after a confirm.
 function Drawer:discard()
     local item = self:selected()
 
-    if item == nil or against_base(item, 'Discard') then
-        return
+    if item ~= nil then
+        self:after_action(file_actions.discard(self:action_context(), item))
     end
-
-    if item.side == 'staged' then
-        util.warn('Unstage first')
-        return
-    end
-
-    local untracked = item.code == '?'
-    local paths = untracked and self:paths(item) or { item.path }
-
-    if #paths == 0 then
-        return
-    end
-
-    local message = (
-        untracked and 'Delete untracked files:\n'
-        or 'Discard unstaged changes in:\n'
-    ) .. table.concat(paths, '\n')
-
-    if
-        self.config.options.confirm.discard
-        and vim.fn.confirm(message, '&Discard\n&No', 2) ~= 1
-    then
-        return
-    end
-
-    local root = self.changes.root
-    local ok, err
-
-    if untracked then
-        ok, err = git.delete_untracked(root, paths)
-    else
-        ok, err = git.discard(root, paths)
-    end
-
-    self:refresh_after(ok, err, 'Cannot discard ' .. item.path)
-    self:staged(ok, 'discard', paths)
 end
 
 --- Fire `User IterStage` for `paths` when the `action` on them succeeded.
@@ -2039,33 +1651,13 @@ function Drawer:staged(ok, action, paths)
 end
 
 --- Append the selected untracked path to the `.gitignore` at the root,
---- anchored to the root, after a confirm.
+--- after a confirm.
 function Drawer:ignore()
     local item = self:selected()
 
-    if item == nil or against_base(item, 'Ignoring') then
-        return
+    if item ~= nil then
+        self:after_action(file_actions.ignore(self:action_context(), item))
     end
-
-    if item.code ~= '?' then
-        util.warn('Only untracked files can be ignored')
-        return
-    end
-
-    if
-        self.config.options.confirm.ignore
-        and vim.fn.confirm(
-                'Append ' .. item.path .. ' to .gitignore?',
-                '&Yes\n&No',
-                2
-            )
-            ~= 1
-    then
-        return
-    end
-
-    local ok, err = git.ignore(self.changes.root, item.path)
-    self:refresh_after(ok, err, 'Cannot write .gitignore')
 end
 
 --- Close the drawer and edit `rel`, a path of the repository, in the pane,
@@ -2117,40 +1709,11 @@ function Drawer:open_row()
     if row.kind == 'gap' then
         view:expand()
     elseif CODE_ROWS[row.kind] then
-        self:edit(section.file.path, self:worktree_line(section.file, index))
+        self:edit(
+            section.file.path,
+            self.preview:worktree_line(section.file, index)
+        )
     end
-end
-
---- The worktree line for model row `row` of `file`, a diff of this
---- drawer's changes. A staged line goes through the unstaged diff of the
---- same path, when there is one.
----@param file IterFileDiff
----@param row integer
----@return integer
-function Drawer:worktree_line(file, row)
-    local line = model.new_line(file, row)
-
-    if file.side ~= 'staged' then
-        return line
-    end
-
-    for _, item in ipairs(self.changes.unstaged) do
-        if item.path == file.path and not item.dir and item.code ~= '?' then
-            local source = git.file_diff(
-                self.changes.root,
-                item,
-                self.config.options.diff.args
-            )
-
-            if source == nil then
-                return line
-            end
-
-            return model.old_line_to_new_line(model.build(item, source), line)
-        end
-    end
-
-    return line
 end
 
 --- Show the selected file's diff and move into the diff view.
@@ -2161,7 +1724,7 @@ function Drawer:enter_view()
         return
     end
 
-    self:preview(false)
+    self:show_selection(false)
 
     if self.view:is_shown() then
         vim.api.nvim_set_current_win(self.view.win)
@@ -2198,7 +1761,7 @@ function Drawer:reveal(path)
 
     ---@cast at -nil
     self:select(at.lnum, at.side)
-    self:preview(false)
+    self:show_selection(false)
 end
 
 --- Files in drawer order, directories left out.
@@ -2215,7 +1778,7 @@ end
 --- the selection follows it. At the last or first file nothing changes.
 ---@param dir 1|-1
 function Drawer:step_file(dir)
-    if self.all_files and self.view:is_shown() then
+    if self.preview.all_files and self.view:is_shown() then
         if self.view:jump_file(dir) then
             self:follow_view()
         end
@@ -2251,7 +1814,7 @@ function Drawer:step_file(dir)
 
         if item ~= nil and key(item) == key(target) then
             self:select(lnum, target.side)
-            self:preview(false)
+            self:show_selection(false)
             return
         end
     end
@@ -2281,7 +1844,7 @@ function Drawer:close()
     end
 
     self.float:close()
-    self.view:close()
+    self.preview:close()
 
     for _, buf in pairs({ self.buf, self.section_buf, self.side_buf }) do
         if vim.api.nvim_buf_is_valid(buf) then

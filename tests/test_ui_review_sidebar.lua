@@ -1,4 +1,5 @@
 local helpers = dofile('tests/helpers.lua')
+local H = dofile('tests/helpers_review.lua')
 
 local new_set = MiniTest.new_set
 local eq = MiniTest.expect.equality
@@ -7,7 +8,7 @@ local child = MiniTest.new_child_neovim()
 ---@type string
 local repo
 
-local R = [[require('iter').current_review]]
+local R = H.R
 local S = [[require('iter.ui.sidebar').of(require('iter').current_review.tab)]]
 
 ---@param prefix string
@@ -100,11 +101,8 @@ local function setup(options)
 end
 
 local function open_review()
-    child.cmd('Iter review')
-    helpers.wait_until(
-        child,
-        R .. ' ~= nil and ' .. R .. '.drawer.view:is_shown()'
-    )
+    H.open(child)
+    helpers.wait_until(child, R .. [[.view:is_shown()]])
 end
 
 ---@return integer?
@@ -134,7 +132,7 @@ local function goto_note(body)
         child,
         string.format(
             [[(function()
-                local view = %s.drawer.view
+                local view = %s.view
                 for _, mark in ipairs(view.marks) do
                     if mark.annotation.id == view.focus then
                         return mark.annotation.body == %q
@@ -205,7 +203,7 @@ T['wide']['moving in the sidebar previews the note in the diff'] = function()
     open_review()
     goto_note('Why this change?')
 
-    eq(child.lua_get(R .. '.drawer.view.files[1].path'), 'a.txt')
+    eq(child.lua_get(R .. '.view.files[1].path'), 'a.txt')
     helpers.expect_screenshot(child, 'review-sidebar')
 end
 
@@ -213,7 +211,7 @@ T['wide']['a note on a file without changes shows the file at HEAD'] = function(
     open_review()
     goto_note('Unchanged but odd')
 
-    local file = child.lua_get(R .. '.drawer.view.files[1]')
+    local file = child.lua_get(R .. '.view.files[1]')
 
     eq({ file.path, file.side }, { 'e.txt', 'commit' })
     helpers.expect_screenshot(child, 'review-sidebar-outside')
