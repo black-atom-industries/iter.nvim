@@ -73,13 +73,6 @@ local BASE_PREVIEW_DELAY_MS = 150
 -- Commits since a branch the base summary lists at most.
 local BASE_COMMITS = 100
 
--- Glyph and group per staging state in a tree row of working changes.
-local STAGE_ICONS = {
-    staged = { '●', 'IterStage' },
-    partly = { '◐', 'IterUnstage' },
-    unstaged = { '○', 'IterDrawerHint' },
-}
-
 -- Glyph and group per reviewed state at the right of a tree row.
 local REVIEWED_MARKS = {
     reviewed = { '✓', 'IterReviewed' },
@@ -722,7 +715,7 @@ function Review:decorator()
             mark and { ' ' .. mark[1], mark[2] } or { '  ', 'IterDrawerHint' }
         )
 
-        return { icon = STAGE_ICONS[file.stage], right = right }
+        return { icon = tree.stage_icon(file.stage), right = right }
     end
 end
 

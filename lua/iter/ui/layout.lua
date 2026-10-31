@@ -812,9 +812,76 @@ function M.base_summary(summary, width)
     return lines
 end
 
+--- The status header in `width` cells: `HEAD <branch>  ↑n ↓m  <upstream>`,
+--- `↑`, `↓` and the upstream only when there are, and `summary` at the
+--- right edge when given. Too wide, it sheds from the right: the summary
+--- shrinks to `total`, then goes, then the upstream, then the arrows;
+--- `HEAD <branch>` always stays. A detached HEAD reads `(detached)`.
+---@param branch string
+---@param recent GitRecent?
+---@param width integer
+---@param summary? string
+---@param total? string
+---@return [string, string][]
+function M.status_head(branch, recent, width, summary, total)
+    local head = {
+        { 'HEAD ', 'IterDrawerHint' },
+        { branch == 'HEAD' and '(detached)' or branch, 'IterHead' },
+    }
+    local arrows, upstream = {}, {}
+
+    if recent ~= nil and recent.upstream ~= nil then
+        if recent.ahead > 0 then
+            table.insert(arrows, { '  ↑' .. recent.ahead, 'IterUnpushed' })
+        end
+
+        if recent.behind > 0 then
+            local gap = #arrows > 0 and ' ' or '  '
+            table.insert(
+                arrows,
+                { gap .. '↓' .. recent.behind, 'IterBehind' }
+            )
+        end
+
+        upstream = { { '  ' .. recent.upstream, 'IterDrawerHint' } }
+    end
+
+    local function build(parts, tail)
+        local chunks = vim.deepcopy(head)
+
+        for _, part in ipairs(parts) do
+            vim.list_extend(chunks, part)
+        end
+
+        if tail ~= nil then
+            tail = tail .. ' '
+            local room = width
+                - chunks_width(chunks)
+                - vim.fn.strdisplaywidth(tail)
+
+            if room < 2 then
+                return nil
+            end
+
+            table.insert(chunks, { string.rep(' ', room), 'IterDrawerHint' })
+            table.insert(chunks, { tail, 'IterDrawerHint' })
+        elseif chunks_width(chunks) > width then
+            return nil
+        end
+
+        return chunks
+    end
+
+    return build({ arrows, upstream }, summary)
+        or build({ arrows, upstream }, total)
+        or build({ arrows, upstream })
+        or build({ arrows })
+        or head
+end
+
 --- The Recent commits section, `width` cells wide: a title with
---- `· ↑n unpushed` and `· ↓m behind` when not 0, then a row per commit. Its
---- rows hold no items. Empty without commits.
+--- `· ↑n unpushed` and `· ↓m behind` when not 0, then a row per commit,
+--- each holding its commit as `commit`. Empty without commits.
 ---@param recent GitRecent?
 ---@param width integer
 ---@param now integer seconds since the epoch the ages count to
@@ -867,9 +934,9 @@ function M.commits(recent, width, now)
         )
     end
 
-    for _, line in ipairs(lines) do
+    for i, line in ipairs(lines) do
         table.insert(result.lines, line)
-        table.insert(result.rows, {})
+        table.insert(result.rows, { commit = recent.commits[i - 1] })
         table.insert(result.cells, {})
     end
 

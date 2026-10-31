@@ -411,4 +411,11 @@ T['ancestors']['lists the directories that hold a path'] = function()
     eq(tree.ancestors('vendor/sub/'), { 'vendor/' })
 end
 
+T['stage_icon()'] = function()
+    eq(tree.stage_icon('staged'), { '●', 'IterStage' })
+    eq(tree.stage_icon('partly'), { '◐', 'IterUnstage' })
+    eq(tree.stage_icon('unstaged'), { '○', 'IterDrawerHint' })
+    eq(tree.stage_icon(nil), nil)
+end
+
 return T

@@ -18,12 +18,16 @@ local function change(path, side)
 end
 
 --- A tree page of `items` with a one-line header and one hint line; each
---- selected node lands in `selected`.
+--- selected node lands in `selected`, each selected footer item in
+--- `extras`.
 ---@param items IterChange[]
 ---@param selected? (IterTreeDir|IterTreeFile)[]
+---@param footer? fun(width: integer): IterRenderLine[], table<integer, any>
+---@param extras? any[]
 ---@return IterReviewTree
-local function new_page(items, selected)
+local function new_page(items, selected, footer, extras)
     page = review_tree.new({
+        footer = footer,
         view = 'tree',
         keys = { help = { '?' } },
         handlers = { help = function() end },
@@ -36,8 +40,12 @@ local function new_page(items, selected)
         hints = function()
             return { { { 'help', 'help' } } }
         end,
-        on_select = function(node)
-            table.insert(selected or {}, node)
+        on_select = function(node, extra)
+            if node ~= nil then
+                table.insert(selected or {}, node)
+            else
+                table.insert(extras or {}, extra)
+            end
         end,
     })
     page.root = tree.build(items)
@@ -240,6 +248,104 @@ T['rows']['a partly staged path is one row'] = function()
     eq(vim.tbl_count(p.items), 1)
     eq(#p.items[3].node.items, 2)
     eq(p.items[3].node.stage, 'partly')
+end
+
+T['footer'] = new_set()
+
+--- A footer of a title and two items, `c1` and `c2`.
+---@return IterRenderLine[], table<integer, any>
+local function footer()
+    return {
+        render.line(' Recent'),
+        render.line(' c1'),
+        render.line(' c2'),
+    }, { [2] = 'c1', [3] = 'c2' }
+end
+
+T['footer']['sits above the hints at the bottom while the rows fit'] = function()
+    local p = new_page({ change('a.txt') }, nil, footer)
+
+    p:render(30, 9)
+
+    eq(lines(), {
+        ' Title',
+        '',
+        '   M a.txt',
+        '',
+        '',
+        ' Recent',
+        ' c1',
+        ' c2',
+        ' ? help',
+    })
+    eq(p.extras, { [7] = 'c1', [8] = 'c2' })
+    eq(vim.tbl_count(p.items), 1)
+end
+
+T['footer']['a blank line keeps it apart when the rows overflow'] = function()
+    local p = new_page({ change('a.txt'), change('b.txt') }, nil, footer)
+
+    p:render(30, 6)
+
+    eq(lines(), {
+        ' Title',
+        '',
+        '   M a.txt',
+        '   M b.txt',
+        '',
+        ' Recent',
+        ' c1',
+        ' c2',
+        ' ? help',
+    })
+    eq(p.extras, { [7] = 'c1', [8] = 'c2' })
+end
+
+T['footer']['shows below a clean tree'] = function()
+    local p = new_page({}, nil, footer)
+
+    p:render(30, 8)
+
+    eq(lines(), {
+        ' Title',
+        '',
+        ' Working tree clean',
+        '',
+        ' Recent',
+        ' c1',
+        ' c2',
+        ' ? help',
+    })
+    eq(p:nearest(1, 1), 6)
+end
+
+T['footer']['the cursor snaps onto its items and on_select gets them'] = function()
+    local selected, extras = {}, {}
+    local p = new_page({ change('a.txt') }, selected, footer, extras)
+
+    p:render(30, 9)
+    vim.api.nvim_win_set_buf(0, p.buf)
+
+    eq(p:nearest(4, 1), 7)
+    eq(p:nearest(9, -1), 8)
+
+    vim.api.nvim_win_set_cursor(0, { 6, 0 })
+    p:on_cursor(6, 3)
+
+    eq(vim.api.nvim_win_get_cursor(0)[1], 7)
+    eq(extras, { 'c1' })
+    eq(p:extra(), 'c1')
+    eq(p:node(), nil)
+    eq(p:file(), nil)
+    eq(p:line_of('a.txt'), 3)
+
+    vim.api.nvim_win_set_cursor(0, { 5, 0 })
+    p:on_cursor(5, 7)
+
+    eq(p.lnum, 3)
+    eq(p:extra(), nil)
+    eq(p:file().path, 'a.txt')
+    eq(#selected, 1)
 end
 
 return T

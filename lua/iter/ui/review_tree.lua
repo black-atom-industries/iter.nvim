@@ -1,6 +1,6 @@
 --- A file tree page of the panel, the review's or a commit's: a header,
---- the changed files as a directory tree, and two lines of key hints at the
---- bottom.
+--- the changed files as a directory tree, an optional footer, and two lines
+--- of key hints at the bottom.
 
 local keymap = require('iter.keymap')
 local layout = require('iter.ui.layout')
@@ -16,7 +16,8 @@ local M = {}
 ---@field header fun(width: integer): IterRenderLine[] the lines above the rows
 ---@field decorate fun(file: IterTreeFile): IterTreeDecor
 ---@field hints fun(): [string, string][][] action and label, one list per hint line
----@field on_select fun(node: IterTreeDir|IterTreeFile) after the cursor moved onto another row
+---@field footer? fun(width: integer): IterRenderLine[], table<integer, any> lines above the hints and the item of each of its lines that has one
+---@field on_select fun(node?: IterTreeDir|IterTreeFile, extra?: any) after the cursor moved onto another row: a tree row's node, or a footer line's item
 
 ---@class IterReviewTree: IterPanelPage
 ---@field buf integer
@@ -24,6 +25,7 @@ local M = {}
 ---@field collapsed table<string, true> directory paths the user closed
 ---@field rows IterTreeRow[] the visible rows of the last render
 ---@field items table<integer, IterTreeRow> buffer line → row
+---@field extras table<integer, any> buffer line → footer item
 ---@field lnum integer the cursor line the page saw last
 ---@field opts IterReviewTreeOptions
 local Tree = {}
@@ -41,6 +43,7 @@ function M.new(opts)
     vim.validate('opts.decorate', opts.decorate, 'function')
     vim.validate('opts.hints', opts.hints, 'function')
     vim.validate('opts.on_select', opts.on_select, 'function')
+    vim.validate('opts.footer', opts.footer, 'function', true)
 
     local buf = vim.api.nvim_create_buf(false, true)
 
@@ -55,6 +58,7 @@ function M.new(opts)
         collapsed = {},
         rows = {},
         items = {},
+        extras = {},
         lnum = 1,
         opts = opts,
     }, Tree)
@@ -99,7 +103,31 @@ function Tree:render(width, height)
         self.items[first + index] = self.rows[index]
     end
 
-    layout.bottom_hints(lines, hint_chunks(self, width), height)
+    local hints = hint_chunks(self, width)
+    local bottom = height
+
+    self.extras = {}
+
+    if self.opts.footer ~= nil then
+        local footer, extras = self.opts.footer(width)
+
+        if #footer > 0 then
+            local gap = height - #lines - #footer - #hints
+
+            for _ = 1, math.max(gap, 1) do
+                table.insert(lines, render.line(''))
+            end
+
+            for index, item in pairs(extras) do
+                self.extras[#lines + index] = item
+            end
+
+            vim.list_extend(lines, footer)
+            bottom = #lines + #hints
+        end
+    end
+
+    layout.bottom_hints(lines, hints, bottom)
 
     vim.bo[self.buf].modifiable = true
     vim.api.nvim_buf_set_lines(self.buf, 0, -1, false, render.text_lines(lines))
@@ -107,8 +135,8 @@ function Tree:render(width, height)
     render.apply(self.buf, lines)
 end
 
---- The row line nearest to `lnum`, looking in direction `dir` first; nil
---- without rows.
+--- The line of a row or footer item nearest to `lnum`, looking in
+--- direction `dir` first; nil without either.
 ---@param lnum integer
 ---@param dir 1|-1
 ---@return integer?
@@ -119,7 +147,7 @@ function Tree:nearest(lnum, dir)
         local l = lnum
 
         while l >= 1 and l <= last do
-            if self.items[l] ~= nil then
+            if self.items[l] ~= nil or self.extras[l] ~= nil then
                 return l
             end
 
@@ -130,7 +158,8 @@ function Tree:nearest(lnum, dir)
     return nil
 end
 
---- Snap the cursor to a row and tell the review about the row it is on.
+--- Snap the cursor to a row or footer item and tell the page's owner what
+--- it is on.
 ---@param lnum integer
 ---@param prev integer
 function Tree:on_cursor(lnum, prev)
@@ -146,7 +175,15 @@ function Tree:on_cursor(lnum, prev)
 
     if row ~= nil then
         self.opts.on_select(row.node)
+    elseif self.extras[self.lnum] ~= nil then
+        self.opts.on_select(nil, self.extras[self.lnum])
     end
+end
+
+--- The footer item under the cursor.
+---@return any
+function Tree:extra()
+    return self.extras[self.lnum]
 end
 
 --- The node under the cursor.

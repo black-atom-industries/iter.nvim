@@ -29,6 +29,13 @@ local render = require('iter.ui.render')
 
 local M = {}
 
+-- Glyph and group per staging state.
+local STAGE_ICONS = {
+    staged = { '●', 'IterStage' },
+    partly = { '◐', 'IterUnstage' },
+    unstaged = { '○', 'IterDrawerHint' },
+}
+
 local GUTTER = '   '
 local INDENT = '  '
 local ARROW = ' ← '
@@ -383,6 +390,13 @@ local function file_line(row, width, decor)
     end
 
     return render.chunks_line(chunks)
+end
+
+--- The icon of a file's staging state, nil for a file without one.
+---@param stage? 'staged'|'partly'|'unstaged'
+---@return [string, string]?
+function M.stage_icon(stage)
+    return STAGE_ICONS[stage]
 end
 
 --- The render lines of `rows`, each at most `width` cells: a 3-cell gutter,

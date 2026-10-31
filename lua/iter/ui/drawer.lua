@@ -117,90 +117,7 @@ function Drawer:ordered()
     return items
 end
 
----@param chunks [string, string][]
----@return integer
-local function chunks_width(chunks)
-    local width = 0
-
-    for _, chunk in ipairs(chunks) do
-        width = width + vim.fn.strdisplaywidth(chunk[1])
-    end
-
-    return width
-end
-
---- The status drawer's header in `width` cells: `HEAD <branch>  ↑n ↓m
---- <upstream>` and `summary` at the right edge, `↑`, `↓` and the upstream
---- only when there are. Too wide, it sheds from the right: the summary
---- shrinks to `total`, then goes, then the upstream, then the arrows;
---- `HEAD <branch>` always stays.
----@param drawer IterDrawer
----@param summary string
----@param total string
----@param width integer
----@return [string, string][]
-local function status_header(drawer, summary, total, width)
-    local recent = drawer.recent
-    local head = {
-        { 'HEAD ', 'IterDrawerHint' },
-        {
-            drawer.changes.branch == 'HEAD' and '(detached)'
-                or drawer.changes.branch,
-            'IterHead',
-        },
-    }
-    local arrows, upstream = {}, {}
-
-    if recent ~= nil and recent.upstream ~= nil then
-        if recent.ahead > 0 then
-            table.insert(arrows, { '  ↑' .. recent.ahead, 'IterUnpushed' })
-        end
-
-        if recent.behind > 0 then
-            local gap = #arrows > 0 and ' ' or '  '
-            table.insert(
-                arrows,
-                { gap .. '↓' .. recent.behind, 'IterBehind' }
-            )
-        end
-
-        upstream = { { '  ' .. recent.upstream, 'IterDrawerHint' } }
-    end
-
-    local function build(parts, tail)
-        local chunks = vim.deepcopy(head)
-
-        for _, part in ipairs(parts) do
-            vim.list_extend(chunks, part)
-        end
-
-        if tail ~= nil then
-            tail = tail .. ' '
-            local pad = width
-                - chunks_width(chunks)
-                - vim.fn.strdisplaywidth(tail)
-
-            if pad < 2 then
-                return nil
-            end
-
-            table.insert(chunks, { string.rep(' ', pad), 'IterDrawerHint' })
-            table.insert(chunks, { tail, 'IterDrawerHint' })
-        elseif chunks_width(chunks) > width then
-            return nil
-        end
-
-        return chunks
-    end
-
-    return build({ arrows, upstream }, summary)
-        or build({ arrows, upstream }, total)
-        or build({ arrows, upstream })
-        or build({ arrows })
-        or head
-end
-
---- `status_header`, with `<n> changes` at the right edge. A file in more
+--- `layout.status_head`, with `<n> changes` at the right edge. A file in more
 --- than one column counts once. Stacked, the counts are per column, since a
 --- lower title may sit below the visible lines.
 ---@param drawer IterDrawer
@@ -226,7 +143,13 @@ local function header_chunks(drawer)
     -- The header starts one column in.
     local width = drawer:width() - 1
 
-    return status_header(drawer, table.concat(parts, ' · '), total, width)
+    return layout.status_head(
+        drawer.changes.branch,
+        drawer.recent,
+        width,
+        table.concat(parts, ' · '),
+        total
+    )
 end
 
 ---@param opts IterDrawerOpenOptions

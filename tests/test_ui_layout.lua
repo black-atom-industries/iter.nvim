@@ -422,7 +422,13 @@ T['commits()']['title, markers, subjects and right-aligned ages'] = function()
     eq(spans(behind.lines[1], 'IterBehind'), { { 36, 47 } })
 
     local result = layout.commits(recent('origin/main', 1, 0), 40, NOW)
-    eq(result.rows, { {}, {}, {} })
+    eq(result.rows, {
+        {},
+        { commit = result.rows[2].commit },
+        { commit = result.rows[3].commit },
+    })
+    eq(result.rows[2].commit.sha, '3f2a9c1')
+    eq(result.rows[3].commit.sha, '0aa4465')
     eq(result.cells, { {}, {}, {} })
     eq(spans(result.lines[2], 'IterUnpushed'), { { 1, 4 }, { 5, 12 } })
     eq(spans(result.lines[3], 'IterDrawerHint'), {
@@ -446,6 +452,60 @@ T['commits()']['empty without commits'] = function()
 
     eq(layout.commits(none, 40, NOW).lines, {})
     eq(layout.commits(nil, 40, NOW).lines, {})
+end
+
+T['status_head()'] = new_set()
+
+---@param chunks [string, string][]
+---@return string
+local function head_text(chunks)
+    return table.concat(vim.tbl_map(function(chunk)
+        return chunk[1]
+    end, chunks))
+end
+
+T['status_head()']['branch, arrows, upstream and the summary at the right'] = function()
+    local chunks = layout.status_head(
+        'main',
+        recent('origin/main', 1, 2),
+        52,
+        '2 changes · 1 staged',
+        '2 changes'
+    )
+
+    eq(
+        head_text(chunks),
+        'HEAD main  ↑1 ↓2  origin/main  2 changes · 1 staged '
+    )
+    eq(chunks[2], { 'main', 'IterHead' })
+    eq(chunks[3], { '  ↑1', 'IterUnpushed' })
+    eq(chunks[4], { ' ↓2', 'IterBehind' })
+end
+
+T['status_head()']['sheds the summary, the total, the upstream, then the arrows'] = function()
+    local up = recent('origin/main', 1, 2)
+    local function at(width)
+        return head_text(
+            layout.status_head('main', up, width, '2 changes · 1 staged', '2')
+        )
+    end
+
+    eq(at(36), 'HEAD main  ↑1 ↓2  origin/main     2 ')
+    eq(at(30), 'HEAD main  ↑1 ↓2  origin/main')
+    eq(at(20), 'HEAD main  ↑1 ↓2')
+    eq(at(12), 'HEAD main')
+end
+
+T['status_head()']['without a summary, an upstream or a branch'] = function()
+    eq(
+        head_text(layout.status_head('main', recent('origin/main', 0, 0), 40)),
+        'HEAD main  origin/main'
+    )
+    eq(
+        head_text(layout.status_head('main', recent(nil, 0, 0), 40)),
+        'HEAD main'
+    )
+    eq(head_text(layout.status_head('HEAD', nil, 40)), 'HEAD (detached)')
 end
 
 T['file_cell()'] = new_set()
