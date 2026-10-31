@@ -148,7 +148,8 @@ the review straight to an agent pane.
   options it changes and restores them on every exit path.
 - The status sidebar (`iter.ui.status`, `status.style = 'sidebar'`, the default) shows the status in the panel at the tab's left
   edge, a tree page (`iter.ui.review_tree`, named `iter://status`) with the drawer's keys, and the diff of the file under
-  the cursor in the window it opened from. At open it saves that window's buffer and view and the tab's
+  the cursor in the window it opened from, with the review's keys for moving between hunks, staging them
+  (`iter.ui.hunk_actions`, shared with the review), opening the file, closing and help. At open it saves that window's buffer and view and the tab's
   `winrestcmd()`; closing gives the window its buffer and view back, the view restores the options, and the tab gets
   its sizes back while its windows are the ones it had. Its line counts come from one `git diff --numstat HEAD` per
   read. The Recent commits are lines of the tree page, after the rows and above the hints (`review_tree`'s `footer`),
@@ -157,7 +158,7 @@ the review straight to an agent pane.
   another buffer takes it: `:edit` there closes the status and keeps the buffer, `:edit` of a file in the panel puts
   the tree back, closes the status and edits the file in the window, and a split of the window gets the user's buffer.
   The panel sets its window options as local values, so a buffer `:edit` puts there, or a window split from it, starts
-  out with the user's. A tab left with the panel alone gets an empty window before the panel closes.
+  out with the user's. A tab left with the panel alone gets a window with the buffer and view the status opened from before the panel closes.
 - The status drawer's lines come from `iter.ui.layout`: pure functions from a list of column specs and the width to
   render lines, side by side at `drawer.breakpoint` and wider, stacked below it; `h` and `l` step between the
   columns. The drawer and the review share the diff preview (`iter.ui.preview`: the view, the file it shows, all-files

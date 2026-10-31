@@ -9,6 +9,7 @@ local file_actions = require('iter.ui.file_actions')
 local git = require('iter.git')
 local help = require('iter.ui.help')
 local highlight = require('iter.highlight')
+local hunk_actions = require('iter.ui.hunk_actions')
 local layout = require('iter.ui.layout')
 local panel = require('iter.ui.panel')
 local Preview = require('iter.ui.preview')
@@ -788,17 +789,12 @@ function Status:edit(rel, line)
     util.edit_at(path, line, rel)
 end
 
+--- The actions the tree and the diff share: the mode, the layout and the
+--- wrap of the diff.
+---@param self IterStatus
 ---@return table<string, fun()>
-function Status:view_handlers()
+local function diff_handlers(self)
     return {
-        focus_drawer = function()
-            self.panel:focus()
-        end,
-        expand = function()
-            self.preview:open_row(function(path, line)
-                self:edit(path, line)
-            end)
-        end,
         mode = function()
             self:set_all_files(not self.preview.all_files)
         end,
@@ -814,9 +810,70 @@ function Status:view_handlers()
     }
 end
 
+--- Stage (`stage`) or unstage (`unstage`) the hunk under the diff's cursor,
+--- or the selected lines.
+---@param kind 'stage'|'unstage'
+function Status:apply_change(kind)
+    hunk_actions.apply(kind, {
+        view = self.view,
+        root = self.changes.root,
+        args = self.config.options.diff.args,
+        section = function(first, last)
+            return hunk_actions.section(self.view, first, last)
+        end,
+        refresh = function(path)
+            self:refresh(nil, path)
+        end,
+    })
+end
+
+---@return table<string, fun()>
+function Status:view_handlers()
+    return vim.tbl_extend('error', diff_handlers(self), {
+        next_hunk = function()
+            self.view:jump_hunk(1)
+        end,
+        prev_hunk = function()
+            self.view:jump_hunk(-1)
+        end,
+        stage = function()
+            self:apply_change('stage')
+        end,
+        unstage = function()
+            self:apply_change('unstage')
+        end,
+        expand = function()
+            self.preview:open_row(function(path, line)
+                self:edit(path, line)
+            end)
+        end,
+        goto_file = function()
+            local section, row = self.view:at()
+
+            if section ~= nil and self.view:is_shown() then
+                local file = section.file
+
+                self:edit(
+                    file.path,
+                    self.preview:worktree_line(file, row or #file.rows)
+                )
+            end
+        end,
+        focus_drawer = function()
+            self.panel:focus()
+        end,
+        close = function()
+            self:close()
+        end,
+        help = function()
+            self:toggle_help('diff')
+        end,
+    })
+end
+
 ---@return table<string, fun()>
 function Status:handlers()
-    return {
+    return vim.tbl_extend('error', diff_handlers(self), {
         open = function()
             local node = self.tree:node()
             local commit = self.tree:extra()
@@ -875,18 +932,6 @@ function Status:handlers()
             self:close()
             require('iter').review(target)
         end,
-        mode = function()
-            self:set_all_files(not self.preview.all_files)
-        end,
-        split = function()
-            self.preview:set_layout('split')
-        end,
-        unified = function()
-            self.preview:set_layout('unified')
-        end,
-        wrap = function()
-            self.preview:toggle_wrap()
-        end,
         collapse = function()
             self:fold('collapse')
         end,
@@ -905,29 +950,33 @@ function Status:handlers()
         scroll_up = function()
             self.preview:scroll('<C-u>')
         end,
-    }
+    })
 end
 
---- Open the help float with the status's keys, or close it.
-function Status:toggle_help()
+--- Open the help float with the keys of the tree, or of the diff with
+--- `view` 'diff', or close it.
+---@param view? 'diff'
+function Status:toggle_help(view)
     if self.help ~= nil and self.help:is_open() then
         self.help:close()
         return
     end
 
+    local diff = view == 'diff'
+
     self.help = help.open({
-        view = 'drawer',
-        keys = self.keys,
-        handlers = self.tree.opts.handlers,
+        view = diff and 'diff' or 'drawer',
+        keys = diff and self.view.keys or self.keys,
+        handlers = diff and self.view.handlers or self.tree.opts.handlers,
         close_keys = self.config.keys.help,
         zindex = self.config.options.drawer.zindex + 10,
     })
 end
 
 --- After a resize: the 'auto' diff layout, the tree for the new size, even
---- split panes and wrapped lines.
+--- split panes and wrapped lines. A closed pane waits for the close.
 function Status:resized()
-    if not self:is_open() then
+    if not self:is_open() or not util.is_valid_win(self.pane) then
         return
     end
 
@@ -954,6 +1003,13 @@ function Status:attach()
                 end)
             then
                 return
+            end
+
+            -- A resize of the editor gives the sidebar its width for the
+            -- new size; one of a window keeps the width the user gave it.
+            if args.event == 'VimResized' and self:is_open() then
+                self.panel.columns = sidebar_width(self.config)
+                self.panel:restore_width()
             end
 
             self:resized()
@@ -1168,7 +1224,8 @@ function Status:close()
 
     local restore = util.is_valid_win(pane) and same_windows(self)
 
-    -- A tab of the panel alone keeps an empty window in its place.
+    -- A tab of the panel alone gets a window with the user's buffer in its
+    -- place.
     if
         self.panel:is_open()
         and #vim.tbl_filter(function(win)
@@ -1176,9 +1233,24 @@ function Status:close()
             end, vim.api.nvim_tabpage_list_wins(self.tab))
             == 1
     then
-        vim.api.nvim_win_call(self.panel.win, function()
-            vim.cmd('rightbelow vnew')
-        end)
+        local buf = origin.buf
+        local valid = vim.api.nvim_buf_is_valid(buf)
+
+        if not valid then
+            buf = vim.api.nvim_create_buf(false, true)
+            vim.bo[buf].bufhidden = 'wipe'
+        end
+
+        pane = vim.api.nvim_open_win(buf, false, {
+            split = 'right',
+            win = self.panel.win,
+        })
+
+        if valid then
+            vim.api.nvim_win_call(pane, function()
+                vim.fn.winrestview(origin.view)
+            end)
+        end
     end
 
     self.panel:close({ silent = true })

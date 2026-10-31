@@ -297,7 +297,8 @@ vim.o.statuscolumn = "%!v:lua.require'iter'.statuscolumn()"
 ### Status
 
 `:Iter` opens the status at the left edge of the current tab,
-`review.tree_width` wide and at most half the editor. The current window shows
+`review.tree_width` wide and at most half the editor. A width set with
+`:vertical resize` stays until the editor resizes. The current window shows
 the diff of the file under the cursor. `q`, or `:Iter` again, closes the status
 and gives that window back its buffer, options and view. `:Iter` in another tab
 moves the status there, and in the commits tab opens it in the tab the commits
@@ -325,9 +326,10 @@ shows the unstaged and the staged section.
   directory it closes or opens the directory, as `h` and `l` do.
 - `r` closes the status and opens the review on the file.
 
-**Diff.** `<CR>` on a code line opens the file at that line and closes the
-status. A staged line lands where it is in the worktree. `<C-j>` in the diff
-goes back to the status.
+**Diff.** `<CR>` or `gf` on a code line opens the file at that line and closes
+the status. A staged line lands where it is in the worktree. `]c` and `[c` move
+between the hunks, `s` and `u` stage and unstage the hunk or the selected
+lines, `q` closes the status, and `<C-j>` goes back to it.
 
 **Recent commits.** The last commits (`drawer.commits`, `0` hides them) sit at
 the bottom above the key hints, each as its short sha, subject, `↑` when it
@@ -644,7 +646,10 @@ The review's file tree (`tree`):
 | `<C-d>` | `scroll_down`   | Scroll the diff down                          |
 | `<C-u>` | `scroll_up`     | Scroll the diff up                            |
 
-The diff pane (`diff`), in the review tab and beside the status:
+The diff pane (`diff`), in the review tab and beside the status. Beside the
+status sidebar it takes `]c`, `[c`, `s`, `u`, `<CR>`, `gf`, `=`, `|`, `-`,
+`gw`, `<C-j>`, `q` and `?`; above the status drawer `<CR>`, `=`, `|`, `-`, `gw`
+and `<C-j>`.
 
 | Key     | Action            | Does                                                            |
 | ------- | ----------------- | --------------------------------------------------------------- |

@@ -137,11 +137,13 @@ local function elsewhere(kind)
         return false
     end
 
+    local sidebar = iter.config.options.status.style == 'sidebar'
+
     util.warn(
         string.format(
             'The open %s is of %s, not of %s',
             kind == 'commits' and 'commits tab'
-                or kind == 'status' and (iter.config.options.status.style == 'sidebar' and 'status' or 'drawer')
+                or kind == 'status' and (sidebar and 'status' or 'drawer')
                 or 'review',
             open_root,
             root
@@ -301,8 +303,8 @@ end
 --- Wipe the `iter://` buffers that aren't iter's own, such as those a
 --- session restores. A window that shows the status sidebar's diff, its
 --- new side in the split layout, or its summary is the user's and keeps an
---- empty buffer; any other closes, or
---- the tab of the last one, unless it is the last window.
+--- empty buffer; any other closes, or the tab of the last one, unless it is
+--- the last window.
 function M.clean()
     for _, buf in ipairs(vim.api.nvim_list_bufs()) do
         local name = vim.api.nvim_buf_get_name(buf)

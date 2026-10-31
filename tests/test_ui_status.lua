@@ -272,6 +272,33 @@ T['open']['the cursor starts on the file of the current buffer'] = function()
     eq(cursor_path(), 'a.txt')
 end
 
+T['open']['the cursor, the marker and the diff move together'] = function()
+    child.cmd('edit a.txt')
+
+    open_status()
+    wait_preview({ 'unstaged a.txt' })
+    child.type_keys('j', 'j')
+    wait_preview({ 'unstaged new.txt' })
+
+    local state = child.lua_get([[(function()
+        local s = require('iter').drawer
+        local ns = vim.api.nvim_create_namespace('iter.panel.cursor')
+        local marks = vim.api.nvim_buf_get_extmarks(s.tree.buf, ns, 0, -1, {})
+        return {
+            cursor = vim.api.nvim_win_get_cursor(s.panel.win)[1],
+            marks = vim.tbl_map(function(mark)
+                return mark[2] + 1
+            end, marks),
+            lnum = s.tree:line_of('new.txt'),
+            pane = vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(s.pane)),
+        }
+    end)()]])
+
+    eq(state.cursor, state.lnum)
+    eq(state.marks, { state.lnum })
+    eq(state.pane, 'iter://status/new.txt')
+end
+
 T['open']['a partly staged file shows its unstaged and its staged section'] = function()
     open_status()
     move_to('b.txt')
@@ -481,6 +508,104 @@ T['tree']['? lists the keys with collapse and expand'] = function()
         ' l      Open the directory',
     })
     helpers.expect_screenshot(child, 'status-sidebar-help')
+end
+
+T['diff'] = new_set()
+
+--- Focus the diff with the cursor on its first line.
+local function focus_diff()
+    child.api.nvim_set_current_win(child.lua_get(S .. '.pane'))
+    child.api.nvim_win_set_cursor(0, { 1, 0 })
+end
+
+T['diff'][']c and [c move between the hunks'] = function()
+    open_status()
+    move_to('b.txt')
+    wait_preview({ 'unstaged b.txt', 'staged b.txt' })
+    focus_diff()
+
+    local function hunk()
+        return child.lua_get([[(function()
+            local s = require('iter').drawer
+            local section, index = s.view:at()
+            local row = section.file.rows[index]
+            return { section.file.side, row.kind, row.hunk }
+        end)()]])
+    end
+
+    child.type_keys(']c')
+    eq(hunk(), { 'unstaged', 'hunk', 1 })
+    child.type_keys(']c')
+    eq(hunk(), { 'staged', 'hunk', 1 })
+    child.type_keys('[c')
+    eq(hunk(), { 'unstaged', 'hunk', 1 })
+end
+
+T['diff']['s stages the hunk under the cursor, u unstages it'] = function()
+    open_status()
+    move_to('b.txt')
+    wait_preview({ 'unstaged b.txt', 'staged b.txt' })
+    focus_diff()
+
+    child.type_keys(']c', 's')
+    wait_preview({ 'staged b.txt' })
+
+    eq(status()['b.txt'], 'M ')
+    eq(
+        helpers.git(repo, { 'diff', '--cached', '--name-only' }),
+        'b.txt\ndir/c.txt\n'
+    )
+    eq(child.api.nvim_get_current_win(), child.lua_get(S .. '.pane'))
+
+    child.api.nvim_win_set_cursor(0, { 1, 0 })
+    child.type_keys(']c', 'u')
+    wait_preview({ 'unstaged b.txt', 'staged b.txt' })
+
+    eq(status()['b.txt'], 'MM')
+end
+
+T['diff']['q closes the sidebar'] = function()
+    child.cmd('edit long.txt')
+    local buf = child.api.nvim_get_current_buf()
+
+    open_status()
+    wait_preview({ 'unstaged dir/sub/d.txt' })
+    focus_diff()
+    child.type_keys('q')
+
+    eq(child.lua_get(S), vim.NIL)
+    eq(#child.api.nvim_list_wins(), 1)
+    eq(child.api.nvim_get_current_buf(), buf)
+end
+
+T['diff']['? lists the keys of the diff'] = function()
+    open_status()
+    wait_preview({ 'unstaged dir/sub/d.txt' })
+    focus_diff()
+    child.type_keys('?')
+
+    local lines = child.lua_get(
+        [[vim.tbl_map(function(line)
+        return (line:gsub('%s+$', ''))
+    end, vim.api.nvim_buf_get_lines(require('iter').drawer.help.buf, 0, -1, false))]]
+    )
+
+    eq(lines, {
+        ' ]c     Next hunk',
+        ' [c     Previous hunk',
+        ' s      Stage the hunk or the selected lines',
+        ' u      Unstage the hunk or the selected lines',
+        ' <CR>   Expand the collapsed file or hidden context',
+        ' gf     Go to the line in the file',
+        ' =      Toggle one file or all files',
+        ' |      Show the diff side by side',
+        ' -      Show the diff unified',
+        ' gw     Toggle wrapping long lines',
+        ' <C-j>  Focus the drawer or the file tree',
+        ' q      Close',
+        ' ?      Show the keys',
+    })
+    helpers.expect_screenshot(child, 'status-sidebar-diff-help')
 end
 
 T['close'] = new_set()
@@ -977,7 +1102,11 @@ T['hand back'][':split in the window gives the new window the file'] = function(
     )
 end
 
-T['hand back'][':close of the last window beside the sidebar leaves an empty window'] = function()
+T['hand back'][":close of the last window beside the sidebar leaves the window's buffer"] = function()
+    child.cmd('edit long.txt')
+    child.cmd('normal! 30Gzt')
+    local buf = child.api.nvim_get_current_buf()
+
     open_status()
     wait_preview({ 'unstaged dir/sub/d.txt' })
     local panel = child.lua_get(S .. '.panel.win')
@@ -989,8 +1118,56 @@ T['hand back'][':close of the last window beside the sidebar leaves an empty win
 
     eq(#child.api.nvim_list_wins(), 1)
     eq(child.api.nvim_get_current_win() ~= panel, true)
-    eq(child.api.nvim_buf_get_name(0), '')
+    eq(child.api.nvim_get_current_buf(), buf)
+    eq(child.fn.winsaveview().topline, 30)
     eq(panel_opts(), NO_PANEL_OPTS)
+    eq(child.v.errmsg, '')
+end
+
+T['hand back'][":only in the sidebar leaves the window's buffer"] = function()
+    child.cmd('edit long.txt')
+    local buf = child.api.nvim_get_current_buf()
+
+    open_status()
+    wait_preview({ 'unstaged dir/sub/d.txt' })
+    child.cmd('only')
+    helpers.wait_until(child, S .. ' == nil')
+
+    eq(#child.api.nvim_list_wins(), 1)
+    eq(child.api.nvim_get_current_buf(), buf)
+    eq(panel_opts(), NO_PANEL_OPTS)
+    eq(child.v.errmsg, '')
+end
+
+T['hand back']['<C-w>c in the diff closes the sidebar'] = function()
+    child.cmd('edit long.txt')
+    child.cmd('vsplit')
+    local buf = child.api.nvim_get_current_buf()
+
+    open_status()
+    wait_preview({ 'unstaged dir/sub/d.txt' })
+    child.api.nvim_set_current_win(child.lua_get(S .. '.pane'))
+    child.type_keys('<C-w>c')
+    helpers.wait_until(child, S .. ' == nil')
+
+    eq(#child.api.nvim_list_wins(), 1)
+    eq(child.api.nvim_get_current_buf(), buf)
+    eq(child.v.errmsg, '')
+end
+
+T['hand back']['<C-w>c in the window over a summary closes the sidebar'] = function()
+    child.cmd('edit long.txt')
+    local buf = child.api.nvim_get_current_buf()
+
+    open_status()
+    to_commit()
+    wait_summary()
+    child.api.nvim_set_current_win(child.lua_get(S .. '.pane'))
+    child.type_keys('<C-w>c')
+    helpers.wait_until(child, S .. ' == nil')
+
+    eq(#child.api.nvim_list_wins(), 1)
+    eq(child.api.nvim_get_current_buf(), buf)
     eq(child.v.errmsg, '')
 end
 
@@ -1059,7 +1236,7 @@ T['hand back']['a 50-column tab gives the sidebar half of it'] = function()
     helpers.expect_screenshot(child, 'status-sidebar-narrow')
 end
 
-T['hand back']['a layout switch keeps the width, a resize keeps the user one'] = function()
+T['hand back']['a layout switch and a window resize keep the width, an editor resize sets it'] = function()
     child.o.columns = 160
 
     open_status()
@@ -1072,10 +1249,16 @@ T['hand back']['a layout switch keeps the width, a resize keeps the user one'] =
     eq(child.api.nvim_win_get_width(panel), 34)
 
     child.cmd('vertical resize 40')
+    child.lua('vim.wait(50)')
+    eq(child.api.nvim_win_get_width(panel), 40)
+
     child.o.columns = 140
     child.lua('vim.wait(50)')
+    eq(child.api.nvim_win_get_width(panel), 34)
 
-    eq(child.api.nvim_win_get_width(panel), 40)
+    child.o.columns = 50
+    child.lua('vim.wait(50)')
+    eq(child.api.nvim_win_get_width(panel), 25)
 end
 
 T['hand back']['the tab line counts the windows without the sidebar'] = function()
