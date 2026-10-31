@@ -63,10 +63,10 @@ The status shows:
 - the branch, and how far it is ahead (`↑`) and behind (`↓`) its upstream
 - the last commits, pinned under the files
 
+![The status sidebar: moving through the file tree shows each diff in the window beside it, a partly staged file shows its unstaged and staged changes, s stages a file, a recent commit shows its summary, ? lists the keys, and q gives the window back to the file](docs/assets/status.webp)
+
 With `status = { style = 'drawer' }` the status is a float at the bottom of
 the current window, Unstaged and Staged side by side.
-
-![The status drawer: moving through the files previews each diff, s stages a file, ? lists the keys](docs/assets/drawer.webp)
 
 ### Review
 

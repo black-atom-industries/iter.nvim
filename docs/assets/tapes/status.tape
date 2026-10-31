@@ -1,6 +1,6 @@
-# Run from an empty directory: REPO=<iter.nvim> BLACK_ATOM=<black-atom/adapters/nvim> vhs "$REPO/docs/assets/tapes/drawer.tape"
+# Run from an empty directory: REPO=<iter.nvim> BLACK_ATOM=<black-atom/adapters/nvim> vhs "$REPO/docs/assets/tapes/status.tape"
 # Then overlay frames/frame-text-* with frames/frame-cursor-*, pad 40px with the background, and encode:
-# magick -delay 1x50 -loop 0 'composed/f*.png' -define webp:lossless=true -define webp:method=4 drawer.webp
+# magick -delay 1x50 -loop 0 'composed/f*.png' -define webp:lossless=true -define webp:method=4 status.webp
 Output frames/
 Set Shell bash
 Set FontFamily "TX-02, FiraCode Nerd Font Mono"
@@ -19,6 +19,9 @@ Enter
 Type@1ms '"$REPO/docs/assets/tapes/demo.sh" "$PWD/demo" && cd demo && clear'
 Enter
 Sleep 500ms
+Type@1ms `perl -0pi -e "s|\nreturn M|\nfunction M.stop(timer)\n    timer:stop()\n    timer:close()\nend\n\nreturn M|" lua/kettle/timer.lua`
+Enter
+Sleep 300ms
 Type@1ms 'nvim --clean -u "$REPO/docs/assets/tapes/init.lua" lua/kettle/init.lua'
 Enter
 Sleep 1.5s
@@ -28,24 +31,22 @@ Sleep 800ms
 Type ":Iter"
 Sleep 400ms
 Enter
-Sleep 1.5s
+Sleep 2s
 Type "j"
 Sleep 1.2s
 Type "j"
-Sleep 1.2s
-Type "j"
-Sleep 1.2s
+Sleep 2s
 Type "k"
 Sleep 1s
 Type "s"
 Sleep 1.5s
-Type "l"
-Sleep 1.2s
 Type "j"
-Sleep 1.5s
+Sleep 1s
+Type "j"
+Sleep 2s
 Type "?"
 Sleep 2s
 Type "q"
 Sleep 800ms
 Type "q"
-Sleep 1s
+Sleep 1.5s
