@@ -61,15 +61,14 @@ local function create_repo()
     return dir
 end
 
---- Resolve the config in the child with the sidebar style and `options`.
----@param options? string Lua table source
+--- Resolve the config in the child with `options`.
+---@param options string Lua table source
 local function configure(options)
     child.lua(
-        [[
-        local options = vim.tbl_deep_extend('force', { status = { style = 'sidebar' } }, ...)
-        require('iter').config = require('iter.config').resolve(options)
-    ]],
-        { options and child.lua_get(options) or {} }
+        [[require('iter').config = require('iter.config').resolve(...)]],
+        {
+            child.lua_get(options),
+        }
     )
 end
 
@@ -208,7 +207,6 @@ local T = new_set({
             repo = create_repo()
             helpers.start_child(child, repo)
             stub_ui()
-            configure()
         end,
         post_case = function()
             child.stop()
@@ -327,6 +325,22 @@ T['open']['on a clean tree a poll leaves the window to the user'] = function()
     helpers.wait_until(child, S .. ':file_at("polled.txt") ~= nil')
 
     eq(child.api.nvim_get_current_buf(), buf)
+end
+
+T['open']['setup() without options opens the sidebar'] = function()
+    child.lua([[require('iter').setup()]])
+
+    open_status()
+
+    local panel = child.lua_get(S .. '.panel.win')
+
+    eq(child.lua_get(S .. '.float'), vim.NIL)
+    eq(child.api.nvim_win_get_config(panel).relative, '')
+    eq(child.fn.win_screenpos(panel), { 1, 1 })
+    eq(
+        child.api.nvim_buf_get_name(child.lua_get(S .. '.tree.buf')),
+        'iter://status'
+    )
 end
 
 T['open']['the drawer style still opens the float'] = function()
@@ -1018,7 +1032,6 @@ T['hand back']['a restored session keeps the window and no buffer of iter'] = fu
     child.stop()
     helpers.start_child(child, repo)
     stub_ui()
-    configure()
     child.cmd('source ' .. vim.fn.fnameescape(session))
     child.lua('vim.wait(100)')
 

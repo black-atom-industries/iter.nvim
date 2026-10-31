@@ -147,6 +147,13 @@ local function pane_opts()
     )
 end
 
+--- Keep the status a drawer in the child, whatever the default style.
+local function pin_drawer()
+    child.lua(
+        [[require('iter').config = require('iter.config').resolve({ status = { style = 'drawer' } })]]
+    )
+end
+
 local function stub_ui()
     child.lua([[
         -- The fixture commits are dated 2026-01-01T00:00:00Z; now is 2h later.
@@ -211,6 +218,7 @@ local T = new_set({
         pre_case = function()
             repo = helpers.create_fixture_repo()
             helpers.start_child(child, repo)
+            pin_drawer()
             stub_ui()
         end,
         post_case = function()
@@ -368,6 +376,7 @@ T['open']['outside a git repository warns and opens nothing'] = function()
     repo = vim.fn.resolve(vim.fn.tempname())
     vim.fn.mkdir(repo, 'p')
     helpers.start_child(child, repo)
+    pin_drawer()
     stub_ui()
 
     child.cmd('Iter')
@@ -449,7 +458,7 @@ end
 
 T['keys']['a remapped key stages and the default key is unbound'] = function()
     child.lua(
-        [[require('iter').setup({ keys = { drawer = { stage = 'S' } } })]]
+        [[require('iter').setup({ status = { style = 'drawer' }, keys = { drawer = { stage = 'S' } } })]]
     )
     open_drawer()
 
@@ -465,7 +474,7 @@ end
 
 T['keys']['a key disabled with false is not mapped'] = function()
     child.lua(
-        [[require('iter').setup({ keys = { drawer = { discard = false } } })]]
+        [[require('iter').setup({ status = { style = 'drawer' }, keys = { drawer = { discard = false } } })]]
     )
     open_drawer()
 
@@ -605,6 +614,7 @@ T['stage']['u without commits makes the file untracked again'] = function()
     helpers.write_file(vim.fs.joinpath(repo, 'm.txt'), { 'm' })
     helpers.git(repo, { 'add', 'm.txt' })
     helpers.start_child(child, repo)
+    pin_drawer()
     stub_ui()
     open_drawer()
     select_item('staged', 'm.txt')
@@ -1056,9 +1066,13 @@ local HINT =
 local HINT_WIDE =
     's stage  u unstage  d discard  I ignore  <CR> open  r review  = all files  | split  ? help'
 
----@param options string Lua table passed to setup()
+---@param options string Lua table passed to setup(), with the status kept a drawer
 local function setup(options)
-    child.lua('require("iter").setup(' .. options .. ')')
+    child.lua(
+        'require("iter").setup(vim.tbl_deep_extend("force", { status = { style = "drawer" } }, '
+            .. options
+            .. '))'
+    )
 end
 
 T['header'] = new_set()
@@ -1353,6 +1367,7 @@ T['preview'] = new_set({
             helpers.git(repo, { 'add', 'c.txt' })
 
             helpers.start_child(child, repo)
+            pin_drawer()
             stub_ui()
             set_pane_opts()
         end,
@@ -1555,6 +1570,7 @@ T['commits'] = new_set({
             )
             helpers.write_file(vim.fs.joinpath(repo, 'a.txt'), { 'a', 'b' })
             helpers.start_child(child, repo, { lines = 30, columns = 100 })
+            pin_drawer()
             stub_ui()
         end,
         post_case = function()
@@ -1749,7 +1765,9 @@ T['commits'][':Iter on an open drawer focuses it and keeps the section'] = funct
 end
 
 T['commits']['drawer.commits = 0 opens no section window'] = function()
-    child.lua('require("iter").setup({ drawer = { commits = 0 } })')
+    child.lua(
+        'require("iter").setup({ status = { style = "drawer" }, drawer = { commits = 0 } })'
+    )
     open_drawer()
 
     eq(#drawer_lines(), 2)
@@ -1792,7 +1810,9 @@ T['commits']['follows VimResized'] = function()
 end
 
 T['commits']['a new commit shows on the next poll'] = function()
-    child.lua('require("iter").setup({ refresh = { poll_ms = 50 } })')
+    child.lua(
+        'require("iter").setup({ status = { style = "drawer" }, refresh = { poll_ms = 50 } })'
+    )
     open_drawer()
 
     helpers.git(repo, { 'commit', '--quiet', '-am', 'feat: polled' })
@@ -1850,6 +1870,7 @@ T['commits']['an unborn HEAD has no section'] = function()
     helpers.git(repo, { 'init', '--quiet', '-b', 'main' })
     helpers.write_file(vim.fs.joinpath(repo, 'a.txt'), { 'a' })
     helpers.start_child(child, repo)
+    pin_drawer()
     stub_ui()
     open_drawer()
 
@@ -1865,6 +1886,7 @@ T['clean'] = new_set({
             helpers.cleanup(repo)
             repo = helpers.create_repo({ ['a.txt'] = { 'a' } })
             helpers.start_child(child, repo)
+            pin_drawer()
             stub_ui()
             set_pane_opts()
         end,
@@ -2140,7 +2162,7 @@ end
 T['statusline'] = new_set()
 
 T['statusline']['follows new files after the drawer closed'] = function()
-    child.lua([[require('iter').setup()]])
+    child.lua([[require('iter').setup({ status = { style = 'drawer' } })]])
     open_drawer()
     child.type_keys('q')
     eq(child.lua_get([[require('iter').statusline()]]), 'main · 6')
@@ -2293,6 +2315,7 @@ T['odd paths'] = new_set({
             helpers.cleanup(repo)
             repo = helpers.create_odd_paths_repo()
             helpers.start_child(child, repo)
+            pin_drawer()
             stub_ui()
         end,
     },

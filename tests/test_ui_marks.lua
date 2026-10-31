@@ -140,6 +140,13 @@ local function seed(annotations)
     )
 end
 
+--- Keep the status a drawer in the child, whatever the default style.
+local function pin_drawer()
+    child.lua(
+        [[require('iter').config = require('iter.config').resolve({ status = { style = 'drawer' } })]]
+    )
+end
+
 local function stub_ui()
     child.lua([[
         _G.notes = {}
@@ -233,6 +240,7 @@ local T = new_set({
         pre_case = function()
             repo = create_marks_repo()
             helpers.start_child(child, repo, { lines = 36 })
+            pin_drawer()
             stub_ui()
         end,
         post_case = function()
@@ -591,7 +599,7 @@ end
 T['normal buffer'] = new_set()
 
 local function setup_iter()
-    child.lua([[require('iter').setup()]])
+    child.lua([[require('iter').setup({ status = { style = 'drawer' } })]])
 end
 
 --- Each annotation mark of the current buffer as `<lnum> <text>`, the text

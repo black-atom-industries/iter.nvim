@@ -7,7 +7,7 @@ local M = {}
 M.options = {
     debug = false,
     status = {
-        style = 'drawer',
+        style = 'sidebar',
     },
     drawer = {
         height = 0.3,

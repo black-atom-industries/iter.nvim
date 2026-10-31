@@ -32,8 +32,7 @@ iter does not commit, push or pull, and it does not talk to a host. Keep a Git p
 - [Launch from the shell](#launch-from-the-shell)
 - [Annotations outside iter](#annotations-outside-iter)
 - [Reference](#reference)
-  - [Status drawer](#status-drawer)
-  - [Status sidebar](#status-sidebar)
+  - [Status](#status)
   - [Review tab](#review-tab)
   - [Annotation sidebar](#annotation-sidebar)
   - [Keys](#keys)
@@ -51,19 +50,21 @@ iter does not commit, push or pull, and it does not talk to a host. Keep a Git p
 
 ### See what changed
 
-1. `:Iter` opens the status drawer, a float at the bottom of the current
-   window.
-2. Move through the files. The window above shows the diff of the selected
-   file.
+1. `:Iter` opens the status, a sidebar at the left edge of the current tab.
+2. Move through the files. The window beside it shows the diff of the file
+   under the cursor.
 3. `s`, `u` and `d` stage, unstage and discard whole files. `I` adds an
    untracked path to `.gitignore`.
 4. `r` opens the review.
 
-The drawer shows:
+The status shows:
 
-- Unstaged and Staged side by side, stacked in narrow windows
+- the changed files as a tree: `●` staged, `◐` partly staged, `○` unstaged
 - the branch, and how far it is ahead (`↑`) and behind (`↓`) its upstream
 - the last commits, pinned under the files
+
+With `status = { style = 'drawer' }` the status is a float at the bottom of
+the current window, Unstaged and Staged side by side.
 
 ![The status drawer: moving through the files previews each diff, s stages a file, ? lists the keys](docs/assets/drawer.webp)
 
@@ -75,7 +76,7 @@ treesitter syntax, the changed words emphasized, old and new line numbers, and
 hidden context that `<CR>` expands.
 
 1. Read the file. `=` shows every file in one scroll, `|` shows old and new
-   side by side. The review, the status drawer and the commits tab keep the
+   side by side. The review, the status and the commits tab keep the
    layout you picked last, for the whole
    Neovim session, or follow the window width with
    [`diff.layout = 'auto'`](#configuration).
@@ -146,7 +147,7 @@ the text you are reading (see [Annotation sidebar](#annotation-sidebar)).
 
 - Annotations and reviewed marks are saved per repository and branch, reviewed
   marks per base. Linked worktrees share them.
-- The status drawer and the review refresh on their own when the index, HEAD or the
+- The status and the review refresh on their own when the index, HEAD or the
   files change.
 
 ## Install
@@ -184,7 +185,7 @@ plugin manager must not delay it until the first `:Iter`.
 ## Quick start
 
 ```vim
-:Iter             " open the status drawer
+:Iter             " open or close the status
 :Iter status      " the same
 :Iter review      " open the review tab, or switch to it
 :Iter review main " open it against a branch or another ref
@@ -293,47 +294,22 @@ vim.o.statuscolumn = "%!v:lua.require'iter'.statuscolumn()"
 
 ## Reference
 
-### Status drawer
+### Status
 
-**Header.** `HEAD <branch>  ↑n ↓m  <upstream>`, with the number of changes on
-the right, or `N unstaged · M staged` when the columns stack.
+`:Iter` opens the status at the left edge of the current tab,
+`review.tree_width` wide and at most half the editor. The current window shows
+the diff of the file under the cursor. `q`, or `:Iter` again, closes the status
+and gives that window back its buffer, options and view. `:Iter` in another tab
+moves the status there, and in the commits tab opens it in the tab the commits
+came from. `iter.open_status()` opens or focuses it and never closes it.
+
+**Header.** `HEAD <branch>  ↑n ↓m  <upstream>`, and below it the number of
+files with how many are staged and partly staged:
+`4 files · 1 staged · 1 partly`.
 
 - The arrows count against the upstream as last fetched (iter never fetches)
   and show only when not 0.
 - A detached HEAD reads `(detached)`.
-- In a narrow drawer the change count goes first, then the upstream, then the
-  arrows.
-
-**Recent commits.** Pinned above the key hints: the last `drawer.commits`
-commits with the short sha, subject and age (`2h`, `3d`, `5w`), and `↑` on
-those not on the upstream yet.
-
-**Rows.**
-
-- A rename reads `old → new` on one row. A narrow column cuts the old path
-  first.
-- `I` on an untracked row appends its path to the `.gitignore` at the
-  repository root, after a confirm. The path is anchored and its glob
-  characters escaped: `untracked.txt` becomes `/untracked.txt`.
-
-**Diff.** `<CR>` on a code line opens the file at that line and closes the
-drawer. A staged line lands where it is in the worktree.
-
-On a clean tree the drawer says "Working tree clean". Outside a git repository
-iter warns and opens nothing.
-
-### Status sidebar
-
-With `status = { style = 'sidebar' }`, `:Iter` opens the status at the left
-edge of the current tab instead of the drawer, `review.tree_width` wide and at
-most half the editor. The current window shows the diff of the file under the
-cursor. `q`, or `:Iter` again, closes the sidebar and gives that window back
-its buffer, options and view. `:Iter` in another tab moves the sidebar there,
-and in the commits tab opens it in the tab the commits came from.
-
-**Header.** `HEAD <branch>  ↑n ↓m  <upstream>` as in the drawer, and below it
-the number of files with how many are staged and partly staged:
-`4 files · 1 staged · 1 partly`.
 
 **Rows.** The changed files as a tree, as in the review: ● staged, ◐ partly
 staged, ○ unstaged, then the git letter, the name, and the lines changed
@@ -342,33 +318,55 @@ shows the unstaged and the staged section.
 
 - `s` on a ◐ file stages the rest, `u` unstages all of it. On a directory `s`
   and `u` act on every file below it; `d` and `I` work on files only.
-- `<CR>` on a file opens it in the window and closes the sidebar; on a
+- `I` on an untracked file appends its path to the `.gitignore` at the
+  repository root, after a confirm. The path is anchored and its glob
+  characters escaped: `untracked.txt` becomes `/untracked.txt`.
+- `<CR>` on a file opens it in the window and closes the status; on a
   directory it closes or opens the directory, as `h` and `l` do.
-- `r` closes the sidebar and opens the review on the file.
+- `r` closes the status and opens the review on the file.
 
 **Diff.** `<CR>` on a code line opens the file at that line and closes the
-sidebar. `<C-j>` in the diff goes back to the sidebar.
+status. A staged line lands where it is in the worktree. `<C-j>` in the diff
+goes back to the status.
 
 **Recent commits.** The last commits (`drawer.commits`, `0` hides them) sit at
 the bottom above the key hints, each as its short sha, subject, `↑` when it
-isn't pushed, and its age. With more files than fit, they follow the rows and
-scroll with them.
+isn't pushed, and its age (`2h`, `3d`, `5w`). With more files than fit, they
+follow the rows and scroll with them.
 
 - A commit under the cursor shows its summary in the window: its whole message,
   then the files it changed with the lines added and deleted.
-- `<CR>` on a commit closes the sidebar and opens the commits tab with that
+- `<CR>` on a commit closes the status and opens the commits tab with that
   commit entered, its files shown.
-- `r` on a commit closes the sidebar and opens the review from that commit.
+- `r` on a commit closes the status and opens the review from that commit.
 - `s`, `u`, `d` and `I` do nothing on a commit.
 
-On a clean tree the sidebar says "Working tree clean", the cursor starts on
-the newest commit, and the window keeps its buffer until the cursor moves.
+On a clean tree the status says "Working tree clean", the cursor starts on the
+newest commit, and the window keeps its buffer until the cursor moves. Outside
+a git repository iter warns and opens nothing.
 
-**The window.** `:edit` of another buffer in the window closes the sidebar and
-keeps that buffer there. `:edit` of a file in the sidebar closes it and opens
+**The window.** `:edit` of another buffer in the window closes the status and
+keeps that buffer there. `:edit` of a file in the status closes it and opens
 the file in the window. A split of the window shows your buffer. Closing the
-window closes the sidebar, and when the sidebar is the tab's last window an
+window closes the status, and when the status is the tab's last window an
 empty window takes its place.
+
+**Drawer.** With `status = { style = 'drawer' }`, `:Iter` opens the status as
+a float at the bottom of the current window, `drawer.height` of its height,
+and the window above shows the diff. `:Iter` on an open drawer focuses it, and
+`q` closes it.
+
+- Unstaged and Staged sit side by side, stacked below `drawer.breakpoint`
+  columns. `h` and `l` step between them.
+- The header has the number of changes on the right, or
+  `N unstaged · M staged` when the columns stack. In a narrow drawer the
+  change count goes first, then the upstream, then the arrows.
+- A rename reads `old → new` on one row. A narrow column cuts the old path
+  first.
+- The recent commits are pinned above the key hints and take no cursor.
+
+`drawer.height` and `drawer.breakpoint` apply to the drawer only.
+`drawer.commits`, `drawer.zindex` and the `drawer` keys apply to both styles.
 
 ### Review tab
 
@@ -430,7 +428,7 @@ tree's place (`/` searches it, `q` goes back to the tree unchanged):
    one was created from, when it can be told: what a pull request shows. On
    the default branch the list starts with Working changes, then
    `since <upstream>`, which shows what isn't pushed yet.
-2. Working changes, the index and worktree as in the status drawer.
+2. Working changes, the index and worktree as in the status.
 3. Local, then remote branches. A branch means its merge-base with `HEAD`.
 4. The last 20 commits, each as its short sha and subject. A commit means its
    parent, so the commit is included.
@@ -506,7 +504,7 @@ the right, scrolling together. The old version is `HEAD` for a staged file,
 - `s` and `u` work from either window. Against a base they warn instead.
 - `-`, or closing the left window, goes back to one pane.
 
-The status drawer's diff takes `=`, `|` and `-` too.
+The diff of the status takes `=`, `|` and `-` too.
 
 **Annotation float.**
 
@@ -594,7 +592,7 @@ require('iter').setup({
 })
 ```
 
-The status, as a drawer or a sidebar (`drawer`):
+The status, as a sidebar or a drawer (`drawer`):
 
 | Key     | Action         | Does                                         |
 | ------- | -------------- | -------------------------------------------- |
@@ -617,8 +615,8 @@ The status, as a drawer or a sidebar (`drawer`):
 | `h`     | `collapse`     | Close the directory, or the file's directory |
 | `l`     | `expand`       | Open the directory                           |
 
-`column_left` and `column_right` work in the drawer, `collapse` and `expand` in
-the sidebar.
+`collapse` and `expand` work in the sidebar, `column_left` and `column_right`
+in the drawer.
 
 The review's file tree (`tree`):
 
@@ -646,7 +644,7 @@ The review's file tree (`tree`):
 | `<C-d>` | `scroll_down`   | Scroll the diff down                          |
 | `<C-u>` | `scroll_up`     | Scroll the diff up                            |
 
-The diff pane (`diff`), in the review tab and above the status drawer:
+The diff pane (`diff`), in the review tab and beside the status:
 
 | Key     | Action            | Does                                                            |
 | ------- | ----------------- | --------------------------------------------------------------- |
@@ -730,7 +728,7 @@ The base picker (`picker`):
 ```lua
 require('iter').setup({
     status = {
-        style = 'drawer', -- where :Iter shows the status: 'drawer' or 'sidebar'
+        style = 'sidebar', -- where :Iter shows the status: 'sidebar' or 'drawer'
     },
     drawer = {
         height = 0.3,     -- fraction of the window height, drawer only
@@ -760,7 +758,7 @@ require('iter').setup({
         review_breakpoint = 160, -- tab columns from which the review's annotations sit right of the diff, below that under the tree; 0 = always right
     },
     refresh = {
-        poll_ms = 2000,   -- poll interval while the status drawer, the review or the sidebar is open
+        poll_ms = 2000,   -- poll interval while the status, the review or the annotation sidebar is open
     },
     confirm = {
         discard = true,   -- ask before discarding changes
@@ -902,16 +900,15 @@ what it names in the repository of the current directory:
 - On the command line `#` needs a backslash (`:e iter://review/a.txt\#L3`).
   `open_uri()` takes the address as it is.
 - iter's buffers stay unlisted, and a restored session gets none of them back.
-  A window that showed the status sidebar's diff keeps its place with an empty
-  buffer.
+  A window that showed the status's diff keeps its place with an empty buffer.
 
 ### Tab label
 
 The review tab sets `vim.t.iter_label` to `iter review`, the commits tab to
 `iter commits`. Neovim's default tabline ignores it and counts the status
-drawer's float and the status sidebar among the windows. `tabline()` is a
+among the windows, as a sidebar or as the drawer's float. `tabline()` is a
 'tabline' like the default that shows the label and counts only normal windows
-besides the sidebar. While the sidebar is the current window, the tab is named
+besides the status. While the status is the current window, the tab is named
 after the file its diff shows, or `status` for all files or a commit summary:
 
 ```lua
@@ -922,10 +919,10 @@ vim.o.tabline = "%!v:lua.require'iter'.tabline()"
 
 iter fires `User` autocmds with the repository root and the paths in `data`:
 
-| Pattern       | When                                                                         | `data`                                                                               |
-| ------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `IterRefresh` | The status drawer or the review read the status, after an action or a change | `root`, `paths`: every changed path, a file on both sides once                       |
-| `IterStage`   | A stage, unstage or discard of files, hunks or lines succeeded               | `root`, `paths`: the paths acted on, `action`: `'stage'`, `'unstage'` or `'discard'` |
+| Pattern       | When                                                                    | `data`                                                                               |
+| ------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `IterRefresh` | The status or the review read git's status, after an action or a change | `root`, `paths`: every changed path, a file on both sides once                       |
+| `IterStage`   | A stage, unstage or discard of files, hunks or lines succeeded          | `root`, `paths`: the paths acted on, `action`: `'stage'`, `'unstage'` or `'discard'` |
 
 ```lua
 vim.api.nvim_create_autocmd('User', {

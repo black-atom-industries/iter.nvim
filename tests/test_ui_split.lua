@@ -42,6 +42,13 @@ local function create_repo()
     return path
 end
 
+--- Keep the status a drawer in the child, whatever the default style.
+local function pin_drawer()
+    child.lua(
+        [[require('iter').config = require('iter.config').resolve({ status = { style = 'drawer' } })]]
+    )
+end
+
 local function stub_ui()
     child.lua([[
         _G.notes = {}
@@ -171,6 +178,7 @@ local T = new_set({
         pre_case = function()
             repo = create_repo()
             helpers.start_child(child, repo, { lines = 30, columns = 100 })
+            pin_drawer()
             stub_ui()
         end,
         post_case = function()
@@ -388,7 +396,7 @@ end
 
 T['split']['resizing keeps the panes the same width'] = function()
     child.lua(
-        [[require('iter').setup({ annotate = { review_breakpoint = 1000 } })]]
+        [[require('iter').setup({ status = { style = 'drawer' }, annotate = { review_breakpoint = 1000 } })]]
     )
     open_review()
     split()
@@ -494,6 +502,7 @@ T['sync']['the tree scrolls both windows under scrolloff'] = function()
     end
     helpers.write_file(vim.fs.joinpath(repo, 'f.txt'), lines)
     helpers.start_child(child, repo, { lines = 30, columns = 100 })
+    pin_drawer()
     stub_ui()
     child.o.scrolloff = 5
 
@@ -839,7 +848,9 @@ T['drawer']['| and - in the tree switch the pane and keep the focus'] = function
 end
 
 T['drawer']['diff.layout split opens the review side by side'] = function()
-    child.lua([[require('iter').setup({ diff = { layout = 'split' } })]])
+    child.lua(
+        [[require('iter').setup({ status = { style = 'drawer' }, diff = { layout = 'split' } })]]
+    )
     open_review()
 
     helpers.wait_until(child, R .. [[.view.old ~= nil]])
@@ -858,6 +869,7 @@ end
 
 T['drawer']['diff.layout auto follows the width of the diff'] = function()
     child.lua([[require('iter').setup({
+        status = { style = 'drawer' },
         diff = { layout = 'auto' },
         annotate = { review_breakpoint = 1000 },
     })]])
@@ -875,6 +887,7 @@ end
 
 T['drawer']['under diff.layout auto, - holds until a resize crosses'] = function()
     child.lua([[require('iter').setup({
+        status = { style = 'drawer' },
         diff = { layout = 'auto' },
         annotate = { review_breakpoint = 1000 },
     })]])
@@ -897,7 +910,9 @@ end
 
 T['drawer']['a status drawer opening side by side spans both panes'] = function()
     local D = [[require('iter').drawer]]
-    child.lua([[require('iter').setup({ diff = { layout = 'split' } })]])
+    child.lua(
+        [[require('iter').setup({ status = { style = 'drawer' }, diff = { layout = 'split' } })]]
+    )
     child.cmd('Iter')
     helpers.wait_until(
         child,
@@ -930,7 +945,7 @@ T['drawer']['panes stay even when a plugin equalizes on a new window'] = functio
                 end)
             end,
         })
-        require('iter').setup({ diff = { layout = 'split' } })
+        require('iter').setup({ status = { style = 'drawer' }, diff = { layout = 'split' } })
         vim.keymap.set('n', 'gs', function()
             require('iter').status()
         end)
@@ -970,7 +985,7 @@ T['drawer']['side by side splits only the window it opens in'] = function()
                 end)
             end,
         })
-        require('iter').setup({ diff = { layout = 'split' } })
+        require('iter').setup({ status = { style = 'drawer' }, diff = { layout = 'split' } })
         vim.keymap.set('n', 'gs', function()
             require('iter').status()
         end)
@@ -1075,6 +1090,7 @@ local function two_pairs(stage_all)
     end
 
     helpers.start_child(child, repo, { lines = 30, columns = 100 })
+    pin_drawer()
     stub_ui()
 end
 
@@ -1212,6 +1228,7 @@ T['all files']['m and | show every file on both sides'] = function()
     helpers.write_file(vim.fs.joinpath(repo, 'b.txt'), { 'bx' })
     helpers.write_file(vim.fs.joinpath(repo, 'c.txt'), { 'c', 'c2' })
     helpers.start_child(child, repo, { lines = 30, columns = 100 })
+    pin_drawer()
     stub_ui()
 
     open_review()

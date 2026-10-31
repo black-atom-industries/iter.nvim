@@ -144,9 +144,9 @@ the review straight to an agent pane.
   directory is kept per review by path across refreshes and base changes. Tree order drives `=`, `]f` and `[f`, the
   statusline position, `r`'s next file and the annotations' file order; `]f` and `[f` walk closed directories and open
   them.
-- In the status drawer the pane above shows the diff view in place of its buffer. The view saves the window-local
+- In the status drawer (`iter.ui.drawer`, `status.style = 'drawer'`) the pane above shows the diff view in place of its buffer. The view saves the window-local
   options it changes and restores them on every exit path.
-- The status sidebar (`iter.ui.status`, `status.style = 'sidebar'`) shows the status in the panel at the tab's left
+- The status sidebar (`iter.ui.status`, `status.style = 'sidebar'`, the default) shows the status in the panel at the tab's left
   edge, a tree page (`iter.ui.review_tree`, named `iter://status`) with the drawer's keys, and the diff of the file under
   the cursor in the window it opened from. At open it saves that window's buffer and view and the tab's
   `winrestcmd()`; closing gives the window its buffer and view back, the view restores the options, and the tab gets

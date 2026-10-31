@@ -15,7 +15,7 @@ T['resolve()'] = new_set()
 T['resolve()']['returns the defaults without options'] = function()
     local resolved = config.resolve()
 
-    eq(resolved.options.status, { style = 'drawer' })
+    eq(resolved.options.status, { style = 'sidebar' })
     eq(resolved.options.drawer, {
         height = 0.3,
         zindex = 40,

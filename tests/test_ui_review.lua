@@ -67,6 +67,13 @@ local function create_review_repo()
     return path
 end
 
+--- Keep the status a drawer in the child, whatever the default style.
+local function pin_drawer()
+    child.lua(
+        [[require('iter').config = require('iter.config').resolve({ status = { style = 'drawer' } })]]
+    )
+end
+
 local function stub_ui()
     child.lua([[
         _G.notes = {}
@@ -76,9 +83,13 @@ local function stub_ui()
     ]])
 end
 
----@param options string Lua table passed to setup()
+---@param options string Lua table passed to setup(), with the status kept a drawer
 local function setup(options)
-    child.lua('require("iter").setup(' .. options .. ')')
+    child.lua(
+        'require("iter").setup(vim.tbl_deep_extend("force", { status = { style = "drawer" } }, '
+            .. options
+            .. '))'
+    )
 end
 
 --- Focus the diff pane and put its cursor on the first row whose text is
@@ -196,6 +207,7 @@ local T = new_set({
         pre_case = function()
             repo = create_review_repo()
             helpers.start_child(child, repo)
+            pin_drawer()
             stub_ui()
         end,
         post_case = function()
@@ -363,6 +375,7 @@ T['open']['outside a git repository warns and opens nothing'] = function()
     repo = vim.fn.resolve(vim.fn.tempname())
     vim.fn.mkdir(repo, 'p')
     helpers.start_child(child, repo)
+    pin_drawer()
     stub_ui()
 
     child.cmd('Iter review')
@@ -998,6 +1011,7 @@ T['clean'] = new_set({
             helpers.cleanup(repo)
             repo = helpers.create_repo({ ['a.txt'] = { 'a' } })
             helpers.start_child(child, repo)
+            pin_drawer()
             stub_ui()
         end,
     },
@@ -2073,6 +2087,7 @@ T['reviewed']['reviewed marks survive a restart'] = function()
 
     child.stop()
     helpers.start_child(child, repo)
+    pin_drawer()
     stub_ui()
     H.open(child)
     H.select(child, 'unstaged', 'a.txt')
@@ -2479,6 +2494,7 @@ T['files']['u without commits makes the file untracked again'] = function()
     helpers.write_file(vim.fs.joinpath(repo, 'm.txt'), { 'm' })
     helpers.git(repo, { 'add', 'm.txt' })
     helpers.start_child(child, repo)
+    pin_drawer()
     stub_ui()
     H.open(child)
     H.wait_diff(child, 'staged m.txt')
@@ -2531,7 +2547,7 @@ end)()]]
 
 T['flow']['status, review, annotation, annotations window, yank and close leave nothing behind'] = function()
     child.lua([[
-        require('iter').setup()
+        require('iter').setup({ status = { style = 'drawer' } })
         vim.keymap.set('n', '<C-t>', '<Nop>', { desc = 'user ctrl-t' })
     ]])
     child.cmd('edit a.txt')
@@ -3117,6 +3133,7 @@ T['uri']['stale buffers with iter names give way'] = function()
     )
     child.stop()
     helpers.start_child(child, repo)
+    pin_drawer()
     stub_ui()
     child.cmd('source ' .. vim.fn.fnameescape(session))
     child.lua('vim.wait(100)')
