@@ -33,7 +33,7 @@ local Page = {}
 Page.__index = Page
 
 -- Cells left of an item: the gutter the panel draws `▸` over.
-local GUTTER = '  '
+local GUTTER = '   '
 
 --- The chunks of `item` in `width` cells, its tag at the right edge.
 ---@param item IterPickerItem

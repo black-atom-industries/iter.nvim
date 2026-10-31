@@ -396,11 +396,11 @@ T['tree']['rows are directories first, then files, with staging icons'] = functi
     H.open(child)
 
     eq(tree_rows(), {
-        '  ▾ d/',
-        '    ○ ? x.txt',
-        '  ○ M a.txt',
-        '  ◐ M b.txt',
-        '  ○ ? c.txt',
+        '   ▾ d/',
+        '     ○ ? x.txt',
+        '   ○ M a.txt',
+        '   ◐ M b.txt',
+        '   ○ ? c.txt',
     })
     eq(H.selected(child), 'd/x.txt')
 end
@@ -442,24 +442,24 @@ T['tree']['h and l close and open a directory, <CR> toggles it'] = function()
 
     -- h on a file closes its directory and moves onto it.
     child.type_keys('h')
-    eq(tree_rows()[1], '  ▸ d/')
+    eq(tree_rows()[1], '   ▸ d/')
     eq(#tree_rows(), 4)
     eq(H.selected(child), vim.NIL)
     eq(child.lua_get(R .. '.tree:node().path'), 'd/')
 
     child.type_keys('l')
-    eq(tree_rows()[1], '  ▾ d/')
+    eq(tree_rows()[1], '   ▾ d/')
     eq(#tree_rows(), 5)
 
     child.type_keys('<CR>')
-    eq(tree_rows()[1], '  ▸ d/')
+    eq(tree_rows()[1], '   ▸ d/')
     child.type_keys('<CR>')
-    eq(tree_rows()[2], '    ○ ? x.txt')
+    eq(tree_rows()[2], '     ○ ? x.txt')
 
     -- A closed directory stays closed across a refresh.
     child.type_keys('h')
     child.lua(R .. ':refresh()')
-    eq(tree_rows()[1], '  ▸ d/')
+    eq(tree_rows()[1], '   ▸ d/')
 end
 
 T['tree']['h on a file closes its directory after a poll read the tree again'] = function()
@@ -470,7 +470,7 @@ T['tree']['h on a file closes its directory after a poll read the tree again'] =
 
     child.type_keys('h')
 
-    eq(tree_rows()[1], '  ▸ d/')
+    eq(tree_rows()[1], '   ▸ d/')
     eq(child.lua_get(R .. '.tree:node().path'), 'd/')
 end
 
@@ -632,13 +632,13 @@ T['diff']['[f into a closed directory opens it'] = function()
     child.type_keys('h')
     H.select(child, 'unstaged', 'a.txt')
     H.wait_diff(child, 'unstaged a.txt')
-    eq(tree_rows()[1], '  ▸ d/')
+    eq(tree_rows()[1], '   ▸ d/')
 
     child.lua('vim.api.nvim_set_current_win(' .. R .. '.diff_win)')
     child.type_keys('[f')
 
     eq(H.selected(child), 'd/x.txt')
-    eq(tree_rows()[1], '  ▾ d/')
+    eq(tree_rows()[1], '   ▾ d/')
     H.wait_diff(child, 'unstaged d/x.txt')
 end
 
@@ -1792,11 +1792,11 @@ T['reviewed']['rows start unreviewed, the header counts files and shows progress
     H.wait_diff(child, 'unstaged a.txt')
 
     eq(tree_rows(), {
-        '  ▾ d/',
-        '    ○ ? x.txt',
-        '  ○ M a.txt',
-        '  ◐ M b.txt',
-        '  ○ ? c.txt',
+        '   ▾ d/',
+        '     ○ ? x.txt',
+        '   ○ M a.txt',
+        '   ◐ M b.txt',
+        '   ○ ? c.txt',
     })
     eq(tree_header(), { 'Review HEAD main', 'Working changes · 4 files' })
     eq(
@@ -2465,7 +2465,7 @@ T['files']['u on a partly staged file unstages it and keeps its row'] = function
     -- s stages the whole file, s again unstages it.
     child.type_keys('s')
     helpers.wait_until(child, '#' .. R .. '.changes.staged == 1')
-    eq(tree_rows()[4], '  ● M b.txt')
+    eq(tree_rows()[4], '   ● M b.txt')
     child.type_keys('s')
     helpers.wait_until(child, '#' .. R .. '.changes.staged == 0')
 end

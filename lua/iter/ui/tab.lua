@@ -174,6 +174,18 @@ function M.show_summary(win, buf, saved)
     return saved or {}
 end
 
+--- Whether one of `wins`, such as those `WinResized` reports, is a window
+--- of `t`.
+---@param t IterTab
+---@param wins integer[]
+---@return boolean
+function M.has_window(t, wins)
+    return vim.iter(wins):any(function(win)
+        return util.is_valid_win(win)
+            and vim.api.nvim_win_get_tabpage(win) == t.tab
+    end)
+end
+
 --- Give `win` the options `show_summary` saved.
 ---@param win integer
 ---@param saved? table<string, any>

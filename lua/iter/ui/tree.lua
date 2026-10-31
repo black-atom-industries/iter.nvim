@@ -29,7 +29,7 @@ local render = require('iter.ui.render')
 
 local M = {}
 
-local GUTTER = '  '
+local GUTTER = '   '
 local INDENT = '  '
 local ARROW = ' ← '
 
@@ -385,7 +385,7 @@ local function file_line(row, width, decor)
     return render.chunks_line(chunks)
 end
 
---- The render lines of `rows`, each at most `width` cells: a 2-cell gutter,
+--- The render lines of `rows`, each at most `width` cells: a 3-cell gutter,
 --- 2 cells per depth, then a directory as `▾ name` (`▸` when collapsed) or a
 --- file as `[icon ]letter name`. A rename adds `← orig_path`, dropped
 --- before the name is cut; the decor's right chunks end one cell before the

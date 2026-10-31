@@ -74,8 +74,8 @@ treesitter syntax, the changed words emphasized, old and new line numbers, and
 hidden context that `<CR>` expands.
 
 1. Read the file. `=` shows every file in one scroll, `|` shows old and new
-   side by side. The review and the status drawer keep the layout you picked
-   last, for the whole
+   side by side. The review, the status drawer and the commits tab keep the
+   layout you picked last, for the whole
    Neovim session, or follow the window width with
    [`diff.layout = 'auto'`](#configuration).
 2. Stage as you go: `s` and `u` take the hunk under the cursor, or in visual

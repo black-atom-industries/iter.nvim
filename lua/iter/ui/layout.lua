@@ -1,5 +1,6 @@
---- The drawer's lines from its columns and the width: titled columns side by
---- side above the breakpoint, stacked sections below it, cells cut to fit.
+--- Render lines for iter's windows: the status drawer's titled columns, side
+--- by side above the breakpoint and stacked below it, and the cells, hints,
+--- commit rows and summaries the drawer, the review and the commits tab draw.
 --- Pure: it builds render lines and touches no window or buffer.
 
 local changes = require('iter.changes')
@@ -11,10 +12,6 @@ local render = require('iter.ui.render')
 ---@field id string key of the column's items in a row
 ---@field title string
 ---@field items any[]
----@field weight? number share of the width among the columns, 1 by default
----@field count? integer number in the title, `#items` by default
----@field note? string dimmed text after the title, such as `1 outdated`
----@field selectable? fun(item: any): boolean false for an item shown but never selected; every item is selectable by default
 ---@field cell fun(line: IterRenderLine, item: any, first: integer, width: integer): string text of one item's cell, `width` cells wide, highlights added at byte column `first`
 
 ---@class IterLayoutCell byte columns of one cell on its line
@@ -122,30 +119,12 @@ end
 ---@param width integer
 ---@return string
 local function title_text(line, column, first, width)
-    local title =
-        string.format(' %s (%d)', column.title, column.count or #column.items)
-    local note = column.note and (' · ' .. column.note) or ''
-    local cut = vim.fn.strdisplaywidth(title .. note) > width
-    local text = fit(title .. note, width)
-    local last = first + #text
+    local title = string.format(' %s (%d)', column.title, #column.items)
+    local text = fit(title, width)
 
-    highlight_in(line, 'IterDrawerTitle', first, last, 0, #title)
-
-    if note ~= '' then
-        local stop = cut and #text or #title + #note
-
-        highlight_in(line, 'IterDrawerHint', first, last, #title, stop)
-    end
+    highlight_in(line, 'IterDrawerTitle', first, first + #text, 0, #title)
 
     return text
-end
-
---- Whether `column` lets the selection rest on `item`.
----@param column IterLayoutColumn
----@param item any
----@return boolean
-local function selectable(column, item)
-    return column.selectable == nil or column.selectable(item)
 end
 
 --- Columns side by side at `width` and wider, stacked below it.
@@ -156,30 +135,22 @@ function M.mode(width, breakpoint)
     return width >= breakpoint and 'columns' or 'stacked'
 end
 
---- The display width of each column side by side in `width`, separators
---- left out: shares by weight, rounded down, the last column taking the
---- rest.
+--- The display width of each of `count` columns side by side in `width`,
+--- separators left out: equal shares, rounded down, the last column taking
+--- the rest.
 ---@param width integer
----@param weights number[]
+---@param count integer
 ---@return integer[]
-function M.widths(width, weights)
-    local free = width - (#weights - 1) * vim.fn.strdisplaywidth(M.SEPARATOR)
-    local total = 0
+function M.widths(width, count)
+    local free = width - (count - 1) * vim.fn.strdisplaywidth(M.SEPARATOR)
+    local share = math.floor(free / count)
+    local widths = {}
 
-    for _, weight in ipairs(weights) do
-        total = total + weight
+    for i = 1, count - 1 do
+        widths[i] = share
     end
 
-    local widths, used = {}, 0
-
-    for i, weight in ipairs(weights) do
-        if i == #weights then
-            widths[i] = free - used
-        else
-            widths[i] = math.floor(free * weight / total)
-            used = used + widths[i]
-        end
-    end
+    widths[count] = free - share * (count - 1)
 
     return widths
 end
@@ -211,7 +182,7 @@ local function entries(list)
 end
 
 --- Write `entry` as a cell `width` cells wide starting at byte column
---- `first` of `line`, its item into `row` and `cells` when selectable.
+--- `first` of `line`, its item into `row` and `cells`.
 ---@param line IterRenderLine
 ---@param entry IterLayoutEntry?
 ---@param first integer
@@ -234,10 +205,8 @@ local function entry_text(line, entry, first, width, row, cells)
 
     local text = column.cell(line, item, first, width)
 
-    if selectable(column, item) then
-        row[column.id] = item
-        cells[column.id] = { first = first, last = first + #text }
-    end
+    row[column.id] = item
+    cells[column.id] = { first = first, last = first + #text }
 
     return text
 end
@@ -289,21 +258,13 @@ local function lay(slots, widths)
     return result
 end
 
----@param slots IterLayoutColumn[]
----@return number[]
-local function weights(slots)
-    return vim.tbl_map(function(slot)
-        return slot.weight or 1
-    end, slots)
-end
-
 --- The columns side by side, separated by `SEPARATOR`, each with its title
 --- on the first line and one item per line below.
 ---@param slots IterLayoutColumn[]
 ---@param width integer
 ---@return IterLayout
 function M.columns(slots, width)
-    return lay(slots, M.widths(width, weights(slots)))
+    return lay(slots, M.widths(width, #slots))
 end
 
 --- Every column one below the other, each the full `width`: a title line,

@@ -163,10 +163,10 @@ T['commits'][':Iter commits opens a tab with the list and the summary'] = functi
     eq(page(), {
         ' Commits main · last 4',
         '',
-        '  ' .. short('HEAD') .. ' rename b',
-        '  ' .. short('HEAD~1') .. ' add b',
-        '  ' .. short('HEAD~2') .. ' edit a',
-        '  ' .. short('HEAD~3') .. ' initial',
+        '   ' .. short('HEAD') .. ' rename b',
+        '   ' .. short('HEAD~1') .. ' add b',
+        '   ' .. short('HEAD~2') .. ' edit a',
+        '   ' .. short('HEAD~3') .. ' initial',
     })
     eq(child.api.nvim_win_get_cursor(panel_win()), { 3, 0 })
     summary(sha('HEAD~1'), sha('HEAD'))
@@ -384,7 +384,7 @@ T['files']["<CR> shows the commit's files as a tree with line counts"] = functio
         ' edit a',
         ' 1 file · +1 −1',
         '',
-        '  M a.txt                      ±2',
+        '   M a.txt                     ±2',
     })
     eq(child.api.nvim_get_current_win(), panel_win())
     eq(child.lua_get('vim.wo[' .. C .. '.win].linebreak'), false)
@@ -405,8 +405,8 @@ T['files']['<CR> on a selection lists the files of its commits'] = function()
         ' 2 commits',
         ' 2 files · +2 −1',
         '',
-        '  M a.txt                      ±2',
-        '  A b.txt                      +1',
+        '   M a.txt                     ±2',
+        '   A b.txt                     +1',
     })
 
     child.type_keys('j')
@@ -481,10 +481,10 @@ T['files']['h and l close and open a directory'] = function()
     shown_file(sha('HEAD~1'), sha('HEAD'), 'd/e.txt')
 
     local rows = {
-        '  ▾ d/',
-        '    A e.txt                    +1',
-        '    A f.txt                    +2',
-        '  M a.txt                      −2',
+        '   ▾ d/',
+        '     A e.txt                   +1',
+        '     A f.txt                   +2',
+        '   M a.txt                     −2',
     }
 
     eq(vim.list_slice(page(), 5), rows)
@@ -492,13 +492,13 @@ T['files']['h and l close and open a directory'] = function()
     child.type_keys('h')
 
     eq(vim.list_slice(page(), 5), {
-        '  ▸ d/',
-        '  M a.txt                      −2',
+        '   ▸ d/',
+        '   M a.txt                     −2',
     })
 
     child.type_keys('l')
 
-    eq(vim.list_slice(page(), 5)[2], '    A e.txt                    +1')
+    eq(vim.list_slice(page(), 5)[2], '     A e.txt                   +1')
 
     child.type_keys('h', '<CR>')
 
@@ -517,9 +517,40 @@ T['files']['in the split layout the tree stays at the left edge'] = function()
     eq(#child.api.nvim_tabpage_list_wins(0), 3)
 end
 
+T['files']['a resize keeps the split panes even'] = function()
+    child.o.columns = 200
+    open_commits()
+    child.type_keys('<CR>', '|')
+    helpers.wait_until(child, C .. '.view.old ~= nil')
+
+    child.o.columns = 100
+    helpers.wait_until(
+        child,
+        string.format(
+            [[math.abs(vim.api.nvim_win_get_width(%s.view.old.win)
+                - vim.api.nvim_win_get_width(%s.view.win)) <= 1]],
+            C,
+            C
+        )
+    )
+    eq(child.api.nvim_win_get_width(panel_win()), 34)
+end
+
+T['files']["under 'auto' a resize switches the layout"] = function()
+    child.lua([[require('iter').setup({ diff = { layout = 'auto' } })]])
+    child.o.columns = 200
+    open_commits()
+    child.type_keys('<CR>')
+    helpers.wait_until(child, C .. '.view.old ~= nil')
+
+    child.o.columns = 100
+    helpers.wait_until(child, C .. '.view.old == nil')
+    eq(child.lua_get(C .. '.view.layout'), 'unified')
+end
+
 T['review'] = new_set()
 
---- The review drawer's file column titles and items.
+--- The base title of the review's tree and its files as `code path`.
 ---@return table
 local function file_columns()
     return child.lua_get([[(function()

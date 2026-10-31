@@ -234,6 +234,19 @@ T['render']['a cursor the new lines moved reaches on_cursor'] = function()
     eq(seen, { { 5, 7 } })
 end
 
+T['restore_width'] = new_set()
+
+T['restore_width']['gives the window back the width it opened with'] = function()
+    local p = open({ width = 25 })
+
+    vim.api.nvim_win_set_width(p.win, 10)
+    eq(p:width(), 10)
+
+    p:restore_width()
+
+    eq(p:width(), 25)
+end
+
 T['close'] = new_set()
 
 T['close']['closes the window and calls on_close'] = function()

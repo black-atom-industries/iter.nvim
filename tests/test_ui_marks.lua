@@ -546,8 +546,8 @@ T['counts']['the tree shows counts on rows and files in the header'] = function(
     )
 
     -- The count and the reviewed slot at the right edge of the 34 cells.
-    eq(lines[5], '  ○ M m.txt' .. string.rep(' ', 18) .. '✎6')
-    eq(lines[6], '  ○ M n.txt' .. string.rep(' ', 18) .. '✎1')
+    eq(lines[5], '   ○ M m.txt' .. string.rep(' ', 17) .. '✎6')
+    eq(lines[6], '   ○ M n.txt' .. string.rep(' ', 17) .. '✎1')
     eq(vim.trim(lines[2]), 'Working changes · 2 files')
 end
 

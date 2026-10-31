@@ -134,7 +134,7 @@ T['build']['puts a rename under its new path'] = function()
     eq(files[1].code, 'R')
     eq(
         texts(tree.lines(tree.rows(root, {}), 34, {}, no_decor)),
-        { '  ▾ new/', '    R b.lua ← old/a.lua' }
+        { '   ▾ new/', '     R b.lua ← old/a.lua' }
     )
 end
 
@@ -230,7 +230,7 @@ T['rows']['keeps a collapse when the chain compacts'] = function()
     local rows = tree.rows(after, collapsed)
 
     eq(outline(rows), { 'lua/iter/' })
-    eq(texts(tree.lines(rows, 20, collapsed, no_decor)), { '  ▸ lua/iter/' })
+    eq(texts(tree.lines(rows, 20, collapsed, no_decor)), { '   ▸ lua/iter/' })
     eq(outline(tree.rows(after, { ['lua/iter/'] = true })), { 'lua/iter/' })
 end
 
@@ -242,7 +242,7 @@ T['lines']['draws directories, files, icons and right chunks'] = function()
         change('lua/iter/drawer.lua', 'staged'),
         change('README.md', 'unstaged', { code = '?' }),
     })
-    local lines = tree.lines(tree.rows(root, {}), 26, {}, function(file)
+    local lines = tree.lines(tree.rows(root, {}), 27, {}, function(file)
         if file.stage == 'partly' then
             return {
                 icon = { '◐', 'IterUnstage' },
@@ -254,12 +254,12 @@ T['lines']['draws directories, files, icons and right chunks'] = function()
     end)
 
     eq(texts(lines), {
-        '  ▾ lua/iter/',
-        '    ◐ M drawer.lua   ✎1 ✓',
-        '  ○ ? README.md',
+        '   ▾ lua/iter/',
+        '     ◐ M drawer.lua   ✎1 ✓',
+        '   ○ ? README.md',
     })
 
-    local dir_glyph = #'  '
+    local dir_glyph = #'   '
     eq(lines[1].highlights, {
         {
             group = 'IterDrawerHint',
@@ -268,9 +268,9 @@ T['lines']['draws directories, files, icons and right chunks'] = function()
         },
     })
 
-    local icon = #'    '
+    local icon = #'     '
     local letter = icon + #'◐ '
-    local right = #'    ◐ M drawer.lua   '
+    local right = #'     ◐ M drawer.lua   '
     eq(lines[2].highlights, {
         { group = 'IterUnstage', start_col = icon, end_col = icon + #'◐' },
         {
@@ -294,7 +294,7 @@ T['lines']['shows a collapsed directory with ▸'] = function()
 
     eq(
         texts(tree.lines(tree.rows(root, collapsed), 20, collapsed, no_decor)),
-        { '  ▸ a/' }
+        { '   ▸ a/' }
     )
 end
 
@@ -314,25 +314,25 @@ T['lines']['sheds the rename before cutting the name'] = function()
     })
     local rows = tree.rows(root, {})
 
-    eq(texts(tree.lines(rows, 20, {}, no_decor)), { '  R long_name.lua' })
-    eq(texts(tree.lines(rows, 12, {}, no_decor)), { '  R …ame.lua' })
+    eq(texts(tree.lines(rows, 20, {}, no_decor)), { '   R long_name.lua' })
+    eq(texts(tree.lines(rows, 13, {}, no_decor)), { '   R …ame.lua' })
 end
 
 T['lines']['cuts the name before the right chunks'] = function()
     local root = tree.build({ change('a_very_long_file_name.lua') })
-    local lines = tree.lines(tree.rows(root, {}), 20, {}, function()
+    local lines = tree.lines(tree.rows(root, {}), 21, {}, function()
         return { right = { { '✎12', 'IterDrawerCount' } } }
     end)
 
-    eq(texts(lines), { '  M …e_name.lua ✎12' })
-    eq(vim.fn.strdisplaywidth(lines[1].text), 19)
+    eq(texts(lines), { '   M …e_name.lua ✎12' })
+    eq(vim.fn.strdisplaywidth(lines[1].text), 20)
 end
 
 T['lines']['cuts multibyte names by cells'] = function()
     local root = tree.build({ change('docs/übersicht_änderungen.md') })
-    local lines = tree.lines(tree.rows(root, {}), 16, {}, no_decor)
+    local lines = tree.lines(tree.rows(root, {}), 17, {}, no_decor)
 
-    eq(texts(lines), { '  ▾ docs/', '    M …rungen.md' })
+    eq(texts(lines), { '   ▾ docs/', '     M …rungen.md' })
 end
 
 T['lines']['keeps deep rows within a narrow width'] = function()
@@ -366,7 +366,7 @@ T['lines']['shows the rename of a partly staged file'] = function()
     })
     local lines = tree.lines(tree.rows(root, {}), 34, {}, no_decor)
 
-    eq(texts(lines), { '  R new.lua ← old.lua' })
+    eq(texts(lines), { '   R new.lua ← old.lua' })
     eq(lines[1].highlights[1].group, 'IterDiffHeaderRule')
 end
 
@@ -395,8 +395,8 @@ T['lines']['cuts a long directory name'] = function()
     local root = tree.build({ change('a_very_long_directory/x.txt') })
 
     eq(
-        texts(tree.lines(tree.rows(root, {}), 12, {}, no_decor)),
-        { '  ▾ …ectory/', '    M x.txt' }
+        texts(tree.lines(tree.rows(root, {}), 13, {}, no_decor)),
+        { '   ▾ …ectory/', '     M x.txt' }
     )
 end
 
