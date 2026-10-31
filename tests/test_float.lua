@@ -209,49 +209,4 @@ T['zindex']['draws above a float with a lower zindex'] = function()
     eq(drawer_rows > 0, true)
 end
 
-T['side'] = new_set()
-
-T['side']['covers the text rows from its column, follows and closes with the float'] = function()
-    open_float('chrome = true')
-    child.lua([[
-        _G.side_buf = vim.api.nvim_create_buf(false, true)
-        vim.api.nvim_buf_set_lines(_G.side_buf, 0, -1, false, { 'SIDE' })
-        _G.float:reposition({ side = { buf = _G.side_buf, col = 10 } })
-    ]])
-    child.cmd('redraw')
-
-    local state = [[(function()
-        local f, s = _G.float.win, _G.float.side_win
-        return {
-            buf = vim.api.nvim_win_get_buf(s) == _G.side_buf,
-            row = vim.fn.screenpos(s, 1, 1).row - vim.fn.screenpos(f, 1, 1).row,
-            col = vim.fn.screenpos(s, 1, 1).col - vim.fn.screenpos(f, 1, 1).col,
-            width = vim.api.nvim_win_get_width(s) + 10 == vim.api.nvim_win_get_width(f),
-            height = vim.api.nvim_win_get_height(s) == vim.fn.getwininfo(f)[1].height,
-            focusable = vim.api.nvim_win_get_config(s).focusable,
-            unfocused = vim.api.nvim_get_current_win() ~= s,
-        }
-    end)()]]
-
-    eq(child.lua_get(state), {
-        buf = true,
-        row = 0,
-        col = 10,
-        width = true,
-        height = true,
-        focusable = true,
-        unfocused = true,
-    })
-
-    child.lua('_G.float:reposition({ side = false })')
-    eq(child.lua_get('_G.float.side_win'), vim.NIL)
-
-    child.lua([[
-        _G.float:reposition({ side = { buf = _G.side_buf, col = 10 } })
-        _G.side_win = _G.float.side_win
-        _G.float:close()
-    ]])
-    eq(child.lua_get('vim.api.nvim_win_is_valid(_G.side_win)'), false)
-end
-
 return T

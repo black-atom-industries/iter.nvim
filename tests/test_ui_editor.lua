@@ -181,7 +181,7 @@ local T = new_set({
 
 T['float'] = new_set()
 
-T['float']['opens in insert mode above the drawer with the key hint'] = function()
+T['float']['opens in insert mode over the diff with the key hint'] = function()
     start_annotation('')
 
     eq(mode(), 'i')
@@ -199,6 +199,7 @@ T['float']['opens in insert mode above the drawer with the key hint'] = function
 end
 
 T['float']['follows the pane when the editor is resized'] = function()
+    child.o.columns = 120
     start_annotation('')
 
     local config = [[(function()
@@ -711,20 +712,17 @@ T['anchors']['a staged line anchors on the worktree line'] = function()
     helpers.write_file(vim.fs.joinpath(repo, 'm.txt'), m)
 
     child.cmd('Iter review')
-    helpers.wait_until(
-        child,
-        R .. [[ ~= nil and ]] .. R .. [[.drawer.win ~= nil]]
-    )
-    child.lua(R .. [[.drawer:switch('staged')]])
-    child.lua(R .. [[.drawer:show_selection(true)]])
+    helpers.wait_until(child, R .. [[ ~= nil and ]] .. R .. [[.panel ~= nil]])
+    H.select(child, 'staged', 'm.txt')
     helpers.wait_until(
         child,
         R
-            .. [[.view.files[1] ~= nil and ]]
+            .. [[.view.files[2] ~= nil and ]]
             .. R
-            .. [[.view.files[1].side == 'staged']]
+            .. [[.view.files[2].side == 'staged']]
     )
-    diff_cursor('l3 new')
+    -- The added row of the Staged section.
+    diff_cursor('l3 new', 'add')
     child.type_keys('a')
     wait_editor()
     child.type_keys('staged', '<C-s>')
@@ -756,7 +754,7 @@ T['anchors']['a hunk row takes no line annotation'] = function()
     eq(notes(), { '[iter] No line under the cursor' })
 end
 
-T['anchors']['A annotates the file from the diff pane and the drawer'] = function()
+T['anchors']['A annotates the file from the diff pane and the tree'] = function()
     open_review()
     diff_cursor('l4')
     child.type_keys('A')
@@ -769,16 +767,16 @@ T['anchors']['A annotates the file from the diff pane and the drawer'] = functio
     )
     child.type_keys('from diff', '<C-s>', '<C-c>')
 
-    child.lua([[vim.api.nvim_set_current_win(]] .. R .. [[.drawer.win)]])
+    H.focus_list(child)
     child.type_keys('A')
     wait_editor()
-    child.type_keys('from drawer', '<C-s>', '<C-c>')
+    child.type_keys('from tree', '<C-s>', '<C-c>')
 
     local annotations = stored()
     eq(#annotations, 2)
     eq(annotations[1].scope, 'file')
     eq(annotations[1].anchor, { path = 'm.txt', side = 'new' })
-    eq(annotations[2].body, 'from drawer')
+    eq(annotations[2].body, 'from tree')
     eq(annotations[2].anchor, { path = 'm.txt', side = 'new' })
 end
 

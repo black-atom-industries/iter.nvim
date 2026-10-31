@@ -132,6 +132,19 @@ local function moved(self, force)
     mark(self)
 end
 
+--- Show the page from its first line while the cursor line fits in the
+--- window from there, so a header stays in view after a resize.
+---@param self IterPanel
+local function top(self)
+    local lnum = vim.api.nvim_win_get_cursor(self.win)[1]
+
+    if lnum <= self:height() then
+        vim.api.nvim_win_call(self.win, function()
+            vim.fn.winrestview({ topline = 1 })
+        end)
+    end
+end
+
 --- Render the shown page for the window's size. A cursor the new lines
 --- moved, or left past their end, reaches `on_cursor` as a move.
 function Panel:render()
@@ -148,6 +161,8 @@ function Panel:render()
         if cursor[1] > last then
             vim.api.nvim_win_set_cursor(self.win, { last, 0 })
         end
+
+        top(self)
     end
 
     moved(self)
@@ -204,6 +219,7 @@ function Panel:show(page)
     local lnum = math.min(cursor[1], last)
 
     vim.api.nvim_win_set_cursor(self.win, { lnum, cursor[2] })
+    top(self)
     self.lnum = lnum
     moved(self, true)
 end

@@ -10,7 +10,6 @@ M.options = {
         height = 0.3,
         zindex = 40,
         breakpoint = 80,
-        wide_breakpoint = 160,
         commits = 3,
     },
     diff = {
@@ -25,6 +24,9 @@ M.options = {
     export = {
         intro = 'I reviewed your changes and have these annotations.\n'
             .. 'Please address them.',
+    },
+    review = {
+        tree_width = 34,
     },
     annotate = {
         side = 'right',
@@ -69,7 +71,7 @@ M.keys = {
         column_left = 'h',
         column_right = 'l',
     },
-    review_drawer = {
+    tree = {
         open = '<CR>',
         stage = 's',
         unstage = 'u',
@@ -83,15 +85,14 @@ M.keys = {
         unified = '-',
         wrap = 'gw',
         annotate_file = 'A',
-        edit = 'e',
         yank = 'y',
         yank_all = 'Y',
+        collapse = 'h',
+        expand = 'l',
         close = 'q',
         help = '?',
         scroll_down = '<C-d>',
         scroll_up = '<C-u>',
-        column_left = 'h',
-        column_right = 'l',
     },
     diff = {
         next_hunk = ']c',

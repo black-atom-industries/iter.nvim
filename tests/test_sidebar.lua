@@ -85,18 +85,15 @@ T['lines()']['gives the title, one header per group and one line per note'] = fu
     })
 end
 
-T['lines()']['in a review leads with the progress and marks changed files'] = function()
+T['lines()']['in a review marks changed files'] = function()
     local lines = sidebar.lines(groups(), {
         width = 30,
-        progress = { reviewed = 1, changed = 0, total = 2 },
         changed = { ['a.md'] = true },
     })
     local text = texts(lines)
 
-    eq(text[2]:match('reviewed') ~= nil, true)
-    eq(text[2]:match('1 of 2$') ~= nil, true)
-    eq(text[4], 'M a.md                       4')
-    eq(text[10], '  review                     1')
+    eq(text[3], 'M a.md                       4')
+    eq(text[9], '  review                     1')
 end
 
 T['lines()']['without changes given the headers keep no code slot'] = function()

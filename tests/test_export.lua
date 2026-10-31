@@ -547,7 +547,7 @@ T['yank']['clearing refreshes the review'] = function()
         child,
         [[not table.concat(vim.api.nvim_buf_get_lines(]]
             .. R
-            .. [[.drawer.buf, 0, -1, false), '\n'):find('annotations')]]
+            .. [[.tree.buf, 0, -1, false), '\n'):find('✎', 1, true)]]
     )
 end
 

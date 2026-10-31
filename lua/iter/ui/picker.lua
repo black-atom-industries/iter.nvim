@@ -1,149 +1,227 @@
-local float = require('iter.ui.float')
+--- A list to pick one item from, as a page of the panel: a title, the
+--- items under section titles, and two lines of key hints at the bottom.
+
 local keymap = require('iter.keymap')
 local layout = require('iter.ui.layout')
 local render = require('iter.ui.render')
 
 local M = {}
 
----@alias IterPickerItem string|[string, string?][] a label, or its chunks of text and highlight group
+---@alias IterPickerLabel string|[string, string?][]|fun(width: integer): [string, string?][] a label, its chunks of text and highlight group, or a function that fits them to `width` cells
 
----@class IterPickerOpts
----@field over IterFloat the float whose footprint the picker covers
+---@class IterPickerItem
+---@field label IterPickerLabel
+---@field tag? string a word at the right edge, such as `parent`
+
+---@class IterPickerPageOpts
 ---@field title string
----@field items IterPickerItem[] in order; the first is selected
----@field sections? table<integer, string> a title shown above the item at that index, never selected
+---@field items IterPickerItem[] in order; the first takes the cursor
+---@field sections? table<integer, string> a title line above the item at that index, after a blank line
 ---@field keys table<string, string[]> resolved keys of the picker view
----@field on_pick fun(index: integer) after the picker closed
----@field on_close? fun() after a key closed the picker, before `on_pick`
+---@field on_pick fun(index: integer)
+---@field on_close fun() after the close key
 
----@class IterPicker
----@field float IterFloat
+---@class IterPickerPage: IterPanelPage
 ---@field buf integer
----@field group integer
-local Picker = {}
-Picker.__index = Picker
+---@field opts IterPickerPageOpts
+---@field handlers table<string, fun()>
+---@field indexes table<integer, integer> buffer line → item index
+---@field lnum integer the cursor line the page saw last
+local Page = {}
+Page.__index = Page
 
-local SECTIONS_NS = vim.api.nvim_create_namespace('iter.picker.sections')
+-- Cells left of an item: the gutter the panel draws `▸` over.
+local GUTTER = '  '
 
-local HINTS = { { 'pick', 'pick' }, { 'close', 'back' } }
-
---- The line of `item`, one column in as the drawer's rows start.
+--- The chunks of `item` in `width` cells, its tag at the right edge.
 ---@param item IterPickerItem
----@return IterRenderLine
-local function item_line(item)
-    if type(item) == 'string' then
-        return render.chunks_line({ { ' ' }, { item } })
+---@param width integer
+---@return [string, string?][]
+local function item_chunks(item, width)
+    local tag = item.tag and (' ' .. item.tag .. ' ') or ''
+    local room = width - #GUTTER - vim.fn.strdisplaywidth(tag)
+    local label = item.label
+    ---@type [string, string?][]
+    local chunks
+
+    if type(label) == 'function' then
+        chunks = label(room)
+    elseif type(label) == 'string' then
+        chunks = { { label } }
+    else
+        chunks = vim.deepcopy(label)
     end
 
-    return render.chunks_line({ { ' ' }, unpack(item) })
+    table.insert(chunks, 1, { GUTTER })
+
+    if tag ~= '' then
+        local used = 0
+
+        for _, chunk in ipairs(chunks) do
+            used = used + vim.fn.strdisplaywidth(chunk[1])
+        end
+
+        table.insert(chunks, {
+            string.rep(' ', math.max(1, width - used - #tag)),
+        })
+        table.insert(chunks, { tag, 'IterDrawerHint' })
+    end
+
+    return chunks
 end
 
---- Open a focused list over `opts.over`, with its chrome, its height and
---- above its side window.
----@param opts IterPickerOpts
----@return IterPicker
-function M.open(opts)
+--- The page of `opts.items`, its keys mapped on its own buffer.
+---@param opts IterPickerPageOpts
+---@return IterPickerPage
+function M.page(opts)
     vim.validate('opts', opts, 'table')
-    vim.validate('opts.over', opts.over, 'table')
     vim.validate('opts.title', opts.title, 'string')
     vim.validate('opts.items', opts.items, 'table')
     vim.validate('opts.sections', opts.sections, 'table', true)
     vim.validate('opts.keys', opts.keys, 'table')
     vim.validate('opts.on_pick', opts.on_pick, 'function')
-    vim.validate('opts.on_close', opts.on_close, 'function', true)
+    vim.validate('opts.on_close', opts.on_close, 'function')
 
     local buf = vim.api.nvim_create_buf(false, true)
-    local lines = vim.tbl_map(item_line, opts.items)
 
-    vim.api.nvim_buf_set_lines(buf, 0, -1, false, render.text_lines(lines))
-    render.apply(buf, lines)
-    vim.bo[buf].bufhidden = 'wipe'
+    vim.bo[buf].bufhidden = 'hide'
     vim.bo[buf].modifiable = false
     vim.bo[buf].filetype = 'iterpicker'
 
-    for index, title in pairs(opts.sections or {}) do
-        vim.api.nvim_buf_set_extmark(buf, SECTIONS_NS, index - 1, 0, {
-            virt_lines = { { { '' } }, { { ' ' .. title, 'IterDrawerTitle' } } },
-            virt_lines_above = true,
-        })
-    end
-
-    local self = setmetatable({ buf = buf }, Picker)
-
-    local function leave()
-        self:close()
-
-        if opts.on_close ~= nil then
-            opts.on_close()
-        end
-    end
-
-    local handlers = {
-        pick = function()
-            local index = vim.api.nvim_win_get_cursor(0)[1]
-
-            leave()
-            opts.on_pick(index)
-        end,
-        close = leave,
-    }
-    local over = opts.over.opts
-
-    self.float = float.open({
-        pane = over.pane,
-        left = over.left,
+    local self = setmetatable({
         buf = buf,
-        zindex = over.zindex + 5,
-        height = over.height,
-        min_lines = over.min_lines,
-        enter = true,
-        chrome = true,
-        rule = over.rule,
-        title = { { opts.title, 'IterDrawerTitle' } },
-        footer = layout.hints(
-            keymap.list('picker', opts.keys, handlers),
-            HINTS,
-            vim.api.nvim_win_get_width(opts.over.win) - 1
-        ),
-    })
+        opts = opts,
+        indexes = {},
+        lnum = 1,
+    }, Page)
 
-    local win = self.float.win
+    self.handlers = {
+        pick = function()
+            local index = self:index()
 
-    vim.wo[win].wrap = false
-    vim.wo[win].cursorline = true
-    vim.wo[win].winhighlight = vim.wo[win].winhighlight
-        .. ',CursorLine:IterDrawerSelected'
-
-    keymap.attach(buf, 'picker', opts.keys, handlers)
-
-    self.group =
-        vim.api.nvim_create_augroup('iter.picker.' .. buf, { clear = true })
-    vim.api.nvim_create_autocmd('WinLeave', {
-        group = self.group,
-        buffer = buf,
-        callback = function()
-            vim.schedule(function()
-                self:close()
-            end)
+            if index ~= nil then
+                opts.on_pick(index)
+            end
         end,
-    })
+        close = function()
+            opts.on_close()
+        end,
+    }
+
+    keymap.attach(buf, 'picker', opts.keys, self.handlers)
 
     return self
 end
 
----@return boolean
-function Picker:is_open()
-    return self.float:is_open()
-end
+---@param width integer
+---@param height integer
+function Page:render(width, height)
+    local opts = self.opts
+    local lines = {
+        render.chunks_line({ { ' ' .. opts.title, 'IterDrawerTitle' } }),
+        render.chunks_line({
+            { ' ' },
+            { '/', 'IterDrawerKey' },
+            { ' search', 'IterDrawerHint' },
+        }),
+    }
 
-function Picker:close()
-    pcall(vim.api.nvim_del_augroup_by_id, self.group)
+    self.indexes = {}
 
-    if not self:is_open() then
-        return
+    for index, item in ipairs(opts.items) do
+        local title = opts.sections and opts.sections[index]
+
+        if title ~= nil or index == 1 then
+            table.insert(lines, render.line(''))
+        end
+
+        if title ~= nil then
+            table.insert(
+                lines,
+                render.chunks_line({ { ' ' .. title, 'IterDrawerTitle' } })
+            )
+        end
+
+        table.insert(lines, render.chunks_line(item_chunks(item, width)))
+        self.indexes[#lines] = index
     end
 
-    self.float:close()
+    local bound = keymap.list('picker', opts.keys, self.handlers)
+    local pick = layout.hints(bound, { { 'pick', 'pick' } }, width - 1)
+
+    if #pick > 0 then
+        pick[#pick][1] = pick[#pick][1] .. '  '
+    end
+
+    vim.list_extend(
+        pick,
+        { { '/', 'IterDrawerKey' }, { ' search', 'IterDrawerHint' } }
+    )
+
+    local hints = {
+        pick,
+        layout.hints(bound, { { 'close', 'back to the tree' } }, width - 1),
+    }
+
+    layout.bottom_hints(lines, hints, height)
+
+    vim.bo[self.buf].modifiable = true
+    vim.api.nvim_buf_set_lines(self.buf, 0, -1, false, render.text_lines(lines))
+    vim.bo[self.buf].modifiable = false
+    render.apply(self.buf, lines)
+end
+
+--- Snap the cursor to the nearest item line, looking the way it moved.
+---@param lnum integer
+---@param prev integer
+function Page:on_cursor(lnum, prev)
+    local dir = lnum < prev and -1 or 1
+    local last = vim.api.nvim_buf_line_count(self.buf)
+
+    for _, step in ipairs({ dir, -dir }) do
+        local l = lnum
+
+        while l >= 1 and l <= last do
+            if self.indexes[l] ~= nil then
+                if l ~= lnum then
+                    vim.api.nvim_win_set_cursor(0, { l, 0 })
+                end
+
+                self.lnum = l
+                return
+            end
+
+            l = l + step
+        end
+    end
+
+    self.lnum = lnum
+end
+
+--- The index of the item under the cursor.
+---@return integer?
+function Page:index()
+    return self.indexes[self.lnum]
+end
+
+--- The line of item `index`.
+---@param index integer
+---@return integer?
+function Page:line_of(index)
+    for lnum, i in pairs(self.indexes) do
+        if i == index then
+            return lnum
+        end
+    end
+
+    return nil
+end
+
+--- Wipe the page's buffer.
+function Page:close()
+    if vim.api.nvim_buf_is_valid(self.buf) then
+        vim.api.nvim_buf_delete(self.buf, { force = true })
+    end
 end
 
 return M

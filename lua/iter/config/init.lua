@@ -15,7 +15,6 @@ local SCHEMA = {
         height = 'number',
         zindex = 'integer',
         breakpoint = 'integer',
-        wide_breakpoint = 'integer',
         commits = 'integer',
     },
     diff = {
@@ -27,6 +26,7 @@ local SCHEMA = {
         wrap = 'boolean',
         args = 'table',
     },
+    review = { tree_width = 'integer' },
     export = { intro = 'string' },
     annotate = {
         side = 'string',
@@ -247,6 +247,12 @@ local function validate(opts)
 
     if width ~= nil and width < 10 then
         error('opts.annotate.width must be 10 or more', 0)
+    end
+
+    local tree_width = opts.review and opts.review.tree_width
+
+    if tree_width ~= nil and tree_width < 10 then
+        error('opts.review.tree_width must be 10 or more', 0)
     end
 
     local review_breakpoint = opts.annotate and opts.annotate.review_breakpoint

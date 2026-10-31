@@ -20,25 +20,26 @@ local T = new_set({
     },
 })
 
---- Open a chrome float as `_G.over` and a picker of `one`, `two`, `three`
---- over it as `_G.picker`; `_G.picked` and `_G.closed` record the callbacks.
-local function open_picker()
+--- Open a panel as `_G.panel` showing a base list of `one`, `two` under
+--- `Branches` and `three` under `Commits` as `_G.page`; `_G.picked` and
+--- `_G.closed` record the callbacks.
+local function open_page()
     child.lua([[
-        local float = require('iter.ui.float')
-        local buf = vim.api.nvim_create_buf(false, true)
-        _G.over = float.open({
-            pane = vim.api.nvim_get_current_win(),
-            buf = buf,
-            zindex = 40,
-            height = 0.3,
-            chrome = true,
-        })
         _G.picked = nil
         _G.closed = 0
-        _G.picker = require('iter.ui.picker').open({
-            over = _G.over,
-            title = 'Pick',
-            items = { 'one', 'two', 'three' },
+        _G.panel = require('iter.ui.panel').open({ width = 34 })
+        _G.page = require('iter.ui.picker').page({
+            title = 'Base of the review',
+            items = {
+                { label = 'one', tag = 'parent' },
+                { label = 'two' },
+                {
+                    label = function(width)
+                        return { { 'abc', 'IterCommitSha' }, { ' ' .. ('x'):rep(width - 4) } }
+                    end,
+                },
+            },
+            sections = { [2] = 'Branches', [3] = 'Commits' },
             keys = require('iter.config').resolve({}).keys.picker,
             on_pick = function(index)
                 _G.picked = index
@@ -47,96 +48,101 @@ local function open_picker()
                 _G.closed = _G.closed + 1
             end,
         })
+        _G.panel:show(_G.page)
+        _G.panel:focus()
     ]])
 end
 
-T['open()'] = new_set()
-
-T['open()']['covers the float it opens over and takes the focus'] = function()
-    open_picker()
-
-    local win = child.lua_get('_G.picker.float.win')
-
-    eq(child.api.nvim_get_current_win(), win)
-    eq(
-        child.api.nvim_win_get_position(win),
-        child.lua_get('vim.api.nvim_win_get_position(_G.over.win)')
-    )
-    eq(
-        child.api.nvim_buf_get_lines(
-            child.lua_get('_G.picker.buf'),
-            0,
-            -1,
-            false
-        ),
-        { ' one', ' two', ' three' }
+---@return string[]
+local function lines()
+    return vim.tbl_map(
+        function(line)
+            return (line:gsub('%s+$', ''))
+        end,
+        child.api.nvim_buf_get_lines(child.lua_get('_G.page.buf'), 0, -1, false)
     )
 end
 
-T['open()']['an item of chunks shows their text and highlights'] = function()
-    child.lua([[
-        local float = require('iter.ui.float')
-        _G.over = float.open({
-            pane = vim.api.nvim_get_current_win(),
-            buf = vim.api.nvim_create_buf(false, true),
-            zindex = 40,
-            height = 0.3,
-            chrome = true,
-        })
-        _G.picker = require('iter.ui.picker').open({
-            over = _G.over,
-            title = 'Pick',
-            items = { { { 'abc', 'IterCommitSha' }, { ' plain' } } },
-            keys = require('iter.config').resolve({}).keys.picker,
-            on_pick = function() end,
-        })
-    ]])
+T['page()'] = new_set()
 
-    eq(child.api.nvim_buf_get_lines(0, 0, -1, false), { ' abc plain' })
+T['page()']['lays out the title, the items under their sections and the hints'] = function()
+    open_page()
+
+    local shown = lines()
+
+    eq(vim.list_slice(shown, 1, 9), {
+        ' Base of the review',
+        ' / search',
+        '',
+        '  one                      parent',
+        '',
+        ' Branches',
+        '  two',
+        '',
+        ' Commits',
+    })
+    eq(shown[10], '  abc ' .. ('x'):rep(28))
+    eq(vim.list_slice(shown, #shown - 1), {
+        ' <CR> pick  / search',
+        ' q back to the tree',
+    })
+    eq(#shown, child.api.nvim_win_get_height(child.lua_get('_G.panel.win')))
+end
+
+T['page()']['maps item lines to indexes, the cursor snaps to items'] = function()
+    open_page()
+
     eq(
         child.lua_get(
-            [[vim.tbl_map(function(m)
-            return { m[3], m[4].end_col, m[4].hl_group }
-        end, vim.api.nvim_buf_get_extmarks(0, -1, 0, -1, { details = true, type = 'highlight' }))]]
+            '{ _G.page.indexes[4], _G.page.indexes[7], _G.page.indexes[10] }'
         ),
-        { { 1, 4, 'IterCommitSha' } }
+        { 1, 2, 3 }
     )
+    eq(child.lua_get('vim.tbl_count(_G.page.indexes)'), 3)
+    eq(child.api.nvim_win_get_cursor(0)[1], 4)
+    eq(child.lua_get('_G.page:index()'), 1)
+
+    child.type_keys('j')
+    eq(child.api.nvim_win_get_cursor(0)[1], 7)
+    child.type_keys('j')
+    eq(child.api.nvim_win_get_cursor(0)[1], 10)
+    child.type_keys('k')
+    eq(child.api.nvim_win_get_cursor(0)[1], 7)
+    eq(child.lua_get('_G.page:line_of(3)'), 10)
 end
 
-T['open()']['<CR> passes the index under the cursor'] = function()
-    open_picker()
+T['page()']['<CR> passes the index under the cursor'] = function()
+    open_page()
     child.type_keys('j', '<CR>')
 
     eq(child.lua_get('_G.picked'), 2)
-    eq(child.lua_get('_G.closed'), 1)
-    eq(child.lua_get('_G.picker:is_open()'), false)
-end
-
-T['open()']['/ moves to a match'] = function()
-    open_picker()
-    child.type_keys('/thr', '<CR>', '<CR>')
-
-    eq(child.lua_get('_G.picked'), 3)
-end
-
-T['open()']['q and <Esc> close without picking'] = function()
-    for _, key in ipairs({ 'q', '<Esc>' }) do
-        open_picker()
-        child.type_keys(key)
-
-        eq(child.lua_get('_G.picker:is_open()'), false)
-        eq(child.lua_get('_G.picked'), vim.NIL)
-        eq(child.lua_get('_G.closed'), 1)
-    end
-end
-
-T['open()']['leaving the window closes it without on_close'] = function()
-    open_picker()
-    child.lua('vim.api.nvim_set_current_win(_G.over.pane)')
-    helpers.wait_until(child, 'not _G.picker:is_open()')
-
     eq(child.lua_get('_G.closed'), 0)
+end
+
+T['page()']['/ moves to a match'] = function()
+    open_page()
+    child.type_keys('/two', '<CR>', '<CR>')
+
+    eq(child.lua_get('_G.picked'), 2)
+end
+
+T['page()']['q and <Esc> call on_close without picking'] = function()
+    open_page()
+    child.type_keys('q', '<Esc>')
+
     eq(child.lua_get('_G.picked'), vim.NIL)
+    eq(child.lua_get('_G.closed'), 2)
+end
+
+T['page()']['rejects a missing on_close'] = function()
+    local ok = child.lua_get([[pcall(require('iter.ui.picker').page, {
+        title = 't',
+        items = {},
+        keys = {},
+        on_pick = function() end,
+    })]])
+
+    eq(ok, false)
 end
 
 return T

@@ -25,17 +25,19 @@ local M = {}
 ---@field width integer
 ---@field height? integer window rows; the hints sit on the last of them
 ---@field hints? [string, string][][] key and word pairs, one list per line
----@field progress? IterLayoutProgress the reviewed progress, a row under the title
 ---@field changed? table<string, boolean> paths with changes; when set, each file group's header has a slot that shows `M` for them
 
 ---@class IterSidebarMode the sidebar serving a review
 ---@field order fun(): string[] files in the review's order, listed first
 ---@field changed fun(): table<string, boolean> paths the review lists
----@field progress fun(): IterLayoutProgress
 ---@field on_cursor fun(item?: IterAnnotationItem) after the cursor settled on a line
 ---@field jump fun(item: IterAnnotationItem) `<CR>` on an annotation
 ---@field handlers table<string, fun()> actions that replace or join the sidebar's own
 ---@field on_close? fun() after the sidebar's window closed
+
+---@class IterSidebarPlacement where a review's sidebar opens, in place of the tab's edge
+---@field below integer the window it opens below, in that window's column
+---@field height integer rows
 
 ---@class IterSidebar
 ---@field tab integer
@@ -52,6 +54,7 @@ local M = {}
 ---@field group integer
 ---@field help? IterHelp
 ---@field mode? IterSidebarMode
+---@field placement? IterSidebarPlacement
 ---@field cursor_timer? uv.uv_timer_t runs the last scheduled `mode.on_cursor`
 ---@field mapped? table<string, fun()> the actions mapped on the buffer, the mode's joined in
 local Sidebar = {}
@@ -250,14 +253,6 @@ function M.lines(groups, opts)
     render.add_highlight(first, 'IterDrawerHint', #title, #title + #note)
     table.insert(lines, first)
 
-    if opts.progress ~= nil then
-        local progress = render.line('')
-
-        progress.text =
-            layout.progress_cell(progress, opts.progress, 0, opts.width)
-        table.insert(lines, progress)
-    end
-
     local labels = {}
     local label_width = 0
 
@@ -378,7 +373,6 @@ function Sidebar:render()
         width = vim.api.nvim_win_get_width(self.win),
         height = vim.api.nvim_win_get_height(self.win),
         hints = hints_of(self.config.keys.annotate),
-        progress = mode and mode.progress() or nil,
         changed = mode and mode.changed() or nil,
     })
 
@@ -669,8 +663,9 @@ end
 ---@param root string
 ---@param on_change fun()
 ---@param mode? IterSidebarMode
+---@param placement? IterSidebarPlacement
 ---@return IterSidebar
-local function create(config, root, on_change, mode)
+local function create(config, root, on_change, mode, placement)
     local opts = config.options.annotate
     local buf = vim.api.nvim_create_buf(false, true)
 
@@ -691,14 +686,21 @@ local function create(config, root, on_change, mode)
         end
     end
 
-    -- A split of the tab's full height, with its own buffer from the start:
-    -- a split that copies the current window's buffer would show one of
-    -- iter's buffers in a second window.
-    local win = vim.api.nvim_open_win(buf, true, {
-        split = opts.side == 'left' and 'left' or 'right',
-        win = -1,
-        width = opts.width,
-    })
+    -- A split of the tab's full height, or below the window of `placement`
+    -- in its column, with its own buffer from the start: a split that copies
+    -- the current window's buffer would show one of iter's buffers in a
+    -- second window.
+    local win = placement ~= nil
+            and vim.api.nvim_open_win(buf, true, {
+                split = 'below',
+                win = placement.below,
+                height = placement.height,
+            })
+        or vim.api.nvim_open_win(buf, true, {
+            split = opts.side == 'left' and 'left' or 'right',
+            win = -1,
+            width = opts.width,
+        })
 
     local settings = {
         number = false,
@@ -710,6 +712,8 @@ local function create(config, root, on_change, mode)
         list = false,
         cursorline = true,
         winfixwidth = true,
+        -- Below a window its height holds when the tab equalizes.
+        winfixheight = placement ~= nil,
         winhighlight = 'Normal:IterSidebar,EndOfBuffer:IterSidebar,SignColumn:IterSidebar,FoldColumn:IterSidebar,CursorLine:IterDrawerSelected',
     }
     local before = {}
@@ -729,6 +733,7 @@ local function create(config, root, on_change, mode)
         rows = {},
         order = {},
         mode = mode,
+        placement = placement,
     }, Sidebar)
 
     self.handlers = {
@@ -783,6 +788,25 @@ local function create(config, root, on_change, mode)
         buffer = buf,
         callback = function()
             self:schedule_cursor()
+        end,
+    })
+    -- `:edit iter://…` runs from the window the sidebar reads beside, so
+    -- the address routes there and the sidebar keeps its buffer.
+    vim.api.nvim_create_autocmd('CmdlineLeave', {
+        group = self.group,
+        buffer = buf,
+        callback = function()
+            local cmd = vim.fn.getcmdline():match('^[%s:]*(%a+)!?%s+iter://')
+            local pane = cmd ~= nil and self:pane() or nil
+
+            if
+                vim.v.event.cmdtype == ':'
+                and not vim.v.event.abort
+                and vim.startswith('edit', cmd or '-')
+                and pane ~= nil
+            then
+                vim.api.nvim_set_current_win(pane)
+            end
         end,
     })
     vim.api.nvim_create_autocmd('WinClosed', {
@@ -888,13 +912,16 @@ local function open(config, on_change)
 end
 
 --- Open the sidebar of the current tab for a review without moving the
---- focus, or give the sidebar the tab has the review's `mode`.
+--- focus, at the tab's right edge whatever `annotate.side` says, or below
+--- the window of `placement`; or give the sidebar the tab has the review's
+--- `mode`.
 ---@param config IterConfig
 ---@param root string
 ---@param on_change fun()
 ---@param mode IterSidebarMode
+---@param placement? IterSidebarPlacement
 ---@return IterSidebar
-function M.open_review(config, root, on_change, mode)
+function M.open_review(config, root, on_change, mode, placement)
     local tab = vim.api.nvim_get_current_tabpage()
     local existing = sidebars[tab]
 
@@ -908,7 +935,12 @@ function M.open_review(config, root, on_change, mode)
 
     local current = vim.api.nvim_get_current_win()
 
-    sidebars[tab] = create(config, root, on_change, mode)
+    if placement == nil then
+        config = vim.deepcopy(config)
+        config.options.annotate.side = 'right'
+    end
+
+    sidebars[tab] = create(config, root, on_change, mode, placement)
 
     if util.is_valid_win(current) then
         vim.api.nvim_set_current_win(current)

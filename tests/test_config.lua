@@ -19,7 +19,6 @@ T['resolve()']['returns the defaults without options'] = function()
         height = 0.3,
         zindex = 40,
         breakpoint = 80,
-        wide_breakpoint = 160,
         commits = 3,
     })
     eq(resolved.options.diff, {
@@ -48,8 +47,13 @@ T['resolve()']['returns the defaults without options'] = function()
     eq(resolved.keys.diff.yank, { 'y' })
     eq(resolved.keys.diff.yank_all, { 'Y' })
     eq(resolved.keys.diff.delete, { 'd' })
-    eq(resolved.keys.review_drawer.yank, { 'y' })
-    eq(resolved.keys.review_drawer.yank_all, { 'Y' })
+    eq(resolved.options.review, { tree_width = 34 })
+    eq(resolved.keys.tree.yank, { 'y' })
+    eq(resolved.keys.tree.yank_all, { 'Y' })
+    eq(resolved.keys.tree.collapse, { 'h' })
+    eq(resolved.keys.tree.expand, { 'l' })
+    eq(resolved.keys.tree.edit, nil)
+    eq(resolved.keys.tree.column_left, nil)
     eq(resolved.keys.annotate, {
         jump = { '<CR>' },
         yank = { 'y' },
@@ -74,7 +78,6 @@ T['resolve()']['merges partial options with the defaults'] = function()
         height = 0.5,
         zindex = 40,
         breakpoint = 80,
-        wide_breakpoint = 160,
         commits = 3,
     })
     eq(resolved.options.confirm.discard, false)
@@ -194,6 +197,28 @@ T['resolve() errors']['on a negative or fractional annotate.review_breakpoint'] 
     expect_error(function()
         config.resolve({ annotate = { review_breakpoint = 160.5 } })
     end, 'opts%.annotate%.review_breakpoint: expected integer')
+end
+
+T['resolve() errors']['on a review.tree_width below 10 or fractional'] = function()
+    expect_error(function()
+        config.resolve({ review = { tree_width = 9 } })
+    end, 'opts%.review%.tree_width must be 10 or more')
+
+    expect_error(function()
+        config.resolve({ review = { tree_width = 30.5 } })
+    end, 'opts%.review%.tree_width: expected integer')
+end
+
+T['resolve() errors']['on drawer.wide_breakpoint, which is not an option'] = function()
+    expect_error(function()
+        config.resolve({ drawer = { wide_breakpoint = 160 } })
+    end, 'opts%.drawer%.wide_breakpoint is not an option')
+end
+
+T['resolve() errors']['on the keys view review_drawer, which is not a view'] = function()
+    expect_error(function()
+        config.resolve({ keys = { review_drawer = { open = 'o' } } })
+    end, 'opts%.keys%.review_drawer is not a view')
 end
 
 T['resolve() errors']['on an annotate width below 10 or fractional'] = function()
@@ -448,7 +473,7 @@ T['keymap']['actions() match the configurable keys of every view'] = function()
         'drawer',
         'help',
         'picker',
-        'review_drawer',
+        'tree',
     })
 end
 

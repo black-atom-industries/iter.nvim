@@ -148,97 +148,7 @@ T['columns()']['an item that is not selectable has no row entry'] = function()
     eq(stacked.cells[2], {})
 end
 
-T['columns()']['a stack lays its sections below each other in one column'] = function()
-    local result = layout.columns({
-        {
-            weight = 2,
-            sections = {
-                column('left', 'Left', { 'a', 'b' }),
-                column('mid', 'Mid', { 'c' }),
-            },
-        },
-        column('right', 'Right', { 'x' }),
-    }, 31)
-
-    eq(
-        vim.tbl_map(function(line)
-            return line.text
-        end, result.lines),
-        {
-            ' Left (2)           │ Right (1)',
-            'a                   │x         ',
-            'b                   │          ',
-            '                    │          ',
-            ' Mid (1)            │          ',
-            'c                   │          ',
-        }
-    )
-    eq(result.rows, {
-        {},
-        { left = 'a', right = 'x' },
-        { left = 'b' },
-        {},
-        {},
-        { mid = 'c' },
-    })
-    eq(result.cells[6], { mid = { first = 0, last = 20 } })
-    eq(spans(result.lines[5], 'IterDrawerTitle'), { { 0, 8 } })
-end
-
-T['split()'] = function()
-    local result = layout.split({
-        column('left', 'Left', { 'a', 'b', 'c' }),
-        column('right', 'Right', { 'x' }),
-    }, 21)
-
-    eq(
-        vim.tbl_map(function(line)
-            return line.text
-        end, result.left.lines),
-        { ' Left (3) │', 'a         │', 'b         │', 'c         │' }
-    )
-    eq(
-        vim.tbl_map(function(line)
-            return line.text
-        end, result.right.lines),
-        { ' Right (1)', 'x         ', '          ', '          ' }
-    )
-    eq(result.col, 11)
-    eq(result.left.rows[2], { left = 'a' })
-    eq(result.right.rows[2], { right = 'x' })
-    eq(result.right.cells[2], { right = { first = 0, last = 10 } })
-    eq(spans(result.left.lines[2], 'WinSeparator'), { { 10, 13 } })
-end
-
 T['stacked()'] = new_set()
-
-T['stacked()']['a stack stacks its sections with the other columns'] = function()
-    local result = layout.stacked({
-        {
-            sections = {
-                column('left', 'Left', { 'a' }),
-                column('mid', 'Mid', {}),
-            },
-        },
-        column('right', 'Right', { 'x' }),
-    }, 10)
-
-    eq(
-        vim.tbl_map(function(line)
-            return line.text
-        end, result.lines),
-        {
-            ' Left (1) ',
-            'a         ',
-            '',
-            ' Mid (0)  ',
-            '',
-            ' Right (1)',
-            'x         ',
-        }
-    )
-    eq(result.rows[7], { right = 'x' })
-end
 
 T['stacked()']['columns one below the other'] = function()
     local result = layout.stacked({
@@ -336,6 +246,21 @@ T['commit_chunks()']['author_width() takes the widest author up to 20'] = functi
         14
     )
     eq(layout.author_width({ picker_commit(string.rep('x', 30), '') }), 20)
+end
+
+T['commit_short()'] = function()
+    local commit = picker_commit('Nik', '')
+
+    eq(layout.commit_short(commit, 40), {
+        { commit.sha, 'IterCommitSha' },
+        { ' ' .. commit.subject },
+    })
+
+    local cut = layout.commit_short(commit, #commit.sha + 6)
+
+    eq(cut[2][1], ' ' .. commit.subject:sub(1, 4) .. '…')
+    eq(vim.fn.strdisplaywidth(cut[1][1] .. cut[2][1]), #commit.sha + 6)
+    eq(layout.commit_short(commit, #commit.sha)[2][1], ' ')
 end
 
 T['commit_summary()'] = new_set()
@@ -513,70 +438,12 @@ T['file_cell()']['a rename cuts the old path first, then drops it'] = function()
     eq(rename_cell(12), ' R …rser.lua')
 end
 
-T['file_cell()']['a decor adds the mark slot and the count'] = function()
-    local line = { text = '', highlights = {} }
-    local text = layout.file_cell(
-        line,
-        change('a.txt'),
-        0,
-        16,
-        { mark = { '✓', 'IterReviewed' }, count = 2 }
-    )
-
-    eq(text, ' M ✓ a.txt  [2] ')
-    eq(vim.fn.strdisplaywidth(text), 16)
-    eq(spans(line, 'IterReviewed'), { { 3, 6 } })
-    eq(spans(line, 'IterDrawerCount'), { { #text - 5, #text } })
-end
-
-T['file_cell()']['a decor without a mark keeps a blank slot'] = function()
-    local line = { text = '', highlights = {} }
-
-    eq(layout.file_cell(line, change('a.txt'), 0, 12, {}), ' M   a.txt  ')
-end
-
 ---@param scope string
 ---@param a table
 ---@param body? string
 ---@return IterAnnotation
 local function annotation(scope, a, body)
     return { id = 'x', scope = scope, anchor = a, body = body or 'body' }
-end
-
-T['annotation_label()'] = function()
-    local line =
-        { path = 'lua/a.lua', side = 'new', start_line = 4, end_line = 4 }
-    local range = { path = 'a.lua', side = 'new', start_line = 4, end_line = 6 }
-    local old = { path = 'a.lua', side = 'old', start_line = 8, end_line = 8 }
-
-    eq(layout.annotation_label(annotation('line', line)), 'a.lua:4')
-    eq(layout.annotation_label(annotation('line', line), 10), 'a.lua:10')
-    eq(layout.annotation_label(annotation('range', range)), 'a.lua:4–6')
-    eq(layout.annotation_label(annotation('range', range), 7), 'a.lua:7–9')
-    eq(layout.annotation_label(annotation('line', old)), 'a.lua:8 old')
-    eq(
-        layout.annotation_label(
-            annotation('line', vim.tbl_extend('force', old, { base = 'HEAD' }))
-        ),
-        'a.lua:8 old'
-    )
-    eq(
-        layout.annotation_label(
-            annotation(
-                'line',
-                vim.tbl_extend('force', old, { base = string.rep('ab', 20) })
-            )
-        ),
-        'a.lua:8 old abababa'
-    )
-    eq(
-        layout.annotation_label(annotation('file', { path = 'd/README.md' })),
-        'README.md'
-    )
-    eq(
-        layout.annotation_label(annotation('review', { side = 'new' })),
-        'review'
-    )
 end
 
 T['annotation_cell()'] = new_set()
@@ -679,6 +546,28 @@ T['progress_cell()']['drops the word when narrow'] = function()
     )
 
     eq(text, ' ▰▰▱▱▱▱▱▱▱ 1 of 4 · ↻ 1 ')
+end
+
+T['bottom_hints()'] = function()
+    local lines = { render.line('a') }
+
+    layout.bottom_hints(lines, { { { 'q', 'K' }, { ' close' } } }, 4)
+    eq(
+        vim.tbl_map(function(l)
+            return l.text
+        end, lines),
+        { 'a', '', '', ' q close' }
+    )
+
+    local full = { render.line('a'), render.line('b'), render.line('c') }
+
+    layout.bottom_hints(full, { { { 'x' } } }, 3)
+    eq(
+        vim.tbl_map(function(l)
+            return l.text
+        end, full),
+        { 'a', 'b', 'c', '', ' x' }
+    )
 end
 
 T['hints()'] = new_set()

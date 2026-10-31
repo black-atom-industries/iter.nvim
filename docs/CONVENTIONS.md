@@ -35,13 +35,14 @@ the review straight to an agent pane.
   that ref still exists, else the candidate (local branches and the remote default branch) whose merge-base with HEAD is
   the fewest commits back. Branches that contain HEAD don't count, and ties go to the default branch, then to a local
   branch over a remote one. The default branch is the target of `origin/HEAD`, else `main`, else `master`. On the default
-  branch there is no parent: the picker presets working changes and offers the merge base with the upstream after it.
-- The base picker (`iter.ui.picker`) titles its Branches and Commits with `virt_lines`, so a buffer line is an item's
-  index.
-- Against a base the drawer has one file column beside Annotations: one diff per file, the changes from
-  `git.base_changes` (`git diff -M --name-status` against the resolved sha plus the untracked files of the status read
-  the poll already made). Stage, unstage,
-  discard and ignore refuse there, in the drawer and in the diff pane. Working changes keeps Unstaged and Staged.
+  branch there is no parent: the base list presets working changes and offers the merge base with the upstream after it.
+- The base list (`iter.ui.picker`) is a page of the panel that takes the tree's place. Its header, section titles and
+  hints are buffer lines; a table maps the lines of its items to their index, and the cursor snaps to the nearest
+  item line. It stays until `<CR>` or `q`.
+- Against a base the review's tree lists the changes from `git.base_changes` (`git diff -M --name-status` against the
+  resolved sha plus the untracked files of the status read the poll already made), one diff per file, without
+  staging icons. Stage, unstage, discard and ignore refuse there, in the tree and in the diff. Working changes lists
+  each path once, its staging state as an icon.
 - The commits drawer (`iter.ui.commits`) has two levels. The commits level lists the last 100 commits; the pane shows
   a summary of the commit under the cursor or of a visual selection, read from two git calls (`git.messages`,
   `git.stats`) and drawn by `layout.commit_summary` in a buffer of the drawer's, so moving through the list never reads
@@ -56,7 +57,8 @@ the review straight to an agent pane.
   and context; when they don't match the diff text (filters, CRLF), only the hunk text is used.
 - A view renders a document (`iter.diff.document`): sections in order, one per file diff, and for each buffer line
   its section and model row (none on the blank line between two files). One file is a document of one section; the
-  review's all-files mode is one section per drawer file, Unstaged then Staged. Callers map lines with `at()` and
+  review shows a path as one section per change, Unstaged then Staged, and its all-files mode is every path's sections
+  in tree order. Callers map lines with `at()` and
   `line_of()`, and a selection to model rows with `rows_in()`, never with offsets.
 - The split layout (side by side) is a document whose lines carry a model row per side. `model.pairs` pairs the del
   and add rows of each change group (linematch, one by one above 60 lines); a pair shares a line, an unpaired del or
@@ -95,8 +97,8 @@ the review straight to an agent pane.
   `@function` foreground blended into `Normal`.
   The new side follows the worktree file, the old side its `base`: `HEAD`, `index`, or the full sha of the commit or
   tree a base resolved to. A sha-based old-side annotation shows in a base diff view while the view's resolved base is
-  that sha, and stays in the Annotations column, the sidebar and the export, read from its own commit. Its labels
-  name that commit by its short sha (`anchor.short_base`): `old a1b2c3d` in the Annotations column and the sidebar,
+  that sha, and stays in the sidebar and the export, read from its own commit. Its labels
+  name that commit by its short sha (`anchor.short_base`): `old a1b2c3d` in the sidebar,
   `(old side, a1b2c3d)` in the export; an old side on `HEAD` or `index` reads `old` and `(old side)`.
 - Outdated has one rule, `iter.annotations.list.line_of`: an annotation with text is outdated when the content of the
   version it follows lacks that text; the worktree's content is the loaded buffer's, else the file's. The Annotations
@@ -111,7 +113,7 @@ the review straight to an agent pane.
   briefly with backoff; one older than the stale timeout (`LOCK_STALE_MS`) belongs to a dead instance and is taken over,
   once per write. While another instance holds it, the change stays in this instance (`store.cached` shows it), a
   warning says so, and the next write of that file saves it first. Leaving Neovim waits for the lock up to the stale
-  timeout and takes it over then; a change it still can't save is reported as lost. The review drawer and the buffer
+  timeout and takes it over then; a change it still can't save is reported as lost. The review and the buffer
   marks read through one cache per root (`store.cached`), read again when the file's stat or HEAD changes.
 - The store file also holds the branch's `base` (a base spec), the base the review opens with. A `base` or
   `reviewed_by_base` entry iter can't read is dropped on read without setting the file aside, so the annotations stay.
@@ -122,28 +124,27 @@ the review straight to an agent pane.
   (`reviewed.base_key`). Empty buckets are pruned.
 - Discard never touches the index or ignored files: an unstaged row restores from the index, an untracked row deletes
   only its untracked files, and the confirm names the paths. The Staged column has no discard.
-- The drawer float sits at the bottom of its pane (`relative = 'win'`, `anchor = 'SW'`) at `drawer.zindex`; the base
-  picker `drawer.zindex + 5`, over the drawer's footprint with its chrome, so it shows there whatever picker plugin
-  is installed; the help float uses `drawer.zindex + 10`, the annotation float `+ 20`. Every float follows editor and window resizes through
-  `iter.ui.float`: the drawer through `float.open`, the help and annotation floats through `float.follow_resize`. In the
-  review tab the drawer covers a spacer split of its own height, so it never hides the diff.
+- The drawer float sits at the bottom of its pane (`relative = 'win'`, `anchor = 'SW'`) at `drawer.zindex`; the help
+  float uses `drawer.zindex + 10`, the annotation float `+ 20`. Every float follows editor and window resizes through
+  `iter.ui.float`: the drawer through `float.open`, the help and annotation floats through `float.follow_resize`.
+- The review tab is three splits: the panel (`iter.ui.panel`), a full-height window at the tab's left edge,
+  `review.tree_width` wide with `winfixwidth`, that shows one page at a time and draws `▸` on the cursor line; the diff
+  window; and the annotation sidebar. The panel's pages own their buffers: the tree (`iter.ui.review_tree`, named
+  `iter://review`) and the base list. Closing the panel or the diff window closes the review; a file opened in the
+  panel or the diff with `:edit` opens in the tab the review came from and the page or the diff comes back.
+- The review's tree comes from `iter.ui.tree`, pure functions from the changes to a directory tree, its visible rows and
+  render lines: directories first, a chain of single directories on one row, a path's changes on one row. A closed
+  directory is kept per review by path across refreshes and base changes. Tree order drives `=`, `]f` and `[f`, the
+  statusline position, `r`'s next file and the annotations' file order; `]f` and `[f` walk closed directories and open
+  them.
 - In the status drawer the pane above shows the diff view in place of its buffer. The view saves the window-local
   options it changes and restores them on every exit path.
-- The drawer's lines come from `iter.ui.layout`: pure functions from a list of column specs and the width to render
-  lines, side by side at `drawer.breakpoint` and wider, stacked below it. A stack (`IterLayoutStack`) puts several
-  specs as titled sections in one column; the review drawer's columns layout stacks Unstaged above Staged beside the
-  Annotations column, below `drawer.wide_breakpoint` (from it they sit side by side), and `h` and `l` step between those columns, each keeping its last selection. There
-  `layout.split` gives the Annotations column a layout of its own, shown in the float's side window (`IterFloatSide`):
-  a focusable window over the right of the float's text rows at `drawer.zindex + 1`, with its own buffer, so the file
-  list scrolls alone. The float opens, moves and closes it; the drawer closes when it is closed from outside, and
-  focus moves into it only through `h` and `l`, opening the review on the Annotations column, and a resize that splits
-  it off while an annotation is selected in the drawer. The drawer, with its diff preview
-  (`iter.ui.preview`: the view, the file it shows, all-files mode, and the diff layout and wrap chosen last, held for
-  the session) and its file actions (`iter.ui.file_actions`: stage, unstage, discard and ignore on files of the
-  changes), holds what the status and review drawers share; the review tab plugs in its reviewed marks, annotation counts, header, Annotations column, its preview
-  and spacer sizing as the drawer's extras (`IterDrawerExtras`). Columns the extras add come after the file columns;
-  their items carry a `key`, and `Drawer:selected()` returns files only.
-- Reviewed marks, annotation counts and the Annotations column show only in the review drawer.
+- The status drawer's lines come from `iter.ui.layout`: pure functions from a list of column specs and the width to
+  render lines, side by side at `drawer.breakpoint` and wider, stacked below it; `h` and `l` step between the
+  columns. The drawer and the review share the diff preview (`iter.ui.preview`: the view, the file it shows, all-files
+  mode, and the diff layout and wrap chosen last, held for the session) and the file actions
+  (`iter.ui.file_actions`: stage, unstage, discard and ignore on files of the changes).
+- Reviewed marks, annotation counts and the annotations window show only in the review.
 - iter's buffers carry `iter://` addresses as names, without buffer numbers (`iter.uri`): `BufReadCmd` on
   `iter://*` routes a buffer `:edit` made to what its name addresses and wipes it, after giving its window the previous
   buffer back. Each of iter's buffers is registered with the windows it belongs in and a redraw: `:edit` in one of
@@ -163,20 +164,21 @@ the review straight to an agent pane.
   with itself.
 - The status header keeps `HEAD <branch>` whole and sheds from the right when it doesn't fit: the summary shrinks to
   the total, then goes, then the upstream, then the arrows.
-- The export, the Annotations column and the sidebar list annotations through `iter.annotations.list`: files in drawer order,
+- The export and the sidebar list annotations through `iter.annotations.list`: in the review files in tree order,
   then other files by name, the review last; by line within a file, each resolved with `line_of`.
 - Against a base the export names it in a paragraph after the intro, `Reviewed ` and the header's words:
   `Reviewed since main (a1b2c3d)`, `Reviewed since v1.0 (a1b2c3d)` or `Reviewed from a1b2c3d`. The line comes from the
   open review's base (`Review:since`), never
-  from the stored one, and is the same for the drawer and the sidebar. Without a base the text has no such line.
+  from the stored one, and is the same for the tree and the sidebar. Without a base the text has no such line.
 - The annotation sidebar (`iter.ui.sidebar`) is a vertical split at the tab's edge, one per tabpage. Every sidebar
   redraws through `refresh_annotations` and the store watcher.
-- In the review tab from `annotate.review_breakpoint` tab columns (`vim.o.columns`, never the drawer's width, which the
-  sidebar narrows) the sidebar replaces the drawer's Annotations column, through an `IterSidebarMode`: the review's
-  file order, `M` on its files, the reviewed progress under the title, previews in the diff pane on cursor moves,
-  `<CR>` into the diff, `<C-j>` back to the drawer, `q` closing the review. `l` past the drawer's last column enters it
-  (`drawer_past_last`). `Review:place_annotations` switches on `VimResized` and `TabEnter` and carries the selected
-  annotation across; closing the sidebar's window brings the column back.
+- The review's annotations window is the sidebar with an `IterSidebarMode`: the review's file order, `M` on its files,
+  previews in the diff on cursor moves, `<CR>` into the diff, `<C-j>` to the tree, `q` closing the review. From
+  `annotate.review_breakpoint` tab columns (`vim.o.columns`) it sits at the tab's right edge whatever `annotate.side`
+  says, below that under the tree in the panel's column, a third of its height (at least 5 rows), with `winfixheight`.
+  `Review:place_annotations` moves it on `VimResized` and `TabEnter` and carries the selected annotation across. A
+  window the user closes stays closed until `:Iter annotate` or `iter.annotations()`. `:edit` of an `iter://` address
+  in a sidebar runs from the window the sidebar reads beside.
 - An annotation of a file the review doesn't list previews that file at `HEAD` (the worktree file when `HEAD` lacks
   it) as a `commit`-side document of context rows, read-only: staging, annotating and reviewed marks refuse there.
 - `iter.annotations.statuscolumn` backs `require('iter').statuscolumn()`: a wrapped row of an annotated line draws the

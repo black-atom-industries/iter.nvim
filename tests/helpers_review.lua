@@ -7,17 +7,17 @@ local M = {}
 --- The open review, as an expression for the child.
 M.R = [[require('iter').current_review]]
 
---- The window of the review's file list, as an expression for the child.
-M.LIST_WIN = M.R .. [[.drawer.win]]
+--- The window of the review's file tree, as an expression for the child.
+M.LIST_WIN = M.R .. [[.panel.win]]
 
---- Run `:Iter review` (or `command`) and wait for the file list.
+--- Run `:Iter review` (or `command`) and wait for the file tree.
 ---@param child table MiniTest child Neovim
 ---@param command? string
 function M.open(child, command)
     child.cmd(command or 'Iter review')
     helpers.wait_until(
         child,
-        M.R .. [[ ~= nil and ]] .. M.LIST_WIN .. [[ ~= nil]]
+        M.R .. [[ ~= nil and ]] .. M.R .. [[.panel ~= nil]]
     )
 end
 
@@ -40,36 +40,36 @@ function M.wait_diff(child, expected)
     )
 end
 
---- Select the `side` item with `path` in the file list. Focus stays.
+--- Put the tree's cursor on the file at `path` and show its diff; `side`
+--- is ignored, a tree row is a path. Focus stays.
 ---@param child table MiniTest child Neovim
----@param side string
+---@param _ string
 ---@param path string
-function M.select(child, side, path)
+function M.select(child, _, path)
     child.lua([[
-        local side, path = ...
-        local d = ]] .. M.R .. [[.drawer
-        for lnum, row in ipairs(d.rows) do
-            if row[side] ~= nil and row[side].path == path then
-                vim.api.nvim_win_set_cursor(d.win, { lnum, 0 })
-                d:select(lnum, side)
-                return
-            end
+        local path = ...
+        local r = ]] .. M.R .. [[
+
+        if not r:select_path(path) then
+            error('no row for ' .. path)
         end
-        error('no row for ' .. side .. ' ' .. path)
-    ]], { side, path })
+
+        r:show_selection(false)
+    ]], { path })
 end
 
---- The selected file of the list as `side path`, nil without one.
+--- The path of the tree's file under the cursor, nil on a directory or
+--- without files.
 ---@param child table MiniTest child Neovim
 ---@return string?
 function M.selected(child)
     return child.lua_get([[(function()
-        local item = ]] .. M.R .. [[.drawer:selected()
-        return item and (item.side .. ' ' .. item.path) or vim.NIL
+        local file = ]] .. M.R .. [[.tree:file()
+        return file and file.path or vim.NIL
     end)()]])
 end
 
---- Focus the file list.
+--- Focus the file tree.
 ---@param child table MiniTest child Neovim
 function M.focus_list(child)
     child.lua([[vim.api.nvim_set_current_win(]] .. M.LIST_WIN .. [[)]])

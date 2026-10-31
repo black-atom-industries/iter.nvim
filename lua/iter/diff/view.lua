@@ -641,11 +641,12 @@ end
 --- right the reviewed state, a mode change, the stat (`untracked · +n` for
 --- an untracked file) and, where the reviewed state shows, the count of
 --- annotations placed in the file, for an untracked file only when it has
---- any. In the split layout each side names its version after the path,
---- and only the new side shows the right part, with the reviewed state as its
---- glyph. The right part sheds its parts from the left where it would cover
---- the path. Drawn again in place, so the reviewed state and the count can
---- change alone.
+--- any. In the split layout each side names its version after the path;
+--- in the unified layout a path the document shows twice names its side
+--- (`unstaged`, `staged`) there. Only the new side shows the right part,
+--- with the reviewed state as its glyph. The right part sheds its parts from
+--- the left where it would cover the path. Drawn again in place, so the
+--- reviewed state and the count can change alone.
 ---@param index integer
 function View:decorate_header(index)
     local section = self.document.sections[index]
@@ -696,13 +697,21 @@ function View:decorate_header(index)
     end
 
     local lnum = section.first - 1
+    local side_label
+
+    for i, other in ipairs(self.document.sections) do
+        if i ~= index and other.file.path == file.path then
+            side_label = '  ' .. file.side
+        end
+    end
 
     for _, pane in ipairs(self:panes()) do
         local ids = pane.headers[index] or {}
         local text =
             vim.api.nvim_buf_get_lines(pane.buf, lnum, lnum + 1, true)[1]
         local label = pane.side ~= nil
-            and '  ' .. version_label(file, pane.side)
+                and '  ' .. version_label(file, pane.side)
+            or side_label
         local right = pane.side ~= 'old' and virt_text or nil
 
         if right ~= nil and vim.api.nvim_win_is_valid(pane.win) then
