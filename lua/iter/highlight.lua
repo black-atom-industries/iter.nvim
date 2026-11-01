@@ -6,6 +6,10 @@ local M = {}
 -- Share of the diff colour in a row background; the rest is Normal.
 local BLEND = 0.6
 
+-- Share of the sign colour in a change row under the cursor; the rest is the
+-- row's background.
+local CURSOR_BLEND = 0.1
+
 -- Share of the title colour in the file header background; the rest is Normal.
 local HEADER_BLEND = 0.2
 
@@ -190,6 +194,22 @@ function M.apply()
     for name, spec in pairs(groups) do
         set_derived(name, spec)
     end
+
+    -- From the row's group, which the colorscheme may define.
+    set_derived('IterDiffAddCursor', {
+        bg = blend(
+            add_fg,
+            color({ 'IterDiffAdd' }, 'bg') or add_row,
+            CURSOR_BLEND
+        ),
+    })
+    set_derived('IterDiffDeleteCursor', {
+        bg = blend(
+            del_fg,
+            color({ 'IterDiffDelete' }, 'bg') or del_row,
+            CURSOR_BLEND
+        ),
+    })
 end
 
 local augroup

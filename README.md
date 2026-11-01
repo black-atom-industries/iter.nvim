@@ -972,6 +972,8 @@ event, so no colorscheme needs to define them.
 | `IterCommitAuthor`           | Commit author in the commit and base previews             | link to `Identifier`                                                        |
 | `IterDiffAdd`                | Added line rows                                           | bg of `DiffAdd`, blended with `Normal`                                      |
 | `IterDiffDelete`             | Deleted line rows                                         | bg of `DiffDelete`, blended with `Normal`                                   |
+| `IterDiffAddCursor`          | Added line row under the cursor                           | bg of `IterDiffAdd`, 10 % towards the fg of `IterDiffAddNr`                 |
+| `IterDiffDeleteCursor`       | Deleted line row under the cursor                         | bg of `IterDiffDelete`, 10 % towards the fg of `IterDiffDeleteNr`           |
 | `IterDiffAddText`            | Changed words in added lines                              | bg of `DiffAdd`                                                             |
 | `IterDiffDeleteText`         | Changed words in deleted lines                            | bg of `DiffDelete`                                                          |
 | `IterDiffAddNr`              | Line number of added lines                                | fg of `diffAdded`, `Added`, `DiffAdd`; bg as `IterDiffAdd`                  |

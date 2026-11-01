@@ -82,6 +82,7 @@ local NS_ANNOTATION_TEXT =
 -- Del and add rows draw below syntax, word emphasis above it, so an
 -- emphasis background also shows over a capture that sets one.
 local ROW_PRIORITY = vim.hl.priorities.treesitter - 50
+local NS_CURSOR = vim.api.nvim_create_namespace('iter.diff.cursor')
 local WORD_PRIORITY = vim.hl.priorities.treesitter + 50
 
 local WORD_HL = { add = 'IterDiffAddText', del = 'IterDiffDeleteText' }
@@ -131,6 +132,50 @@ local REVIEWED_HEADER = {
 
 ---@type table<integer, IterDiffView>
 local views = {}
+
+--- The pane of a view that shows `buf`.
+---@param buf integer
+---@return IterDiffPane?
+local function pane_of(buf)
+    local view = views[buf]
+
+    if view == nil then
+        return nil
+    end
+
+    return view.old ~= nil and view.old.buf == buf and view.old or view
+end
+
+local CURSOR_HL = { add = 'IterDiffAddCursor', del = 'IterDiffDeleteCursor' }
+
+-- A change row's tint covers 'cursorline', so the row under the cursor draws
+-- a stronger one, in every window at each redraw.
+vim.api.nvim_set_decoration_provider(NS_CURSOR, {
+    on_win = function(_, win, buf)
+        return views[buf] ~= nil and vim.wo[win].cursorline
+    end,
+    on_line = function(_, win, buf, row)
+        if vim.api.nvim_win_get_cursor(win)[1] ~= row + 1 then
+            return
+        end
+
+        local pane = pane_of(buf)
+        local shown = pane and pane.rows[row + 1]
+        local group = shown and CURSOR_HL[shown.kind]
+
+        if group ~= nil then
+            vim.api.nvim_buf_set_extmark(buf, NS_CURSOR, row, 0, {
+                end_row = row + 1,
+                end_col = 0,
+                strict = false,
+                hl_eol = true,
+                hl_group = group,
+                priority = ROW_PRIORITY + 1,
+                ephemeral = true,
+            })
+        end
+    end,
+})
 
 ---@param win integer
 ---@param values table<string, any>
@@ -765,6 +810,7 @@ function View:decorate(pane, row, lnum, expand_lhs)
         mark = {
             virt_text = { { FILL, 'IterDiffFiller' } },
             virt_text_pos = 'overlay',
+            hl_mode = 'combine',
         }
     elseif row.kind == 'blank' then
         mark = {
@@ -1882,6 +1928,8 @@ end
 ---@field del string
 ---@field add string
 ---@field filler? string
+---@field del_cursor string rail of a deleted row under the cursor
+---@field add_cursor string rail of an added row under the cursor
 ---@field header string rail of a file header row
 ---@field rule string rail of the blank row above a file header
 
@@ -1914,6 +1962,16 @@ local function formats_for(width, side)
                 context = '%%#IterDiffNr#' .. number .. ' ' .. number .. '   ',
                 del = '%%#IterDiffDeleteNr#' .. number .. ' ' .. none .. ' - ',
                 add = '%%#IterDiffAddNr#' .. none .. ' ' .. number .. ' + ',
+                del_cursor = '%%#IterDiffDeleteCursor#'
+                    .. number
+                    .. ' '
+                    .. none
+                    .. ' - ',
+                add_cursor = '%%#IterDiffAddCursor#'
+                    .. none
+                    .. ' '
+                    .. number
+                    .. ' + ',
             }
         else
             formats = {
@@ -1923,6 +1981,8 @@ local function formats_for(width, side)
                 context = '%%#IterDiffNr#' .. number .. '   ',
                 del = '%%#IterDiffDeleteNr#' .. number .. ' - ',
                 add = '%%#IterDiffAddNr#' .. number .. ' + ',
+                del_cursor = '%%#IterDiffDeleteCursor#' .. number .. ' - ',
+                add_cursor = '%%#IterDiffAddCursor#' .. number .. ' + ',
                 filler = '%#IterDiffFiller#' .. FILL:sub(1, 3 * (width + 3)),
             }
         end
@@ -1940,13 +2000,12 @@ end
 ---@return string
 function View.statuscolumn()
     local buf = vim.api.nvim_win_get_buf(vim.g.statusline_winid)
-    local view = views[buf]
+    local pane = pane_of(buf)
 
-    if view == nil then
+    if pane == nil then
         return ''
     end
 
-    local pane = view.old ~= nil and view.old.buf == buf and view.old or view
     local formats = formats_for(pane.width, pane.side)
     local row = pane.rows[vim.v.lnum]
 
@@ -1971,10 +2030,21 @@ function View.statuscolumn()
         end
 
         return string.format(formats.context, row.old, row.new)
-    elseif kind == 'del' then
-        return string.format(formats.del, row.old)
+    end
+
+    local cursor = vim.v.relnum == 0
+        and vim.wo[vim.g.statusline_winid].cursorline
+
+    if kind == 'del' then
+        return string.format(
+            cursor and formats.del_cursor or formats.del,
+            row.old
+        )
     elseif kind == 'add' then
-        return string.format(formats.add, row.new)
+        return string.format(
+            cursor and formats.add_cursor or formats.add,
+            row.new
+        )
     end
 
     return formats.blank

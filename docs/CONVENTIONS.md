@@ -82,6 +82,9 @@ the review straight to an agent pane.
   (`git.diff_ids`) stay the same.
 - The diff buffer holds plain code. Row kinds show through line highlights and line numbers through a `statuscolumn`
   that reads the model, so a yank gives clean code.
+- A change row's tint covers 'cursorline', so with 'cursorline' on, a decoration provider draws the row under each
+  pane's cursor in `IterDiffAddCursor` or `IterDiffDeleteCursor` at redraw, and the `statuscolumn` its rail. A filler row's
+  hatching combines with the cursor line.
 - Syntax comes from a treesitter string parser per file version, cached per blob, with captures only for the rows
   shown. Word emphasis pairs changed lines with `vim.text.diff` and skips lines that mostly changed.
 - Hidden context is gap rows in the model that expand in batches, not folds.

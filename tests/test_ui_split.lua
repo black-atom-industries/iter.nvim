@@ -1368,4 +1368,44 @@ T['wrap']['screenshot of a wrapped line'] = function()
     helpers.expect_screenshot(child, 'review-wrap')
 end
 
+T['cursorline'] = new_set()
+
+--- The screen attribute of the text cell `offset` cells into window `win` at
+--- buffer line `lnum`.
+---@param win integer
+---@param lnum integer
+---@param offset integer
+---@return string
+local function attr_at(win, lnum, offset)
+    local pos = child.fn.screenpos(win, lnum, 1)
+
+    return child.get_screenshot().attr[pos.row][pos.col + offset]
+end
+
+T['cursorline']['shows on a change row and on the filler beside it'] = function()
+    child.o.cursorline = true
+    open_review()
+    split()
+
+    local new = child.lua_get(R .. '.view.win')
+    local old = child.lua_get(R .. '.view.old.win')
+    local added = child.fn.search('local w = 1')
+    local below = added + 1
+
+    child.cmd('redraw')
+
+    -- Past the code's end, the row's tint alone.
+    local eol = child.fn.col({ added, '$' }) + 5
+
+    if attr_at(new, added, eol) == attr_at(new, below, eol) then
+        error('the added row under the cursor has the tint of the next one')
+    end
+
+    if attr_at(old, added, 5) == attr_at(old, below, 5) then
+        error('the filler under the cursor looks like the next one')
+    end
+
+    helpers.expect_screenshot(child, 'split-cursorline')
+end
+
 return T

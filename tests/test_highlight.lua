@@ -36,6 +36,15 @@ T['apply()']['derives groups nothing defined'] = function()
     eq(hl('IterSidebar').link, 'NormalFloat')
 end
 
+T['apply()']['the cursor tint of a change row starts from the row group'] = function()
+    vim.cmd('hi clear')
+    vim.api.nvim_set_hl(0, 'IterDiffAdd', { bg = 0x123456 })
+    vim.api.nvim_set_hl(0, 'Added', { fg = 0x123456 })
+    highlight.apply()
+
+    eq(hl('IterDiffAddCursor').bg, 0x123456)
+end
+
 T['apply()']['the drawer takes NormalFloat when Normal has no background'] = function()
     -- A fresh Neovim: `:hi clear` keeps the links earlier cases set.
     local child = MiniTest.new_child_neovim()
