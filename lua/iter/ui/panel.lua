@@ -38,6 +38,9 @@ local WINOPTS = {
     statuscolumn = '',
     wrap = false,
     list = false,
+    -- With 'scrolloffpad', a user's 'scrolloff' scrolls a page that fits the
+    -- window as the cursor nears its end.
+    scrolloff = 0,
     cursorline = true,
     winfixwidth = true,
     winhighlight = 'Normal:IterSidebar,EndOfBuffer:IterSidebar,SignColumn:IterSidebar,FoldColumn:IterSidebar,CursorLine:IterDrawerSelected',

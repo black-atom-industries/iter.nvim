@@ -876,6 +876,38 @@ T['commits']['the recent commits sit above the hints, ↑ on unpushed ones'] = f
     helpers.cleanup(remote)
 end
 
+T['commits']['the page stays in place under a padded scrolloff'] = function()
+    child.lua([[
+        vim.o.scrolloff = 11
+        if vim.fn.exists('+scrolloffpad') == 1 then
+            vim.o.scrolloffpad = 1
+        end
+    ]])
+
+    open_status()
+    to_commit()
+    child.cmd('redraw')
+
+    eq(child.fn.winsaveview().topline, 1)
+    eq(child.lua_get(S .. '.tree:extra().subject'), 'initial')
+
+    child.type_keys('q')
+    helpers.git(repo, { 'add', '--all' })
+    helpers.git(repo, { 'commit', '--quiet', '-m', 'all' })
+
+    open_status()
+    child.cmd('redraw')
+
+    eq(child.lua_get(S .. '.tree:extra().subject'), 'all')
+    eq(child.fn.winsaveview().topline, 1)
+    eq(vim.list_slice(panel_lines(), 1, 4), {
+        ' HEAD main',
+        ' no changes',
+        '',
+        ' Working tree clean',
+    })
+end
+
 T['commits']['a commit under the cursor shows its summary in the window'] = function()
     open_status()
     wait_preview({ 'unstaged dir/sub/d.txt' })

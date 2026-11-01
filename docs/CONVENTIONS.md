@@ -135,7 +135,7 @@ the review straight to an agent pane.
   float uses `drawer.zindex + 10`, the annotation float `+ 20`. Every float follows editor and window resizes through
   `iter.ui.float`: the drawer through `float.open`, the help and annotation floats through `float.follow_resize`.
 - The review tab is three splits: the panel (`iter.ui.panel`), a full-height window at the tab's left edge,
-  `review.tree_width` wide with `winfixwidth`, that shows one page at a time and draws `▸` on the cursor line; the diff
+  `review.tree_width` wide with `winfixwidth` and a local `scrolloff` of 0, so a page that fits stays in place, that shows one page at a time and draws `▸` on the cursor line; the diff
   window; and the annotation sidebar. The panel's pages own their buffers: the tree (`iter.ui.review_tree`, named
   `iter://review`) and the base list (`iter://review#base`). Closing the panel or the diff window closes the review; a file opened in the
   panel or the diff with `:edit` opens in the tab the review came from and the page or the diff comes back.
