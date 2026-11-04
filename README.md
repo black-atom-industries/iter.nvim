@@ -947,6 +947,8 @@ event, so no colorscheme needs to define them.
 - "Derived from" lists the first group found with that colour, then the
   fallback.
 - Row backgrounds blend the diff colour 60 % towards `Normal`.
+- A `DiffAdd` or `DiffDelete` background that can't be told from `Normal` is
+  replaced by 30 % of the sign colour over `Normal`.
 
 | Group                        | Colours                                                   | Derived from                                                                |
 | ---------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------- |

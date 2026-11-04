@@ -95,6 +95,44 @@ T['apply()']['re-derives its own groups when the colorscheme has no hi clear'] =
     eq(hl('IterDiffAdd').bg, 0x003d00)
 end
 
+T['apply()']['a diff background that matches Normal takes the sign colour instead'] = function()
+    vim.api.nvim_set_hl(0, 'Normal', { bg = 0x000000 })
+    vim.api.nvim_set_hl(0, 'DiffAdd', { bg = 0x000000 })
+    vim.api.nvim_set_hl(0, 'Added', { fg = 0x00ff00 })
+    vim.api.nvim_set_hl(0, 'DiffDelete', { bg = 0x050505 })
+    vim.api.nvim_set_hl(0, 'Removed', { fg = 0xff0000 })
+
+    highlight.apply()
+
+    -- 30 % of the sign colour over Normal: floor(0xff * 0.3) = 0x4c.
+    eq(hl('IterDiffAddText').bg, 0x004c00)
+    eq(hl('IterDiffDeleteText').bg, 0x4c0000)
+    -- 60 % of that for the row: floor(0x4c * 0.6) = 0x2d.
+    eq(hl('IterDiffAdd').bg, 0x002d00)
+    eq(hl('IterDiffDelete').bg, 0x2d0000)
+end
+
+T['apply()']['a faint diff background the colorscheme set stays'] = function()
+    vim.api.nvim_set_hl(0, 'Normal', { bg = 0x101010 })
+    vim.api.nvim_set_hl(0, 'DiffAdd', { bg = 0x102410 })
+    vim.api.nvim_set_hl(0, 'Added', { fg = 0x00ff00 })
+
+    highlight.apply()
+
+    eq(hl('IterDiffAddText').bg, 0x102410)
+end
+
+T['apply()']['a diff background has nothing to differ from without Normal'] = function()
+    local child = MiniTest.new_child_neovim()
+    child.start({ '-u', dofile('tests/helpers.lua').minimal_init })
+    child.api.nvim_set_hl(0, 'Normal', {})
+    child.api.nvim_set_hl(0, 'DiffAdd', { bg = 0x000000 })
+    child.lua([[require('iter.highlight').apply()]])
+
+    eq(child.api.nvim_get_hl(0, { name = 'IterDiffAdd' }).bg, 0x000000)
+    child.stop()
+end
+
 T['apply()']['file and drawer headers take a band of the title colour and a rule in it'] = function()
     vim.api.nvim_set_hl(0, 'Normal', { fg = 0xcccccc, bg = 0x000000 })
     vim.api.nvim_set_hl(0, 'Title', { fg = 0xffffff })
@@ -147,6 +185,20 @@ T['apply()']['annotated text has a background without Normal and Visual'] = func
 end
 
 T['setup()'] = new_set()
+
+T['setup()']['a colorscheme with an invisible diff background still shows rows'] = function()
+    local child = MiniTest.new_child_neovim()
+    child.start({ '-u', dofile('tests/helpers.lua').minimal_init })
+    child.lua([[require('iter.highlight').setup()]])
+
+    child.api.nvim_set_hl(0, 'Normal', { bg = 0x202020 })
+    child.api.nvim_set_hl(0, 'DiffAdd', { bg = 0x202020 })
+    child.api.nvim_set_hl(0, 'Added', { fg = 0x80ff80 })
+    child.api.nvim_exec_autocmds('ColorScheme', {})
+
+    neq(child.api.nvim_get_hl(0, { name = 'IterDiffAdd' }).bg, 0x202020)
+    child.stop()
+end
 
 T['setup()']['colorscheme with hi clear keeps its groups and derives the rest'] = function()
     highlight.setup()

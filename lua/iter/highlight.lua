@@ -20,6 +20,13 @@ local TEXT_BLEND = 0.15
 -- colour; the rest is Normal.
 local TEXT_VISUAL_BLEND = 0.35
 
+-- Distance from Normal, 0 to 1, below which a diff background can't be seen.
+local MIN_DIFF_DISTANCE = 0.04
+
+-- Share of the sign colour in a diff background that replaces an invisible
+-- one; the rest is Normal.
+local INVISIBLE_DIFF_BLEND = 0.3
+
 ---@param color integer
 ---@param base integer
 ---@param alpha number
@@ -35,6 +42,31 @@ local function blend(color, base, alpha)
     end
 
     return result
+end
+
+--- `bg`, or a mix of `fg` and `base` when `bg` can't be told from `base`.
+---@param bg integer
+---@param fg integer
+---@param base integer?
+---@return integer
+local function visible_diff_bg(bg, fg, base)
+    if base == nil then
+        return bg
+    end
+
+    local sum = 0
+
+    for _, shift in ipairs({ 16, 8, 0 }) do
+        local a = bit.band(bit.rshift(bg, shift), 0xFF)
+        local b = bit.band(bit.rshift(base, shift), 0xFF)
+        sum = sum + ((a - b) / 255) ^ 2
+    end
+
+    if math.sqrt(sum / 3) >= MIN_DIFF_DISTANCE then
+        return bg
+    end
+
+    return blend(fg, base, INVISIBLE_DIFF_BLEND)
 end
 
 --- The first `key` colour found in `names`, links resolved.
@@ -125,6 +157,8 @@ function M.apply()
         or (dark and 0x80d080 or 0x206020)
     local del_fg = color({ 'diffRemoved', 'Removed', 'DiffDelete' }, 'fg')
         or (dark and 0xd08080 or 0x802020)
+    add_bg = visible_diff_bg(add_bg, add_fg, base)
+    del_bg = visible_diff_bg(del_bg, del_fg, base)
     local title = color({ 'Title' }, 'fg') or (dark and 0xe0a060 or 0x905020)
     local header_bg =
         blend(title, base or (dark and 0x000000 or 0xffffff), HEADER_BLEND)
