@@ -21,6 +21,12 @@ Scope, architecture and Lua conventions live in `docs/CONVENTIONS.md`. Read it b
 - Git repositories in tests are temporary directories, never real repositories.
 - Run the suite as `CI=1 just test`. Without `CI`, a missing screenshot reference is written instead of failing.
 
+## Trying a branch
+
+Nik's Neovim loads iter from the folder it starts in when that folder is a worktree (`iter.nvim-*`), else from the main
+checkout. To show him a branch, have him start `nvim` from its worktree; a Neovim already open keeps the code it started
+with.
+
 ## Skills
 
 - `repo-commit`: any commit.
