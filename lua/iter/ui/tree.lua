@@ -1,7 +1,6 @@
 --- Changed files as a directory tree: the tree, its visible rows and their
 --- render lines. Pure: it builds tables and touches no window or buffer.
 
-local changes = require('iter.changes')
 local render = require('iter.ui.render')
 
 ---@class IterTreeFile one row per path
@@ -279,6 +278,30 @@ local function chunks_width(chunks)
     return width
 end
 
+--- The start of `text` that fits in `width` cells.
+---@param text string
+---@param width integer
+---@return string
+local function head(text, width)
+    if vim.fn.strdisplaywidth(text) <= width then
+        return text
+    end
+
+    local kept = ''
+
+    for i = 0, vim.fn.strchars(text) - 1 do
+        local next = kept .. vim.fn.strcharpart(text, i, 1)
+
+        if vim.fn.strdisplaywidth(next) > width then
+            break
+        end
+
+        kept = next
+    end
+
+    return kept
+end
+
 --- `line` cut to `width` cells, its highlights cut with it.
 ---@param line IterRenderLine
 ---@param width integer
@@ -288,17 +311,7 @@ local function clip(line, width)
         return line
     end
 
-    local kept = ''
-
-    for i = 0, vim.fn.strchars(line.text) - 1 do
-        local next = kept .. vim.fn.strcharpart(line.text, i, 1)
-
-        if vim.fn.strdisplaywidth(next) > width then
-            break
-        end
-
-        kept = next
-    end
+    local kept = head(line.text, width)
 
     local highlights = {}
 
@@ -315,21 +328,17 @@ local function clip(line, width)
 end
 
 ---@param row IterTreeRow
----@param width integer
 ---@param collapsed table<string, true>
 ---@return IterRenderLine
-local function dir_line(row, width, collapsed)
+local function dir_line(row, collapsed)
     local dir = row.node
     ---@cast dir IterTreeDir
     local lead = GUTTER .. INDENT:rep(row.depth)
     local glyph = is_collapsed(dir, collapsed) and '▸ ' or '▾ '
-    local room = width
-        - vim.fn.strdisplaywidth(lead)
-        - vim.fn.strdisplaywidth(glyph)
 
     return render.chunks_line({
         { lead },
-        { glyph .. changes.truncate(dir.name, room), 'IterDrawerHint' },
+        { glyph .. dir.name, 'IterDrawerHint' },
     })
 end
 
@@ -363,7 +372,7 @@ local function file_line(row, width, decor)
         - chunks_width(chunks)
         - (right_width > 0 and right_width + 2 or 0)
 
-    -- The indent gives way before the name shrinks below `…`.
+    -- The indent gives way before the name's first cell does.
     if room < 1 then
         lead_width = math.max(0, full_lead - (1 - room))
         room = room + full_lead - lead_width
@@ -379,7 +388,7 @@ local function file_line(row, width, decor)
         table.insert(chunks, { file.name })
         table.insert(chunks, { ARROW .. renamed.orig_path, 'IterDrawerHint' })
     else
-        table.insert(chunks, { changes.truncate(file.name, room) })
+        table.insert(chunks, { head(file.name, room) })
     end
 
     if right_width > 0 then
@@ -399,11 +408,48 @@ function M.stage_icon(stage)
     return STAGE_ICONS[stage]
 end
 
+--- The cells `lines` needs to show every name of the tree whole, closed
+--- directories included, with one cell left at the edge. A rename's
+--- `← orig_path` doesn't count.
+---@param root IterTreeDir
+---@param decorate fun(file: IterTreeFile): IterTreeDecor
+---@return integer
+function M.width(root, decorate)
+    vim.validate('root', root, 'table')
+    vim.validate('decorate', decorate, 'function')
+
+    local widest = 0
+
+    for _, row in ipairs(M.rows(root, {})) do
+        local node = row.node
+        local used = vim.fn.strdisplaywidth(GUTTER .. INDENT:rep(row.depth))
+            + vim.fn.strdisplaywidth(node.name)
+
+        if node.kind == 'dir' then
+            used = used + vim.fn.strdisplaywidth('▾ ')
+        else
+            ---@cast node IterTreeFile
+            local decor = decorate(node)
+            local right = chunks_width(decor.right or {})
+
+            used = used
+                + (decor.icon and chunks_width({ decor.icon }) + 1 or 0)
+                + vim.fn.strdisplaywidth(node.code .. ' ')
+                + (right > 0 and right + 1 or 0)
+        end
+
+        widest = math.max(widest, used + 1)
+    end
+
+    return widest
+end
+
 --- The render lines of `rows`, each at most `width` cells: a 3-cell gutter,
 --- 2 cells per depth, then a directory as `▾ name` (`▸` when collapsed) or a
 --- file as `[icon ]letter name`. A rename adds `← orig_path`, dropped
---- before the name is cut; the decor's right chunks end one cell before the
---- edge.
+--- before the name stops short; the decor's right chunks end one cell before
+--- the edge. A name is never shortened: what doesn't fit stops at the right
+--- chunks or the edge.
 ---@param rows IterTreeRow[]
 ---@param width integer
 ---@param collapsed table<string, true> directory paths
@@ -416,7 +462,7 @@ function M.lines(rows, width, collapsed, decorate)
     vim.validate('decorate', decorate, 'function')
 
     return vim.tbl_map(function(row)
-        local line = row.node.kind == 'dir' and dir_line(row, width, collapsed)
+        local line = row.node.kind == 'dir' and dir_line(row, collapsed)
             or file_line(row, width, decorate(row.node))
 
         return clip(line, width)

@@ -194,7 +194,7 @@ function Review.open(opts)
     end
 
     self.panel = panel.open({
-        width = opts.config.options.review.tree_width,
+        width = self:tree_columns(),
         on_close = function()
             self:close()
         end,
@@ -923,6 +923,10 @@ function Review:refresh(reason, target)
 
     local same = vim.deep_equal(before, self.changes)
 
+    if stored or not same then
+        self:fit_tree(true)
+    end
+
     if reason == 'poll' and same then
         if stored then
             self:render()
@@ -963,6 +967,7 @@ function Review:relist()
         return
     end
 
+    self:fit_tree()
     self.preview.diff_ids = nil
     self.preview.previewed, self.preview.all_shown = nil, false
 
@@ -2084,39 +2089,45 @@ function Review:open_sidebar(id)
 end
 
 --- Give the annotations right of the diff their configured width, and the
---- tree its own with `with_tree`, taking the cells from the diff's panes, which
---- then even out.
+--- tree its own with `with_tree`, taking the cells from the diff's panes.
 ---@param self IterReview
 ---@param with_tree boolean
 local function fit_widths(self, with_tree)
-    local fixed = {}
-
-    for _, win in ipairs({ self.view.win, self.view.old and self.view.old.win }) do
-        if util.is_valid_win(win) then
-            fixed[win] = vim.wo[win].winfixwidth
-            vim.wo[win].winfixwidth = false
+    self.view:give_widths(function()
+        if with_tree then
+            self.panel:restore_width()
         end
-    end
 
-    if with_tree then
-        self.panel:restore_width()
-    end
+        local open = sidebar.of(self.tab)
 
-    local open = sidebar.of(self.tab)
+        if
+            open ~= nil
+            and open.placement == nil
+            and util.is_valid_win(open.win)
+        then
+            vim.api.nvim_win_set_width(
+                open.win,
+                self.config.options.annotate.width
+            )
+        end
+    end)
+end
 
-    if
-        open ~= nil
-        and open.placement == nil
-        and util.is_valid_win(open.win)
-    then
-        vim.api.nvim_win_set_width(open.win, self.config.options.annotate.width)
-    end
+--- The columns the tree asks for, with the annotations right of the diff left
+--- out of what it shares with the diff.
+---@return integer
+function Review:tree_columns()
+    local options = self.config.options
+    local annotations = (self:narrow() or self.annotations_closed) and 0
+        or options.annotate.width + 1
 
-    for win, fix in pairs(fixed) do
-        vim.wo[win].winfixwidth = fix
-    end
+    return self.tree:columns(options, vim.o.columns - annotations)
+end
 
-    self.view:even_widths()
+--- Fit the tree to its names.
+---@param grow? boolean a narrower fit keeps the width, so the diff stays put as files come and go
+function Review:fit_tree(grow)
+    self.panel:fit(self:tree_columns(), { view = self.view, grow = grow })
 end
 
 --- Put the annotations window where the tab's width wants it, right of
@@ -2176,6 +2187,7 @@ end
 function Review:focus_annotations()
     vim.api.nvim_set_current_tabpage(self.tab)
     self.annotations_closed = false
+    self:fit_tree()
     self:place_annotations()
 
     local open = sidebar.of(self.tab)
@@ -2474,6 +2486,7 @@ function Review:attach()
     vim.api.nvim_create_autocmd({ 'VimResized', 'TabEnter' }, {
         group = self.group,
         callback = function()
+            self:fit_tree(true)
             vim.schedule(function()
                 self:place_annotations()
             end)

@@ -19,6 +19,8 @@ local M = {}
 ---@class IterPanel
 ---@field win integer
 ---@field columns integer the width it keeps
+---@field held? integer the width the user set, kept until the panel closes
+---@field editor_columns integer the editor's columns of the last fit
 ---@field page? IterPanelPage the page the window shows
 ---@field on_close? fun()
 ---@field group integer
@@ -167,6 +169,61 @@ function Panel:restore_width()
     end
 end
 
+--- Take a width iter didn't set as the user's. One from a change of the
+--- editor's columns waits for `fit`.
+---@param self IterPanel
+local function note_resize(self)
+    if
+        vim.o.columns == self.editor_columns
+        and self:width() ~= self.columns
+    then
+        self.columns = self:width()
+        self.held = self.columns
+    end
+end
+
+--- Set the width it keeps to `columns`. A width the user set stays instead;
+--- after the editor's columns changed it comes back as far as `bounded` allows.
+--- Windows of another tab wait for a call from that tab.
+---@param columns integer
+---@param opts { view: IterDiffView, grow?: boolean } the view's panes give the cells; with `grow` a narrower width stays, unless the editor's columns changed
+function Panel:fit(columns, opts)
+    if
+        not self:is_open()
+        or vim.api.nvim_win_get_tabpage(self.win)
+            ~= vim.api.nvim_get_current_tabpage()
+    then
+        return
+    end
+
+    local resized = vim.o.columns ~= self.editor_columns
+
+    note_resize(self)
+
+    if resized then
+        self.editor_columns = vim.o.columns
+        self.columns = self:width()
+    end
+
+    if self.held ~= nil then
+        if not resized then
+            return
+        end
+
+        columns = M.bounded(self.held)
+    elseif opts.grow and not resized then
+        columns = math.max(columns, self.columns)
+    end
+
+    self.columns = columns
+
+    if self:width() ~= columns then
+        opts.view:give_widths(function()
+            self:restore_width()
+        end)
+    end
+end
+
 --- Render the shown page for the window's size. A cursor the new lines
 --- moved, or left past their end, reaches `on_cursor` as a move.
 function Panel:render()
@@ -246,6 +303,15 @@ function Panel:show(page)
     moved(self, true)
 end
 
+--- `columns`, at most half the editor, at least 10.
+---@param columns integer
+---@return integer
+function M.bounded(columns)
+    vim.validate('columns', columns, 'number')
+
+    return math.max(10, math.min(columns, math.floor(vim.o.columns / 2)))
+end
+
 --- Close the window; `on_close` follows unless `opts.silent`.
 ---@param opts? { silent?: boolean }
 function Panel:close(opts)
@@ -284,6 +350,7 @@ function M.open(opts)
     local self = setmetatable({
         win = win,
         columns = opts.width,
+        editor_columns = vim.o.columns,
         on_close = opts.on_close,
         group = vim.api.nvim_create_augroup(
             'iter.panel.' .. win,
@@ -304,6 +371,7 @@ function M.open(opts)
         group = self.group,
         callback = function()
             if vim.tbl_contains(vim.v.event.windows, self.win) then
+                note_resize(self)
                 self:render()
             end
         end,

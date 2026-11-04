@@ -553,6 +553,28 @@ function View:even_widths()
     end
 end
 
+--- Run `set_widths`, which may take the cells it needs from the panes, then
+--- even them out.
+---@param set_widths fun()
+function View:give_widths(set_widths)
+    local fixed = {}
+
+    for _, win in ipairs({ self.win, self.old and self.old.win }) do
+        if util.is_valid_win(win) then
+            fixed[win] = vim.wo[win].winfixwidth
+            vim.wo[win].winfixwidth = false
+        end
+    end
+
+    set_widths()
+
+    for win, fix in pairs(fixed) do
+        vim.wo[win].winfixwidth = fix
+    end
+
+    self:even_widths()
+end
+
 --- Give the other panes the cursor line and the top line of `from`, the
 --- pane in the current window by default.
 ---@param from? IterDiffPane

@@ -1268,7 +1268,39 @@ T['hand back']['a 50-column tab gives the sidebar half of it'] = function()
     helpers.expect_screenshot(child, 'status-sidebar-narrow')
 end
 
-T['hand back']['a layout switch and a window resize keep the width, an editor resize sets it'] = function()
+T['hand back']['the sidebar grows to show long names whole'] = function()
+    child.o.columns = 200
+    helpers.write_file(
+        vim.fs.joinpath(repo, 'themes', 'black-atom-terra-fall-light.toml'),
+        { 'colors' }
+    )
+
+    open_status()
+    wait_preview({ 'unstaged dir/sub/d.txt' })
+
+    eq(child.api.nvim_win_get_width(child.lua_get(S .. '.panel.win')), 42)
+end
+
+T['hand back']['a fixed review.tree_width keeps the sidebar there'] = function()
+    child.o.columns = 200
+    child.lua([[
+        local iter = require('iter')
+        iter.config = require('iter.config').resolve({
+            review = { tree_width = 30 },
+        })
+    ]])
+    helpers.write_file(
+        vim.fs.joinpath(repo, 'themes', 'black-atom-terra-fall-light.toml'),
+        { 'colors' }
+    )
+
+    open_status()
+    wait_preview({ 'unstaged dir/sub/d.txt' })
+
+    eq(child.api.nvim_win_get_width(child.lua_get(S .. '.panel.win')), 30)
+end
+
+T['hand back']['a width the user set stays through editor resizes, down to half the editor'] = function()
     child.o.columns = 160
 
     open_status()
@@ -1286,11 +1318,15 @@ T['hand back']['a layout switch and a window resize keep the width, an editor re
 
     child.o.columns = 140
     child.lua('vim.wait(50)')
-    eq(child.api.nvim_win_get_width(panel), 34)
+    eq(child.api.nvim_win_get_width(panel), 40)
 
     child.o.columns = 50
     child.lua('vim.wait(50)')
     eq(child.api.nvim_win_get_width(panel), 25)
+
+    child.o.columns = 140
+    child.lua('vim.wait(50)')
+    eq(child.api.nvim_win_get_width(panel), 40)
 end
 
 T['hand back']['the tab line counts the windows without the sidebar'] = function()

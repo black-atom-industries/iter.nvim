@@ -164,7 +164,7 @@ function M.open(opts)
     self.handlers = self:make_handlers()
     self.list = self:list_page()
     self.panel = panel.open({
-        width = config.options.review.tree_width,
+        width = review_tree.least_columns(config.options),
         on_close = function()
             self:close()
         end,
@@ -643,6 +643,7 @@ function Commits:open_files()
     self.opened = opened
     self.files = self:files_page()
     self:guard(self.files.buf)
+    self:fit_panel()
     self.quiet = true
     self.panel:show(self.files)
     self.panel:set_cursor(
@@ -650,6 +651,19 @@ function Commits:open_files()
     )
     self.quiet = false
     self:preview()
+end
+
+--- Give the panel the width of the page it shows: the names of the files, the
+--- least for the list.
+---@param grow? boolean a narrower fit keeps the width
+function Commits:fit_panel(grow)
+    local options = self.config.options
+
+    self.panel:fit(
+        self.files ~= nil and self.files:columns(options, vim.o.columns)
+            or review_tree.least_columns(options),
+        { view = self.view, grow = grow }
+    )
 end
 
 --- Show the files of the commit `sha`, a full or short sha, with the
@@ -686,6 +700,7 @@ function Commits:back()
     local index = self.opened.range.index
 
     self.files, self.opened, self.previewed = nil, nil, nil
+    self:fit_panel()
     self.panel:show(self.list)
     self.panel:set_cursor(LIST_TOP + index)
     files:close()
@@ -877,8 +892,18 @@ function Commits:attach()
                 return
             end
 
+            if args.event == 'VimResized' then
+                self:fit_panel(true)
+            end
+
             self.diff:resized()
             self.view:even_widths()
+        end,
+    })
+    vim.api.nvim_create_autocmd('TabEnter', {
+        group = self.group,
+        callback = function()
+            self:fit_panel(true)
         end,
     })
     vim.api.nvim_create_autocmd('BufWipeout', {

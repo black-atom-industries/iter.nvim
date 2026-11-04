@@ -27,7 +27,7 @@ local SCHEMA = {
         wrap = 'boolean',
         args = 'table',
     },
-    review = { tree_width = 'integer' },
+    review = { tree_width = 'integer_or_auto', tree_min_width = 'integer' },
     export = { intro = 'string' },
     annotate = {
         side = 'string',
@@ -65,6 +65,10 @@ local function validate_options(opts, schema, prefix)
             validate_options(value, expected, path)
         elseif expected == 'integer' then
             vim.validate(path, value, is_integer, false, 'integer')
+        elseif expected == 'integer_or_auto' then
+            vim.validate(path, value, function(v)
+                return v == 'auto' or is_integer(v)
+            end, false, "integer or 'auto'")
         else
             vim.validate(path, value, expected)
         end
@@ -258,8 +262,14 @@ local function validate(opts)
 
     local tree_width = opts.review and opts.review.tree_width
 
-    if tree_width ~= nil and tree_width < 10 then
+    if type(tree_width) == 'number' and tree_width < 10 then
         error('opts.review.tree_width must be 10 or more', 0)
+    end
+
+    local tree_min_width = opts.review and opts.review.tree_min_width
+
+    if tree_min_width ~= nil and tree_min_width < 10 then
+        error('opts.review.tree_min_width must be 10 or more', 0)
     end
 
     local review_breakpoint = opts.annotate and opts.annotate.review_breakpoint

@@ -29,7 +29,8 @@ M.options = {
             .. 'Please address them.',
     },
     review = {
-        tree_width = 34,
+        tree_width = 'auto',
+        tree_min_width = 34,
     },
     annotate = {
         side = 'right',

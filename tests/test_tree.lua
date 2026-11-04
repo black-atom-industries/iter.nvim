@@ -305,7 +305,7 @@ T['lines']['colours a conflict letter'] = function()
     eq(lines[1].highlights[1].group, 'IterConflict')
 end
 
-T['lines']['sheds the rename before cutting the name'] = function()
+T['lines']['sheds the rename before the name stops short'] = function()
     local root = tree.build({
         change('long_name.lua', 'staged', {
             code = 'R',
@@ -315,24 +315,72 @@ T['lines']['sheds the rename before cutting the name'] = function()
     local rows = tree.rows(root, {})
 
     eq(texts(tree.lines(rows, 20, {}, no_decor)), { '   R long_name.lua' })
-    eq(texts(tree.lines(rows, 13, {}, no_decor)), { '   R …ame.lua' })
+    eq(texts(tree.lines(rows, 13, {}, no_decor)), { '   R long_nam' })
 end
 
-T['lines']['cuts the name before the right chunks'] = function()
+T['lines']['stops the name before the right chunks, without shortening it'] = function()
     local root = tree.build({ change('a_very_long_file_name.lua') })
     local lines = tree.lines(tree.rows(root, {}), 21, {}, function()
         return { right = { { '✎12', 'IterDrawerCount' } } }
     end)
 
-    eq(texts(lines), { '   M …e_name.lua ✎12' })
+    eq(texts(lines), { '   M a_very_long ✎12' })
     eq(vim.fn.strdisplaywidth(lines[1].text), 20)
 end
 
-T['lines']['cuts multibyte names by cells'] = function()
+T['width'] = new_set()
+
+T['width']['is what lines needs to cut no name, plus an edge cell'] = function()
+    local root = tree.build({
+        change('docs/guides/a_very_long_file_name.lua'),
+        change('short.lua'),
+    })
+    local function decorate()
+        return {
+            icon = { '○', 'IterDrawerHint' },
+            right = { { '✎12', 'IterDrawerCount' } },
+        }
+    end
+
+    local width = tree.width(root, decorate)
+
+    eq(width, 3 + 2 + 2 + 2 + #'a_very_long_file_name.lua' + 1 + 3 + 1)
+
+    local lines = tree.lines(tree.rows(root, {}), width, {}, decorate)
+
+    eq(lines[2].text:find('a_very_long_file_name.lua', 1, true) ~= nil, true)
+    eq(lines[2].text:find('…', 1, true), nil)
+end
+
+T['width']['counts a long directory row'] = function()
+    local root = tree.build({
+        change('a_long_directory_name/x.lua'),
+        change('a_long_directory_name/y.lua'),
+    })
+
+    eq(tree.width(root, no_decor), 3 + 2 + #'a_long_directory_name/' + 1)
+end
+
+T['width']['leaves out the original path of a rename'] = function()
+    local root = tree.build({
+        change('a.lua', 'staged', {
+            code = 'R',
+            orig_path = 'somewhere/far/away/else.lua',
+        }),
+    })
+
+    eq(tree.width(root, no_decor), 3 + 2 + #'a.lua' + 1)
+end
+
+T['width']['is 0 without rows'] = function()
+    eq(tree.width(tree.build({}), no_decor), 0)
+end
+
+T['lines']['stops multibyte names by cells'] = function()
     local root = tree.build({ change('docs/übersicht_änderungen.md') })
     local lines = tree.lines(tree.rows(root, {}), 17, {}, no_decor)
 
-    eq(texts(lines), { '   ▾ docs/', '     M …rungen.md' })
+    eq(texts(lines), { '   ▾ docs/', '     M übersicht_' })
 end
 
 T['lines']['keeps deep rows within a narrow width'] = function()
@@ -387,16 +435,16 @@ T['lines']['keeps the right chunks when a deep row has no room'] = function()
         return { icon = { '●', 'IterStage' }, right = { { '✓', 'X' } } }
     end)
 
-    eq(lines[6].text, '  ● M … ✓')
+    eq(lines[6].text, '  ● M d ✓')
     eq(lines[6].highlights[#lines[6].highlights].group, 'X')
 end
 
-T['lines']['cuts a long directory name'] = function()
+T['lines']['stops a long directory name at the edge'] = function()
     local root = tree.build({ change('a_very_long_directory/x.txt') })
 
     eq(
         texts(tree.lines(tree.rows(root, {}), 13, {}, no_decor)),
-        { '   ▾ …ectory/', '     M x.txt' }
+        { '   ▾ a_very_l', '     M x.txt' }
     )
 end
 

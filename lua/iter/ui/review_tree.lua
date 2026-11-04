@@ -4,6 +4,7 @@
 
 local keymap = require('iter.keymap')
 local layout = require('iter.ui.layout')
+local panel = require('iter.ui.panel')
 local render = require('iter.ui.render')
 local tree = require('iter.ui.tree')
 
@@ -64,6 +65,19 @@ function M.new(opts)
     }, Tree)
 end
 
+--- The columns of a page without names to fit, such as a list of subjects:
+--- a fixed `review.tree_width`, else `review.tree_min_width`.
+---@param options IterResolvedOptions
+---@return integer
+function M.least_columns(options)
+    local review = options.review
+
+    return panel.bounded(
+        review.tree_width == 'auto' and review.tree_min_width
+            or review.tree_width --[[@as integer]]
+    )
+end
+
 --- The hint chunks of each line for `width` cells, one cell in.
 ---@param self IterReviewTree
 ---@param width integer
@@ -75,6 +89,36 @@ local function hint_chunks(self, width)
     return vim.tbl_map(function(actions)
         return layout.hints(bound, actions, width - 1)
     end, self.opts.hints())
+end
+
+--- The columns of the panel for the page. Under `review.tree_width = 'auto'`
+--- the longest name asks, from `least_columns` to half the editor, and under
+--- `diff.layout = 'auto'` to no more than leaves the diff the split layout it
+--- has at the least.
+---@param options IterResolvedOptions
+---@param available integer the cells the panel, its separator and the diff share
+---@return integer
+function Tree:columns(options, available)
+    local least = M.least_columns(options)
+
+    if options.review.tree_width ~= 'auto' then
+        return least
+    end
+
+    local most = math.max(least, math.floor(vim.o.columns / 2))
+
+    if options.diff.layout == 'auto' then
+        local room = available - 1 - options.diff.split_breakpoint
+
+        if room >= least then
+            most = math.min(most, room)
+        end
+    end
+
+    return math.min(
+        most,
+        math.max(least, tree.width(self.root, self.opts.decorate))
+    )
 end
 
 ---@param width integer

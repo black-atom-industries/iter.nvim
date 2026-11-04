@@ -282,4 +282,91 @@ T['close']['silent skips on_close'] = function()
     eq(closed, 0)
 end
 
+T['fit'] = new_set()
+
+--- A view whose panes have nothing to do but let the width through.
+local VIEW = {
+    give_widths = function(_, set_widths)
+        set_widths()
+    end,
+}
+
+T['fit']['sets the width it keeps'] = function()
+    local p = open({ width = 25 })
+
+    p:fit(30, { view = VIEW })
+
+    eq(p:width(), 30)
+    eq(p.columns, 30)
+    eq(p.held, nil)
+end
+
+T['fit']['with grow keeps a wider width'] = function()
+    local p = open({ width = 25 })
+
+    p:fit(20, { view = VIEW, grow = true })
+    eq(p:width(), 25)
+
+    p:fit(30, { view = VIEW, grow = true })
+    eq(p:width(), 30)
+end
+
+T['fit']['keeps a width iter did not set'] = function()
+    local p = open({ width = 25 })
+
+    vim.api.nvim_win_set_width(p.win, 28)
+    p:fit(30, { view = VIEW })
+
+    eq(p:width(), 28)
+    eq(p.held, 28)
+end
+
+T['fit']['brings a held width back across changes of the editor columns'] = function()
+    local columns = vim.o.columns
+    local p = open({ width = 25 })
+
+    vim.o.columns = 120
+    p:fit(30, { view = VIEW })
+    vim.api.nvim_win_set_width(p.win, 28)
+    p:fit(30, { view = VIEW })
+    eq(p.held, 28)
+
+    vim.o.columns = 40
+    p:fit(30, { view = VIEW })
+    eq(p:width(), 20)
+
+    vim.o.columns = 120
+    p:fit(30, { view = VIEW })
+    eq(p:width(), 28)
+
+    vim.o.columns = columns
+end
+
+T['fit']['with grow takes the narrower width once the editor columns changed'] = function()
+    local columns = vim.o.columns
+    local p = open({ width = 25 })
+
+    vim.o.columns = columns + 10
+    p:fit(20, { view = VIEW, grow = true })
+    eq(p:width(), 20)
+
+    vim.o.columns = columns
+end
+
+T['bounded'] = new_set()
+
+T['bounded']['keeps a width within half the editor and at least 10'] = function()
+    local columns = vim.o.columns
+
+    vim.o.columns = 80
+    eq(panel.bounded(34), 34)
+    eq(panel.bounded(60), 40)
+    eq(panel.bounded(5), 10)
+
+    vim.o.columns = 15
+    eq(panel.bounded(34), 10)
+
+    vim.o.columns = columns
+end
+
 return T

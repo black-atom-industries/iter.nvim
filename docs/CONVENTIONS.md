@@ -138,10 +138,21 @@ the review straight to an agent pane.
   float uses `drawer.zindex + 10`, the annotation float `+ 20`. Every float follows editor and window resizes through
   `iter.ui.float`: the drawer through `float.open`, the help and annotation floats through `float.follow_resize`.
 - The review tab is three splits: the panel (`iter.ui.panel`), a full-height window at the tab's left edge,
-  `review.tree_width` wide with `winfixwidth` and a local `scrolloff` of 0, so a page that fits stays in place, that shows one page at a time and draws `▸` on the cursor line; the diff
+  with `winfixwidth` and a local `scrolloff` of 0, so a page that fits stays in place, that shows one page at a time and draws `▸` on the cursor line; the diff
   window; and the annotation sidebar. The panel's pages own their buffers: the tree (`iter.ui.review_tree`, named
   `iter://review`) and the base list (`iter://review#base`). Closing the panel or the diff window closes the review; a file opened in the
   panel or the diff with `:edit` opens in the tab the review came from and the page or the diff comes back.
+- A tree page gives the panel its width (`review_tree`'s `columns`), in the review, the status sidebar and the commits
+  tab's files page. A number in `review.tree_width` is fixed. Under `'auto'` it is what `tree.width` measures, every name
+  whole, closed directories included, a rename's old path left out: at least `review.tree_min_width`, at most half the
+  editor (`panel.bounded` holds both, and the half wins), and under `diff.layout = 'auto'` no more than leaves the diff
+  the split layout it has at the least. The commits list has no names to fit and takes the least (`least_columns`).
+- `Panel:fit` applies a width. It runs in full at open, on a base change, when a commit's files or the list take over the
+  panel, and when the review's annotations reopen. A refresh that changed something only grows the width, so the diff
+  stays put; a change of the editor's columns, also one missed in another tab (`TabEnter`), fits in full. A width iter
+  didn't set is the user's (`Panel.held`, a `WinResized` that finds the window differing from `panel.columns`). It stays
+  until the panel closes and across editor resizes returns as far as half the editor allows.
+- Tree rows never shorten a name. What doesn't fit stops at the row's right chunks or the window's edge, without `…`.
 - The review's tree comes from `iter.ui.tree`, pure functions from the changes to a directory tree, its visible rows and
   render lines: directories first, a chain of single directories on one row, a path's changes on one row. A closed
   directory is kept per review by path across refreshes and base changes. Tree order drives `=`, `]f` and `[f`, the

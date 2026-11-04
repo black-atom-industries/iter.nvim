@@ -50,7 +50,7 @@ T['resolve()']['returns the defaults without options'] = function()
     eq(resolved.keys.diff.yank, { 'y' })
     eq(resolved.keys.diff.yank_all, { 'Y' })
     eq(resolved.keys.diff.delete, { 'd' })
-    eq(resolved.options.review, { tree_width = 34 })
+    eq(resolved.options.review, { tree_width = 'auto', tree_min_width = 34 })
     eq(resolved.keys.tree.yank, { 'y' })
     eq(resolved.keys.tree.yank_all, { 'Y' })
     eq(resolved.keys.tree.collapse, { 'h' })
@@ -229,7 +229,23 @@ T['resolve() errors']['on a review.tree_width below 10 or fractional'] = functio
 
     expect_error(function()
         config.resolve({ review = { tree_width = 30.5 } })
-    end, 'opts%.review%.tree_width: expected integer')
+    end, "opts%.review%.tree_width: expected integer or 'auto'")
+
+    expect_error(function()
+        config.resolve({ review = { tree_width = 'wide' } })
+    end, "opts%.review%.tree_width: expected integer or 'auto'")
+end
+
+T['resolve() errors']['on a review.tree_min_width below 10'] = function()
+    expect_error(function()
+        config.resolve({ review = { tree_min_width = 9 } })
+    end, 'opts%.review%.tree_min_width must be 10 or more')
+end
+
+T['resolve()']['takes a fixed review.tree_width'] = function()
+    local resolved = config.resolve({ review = { tree_width = 40 } })
+
+    eq(resolved.options.review.tree_width, 40)
 end
 
 T['resolve() errors']['on drawer.wide_breakpoint, which is not an option'] = function()

@@ -558,6 +558,36 @@ T['files']['h and l close and open a directory'] = function()
     eq(#page(), 8)
 end
 
+T['files']['the panel grows for long names and the list takes it back'] = function()
+    child.o.columns = 200
+    helpers.write_file(
+        vim.fs.joinpath(repo, 'black-atom-terra-fall-light.toml'),
+        { 'colors' }
+    )
+    helpers.git(repo, { 'add', '--all' })
+    helpers.git(repo, { 'commit', '--quiet', '-m', 'add theme' })
+
+    open_commits()
+    eq(child.api.nvim_win_get_width(panel_win()), 34)
+
+    child.type_keys('<CR>')
+    shown_file(sha('HEAD~1'), sha('HEAD'), 'black-atom-terra-fall-light.toml')
+
+    eq(child.api.nvim_win_get_width(panel_win()) > 34, true)
+    eq(
+        vim.iter(page()):any(function(line)
+            return line:find('black-atom-terra-fall-light.toml', 1, true) ~= nil
+        end),
+        true
+    )
+
+    child.type_keys('q')
+    helpers.wait_until(
+        child,
+        'vim.api.nvim_win_get_width(' .. C .. '.panel.win) == 34'
+    )
+end
+
 T['files']['in the split layout the tree stays at the left edge'] = function()
     open_commits()
     child.type_keys('<CR>')

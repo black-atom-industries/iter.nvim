@@ -64,20 +64,6 @@ Status.__index = Status
 -- the commits reads only the one the cursor stops on.
 local PREVIEW_DELAY_MS = { file = 50, commit = 150 }
 
---- The sidebar's width: `review.tree_width`, at most half the editor, at
---- least 10.
----@param config IterConfig
----@return integer
-local function sidebar_width(config)
-    return math.max(
-        10,
-        math.min(
-            config.options.review.tree_width,
-            math.floor(vim.o.columns / 2)
-        )
-    )
-end
-
 ---@param opts IterStatusOpenOptions
 ---@return IterStatus?
 function Status.open(opts)
@@ -205,7 +191,7 @@ function Status.open(opts)
     end
 
     self.panel = panel.open({
-        width = sidebar_width(opts.config),
+        width = self:tree_columns(),
         on_close = function()
             self:close()
         end,
@@ -628,6 +614,10 @@ function Status:refresh(reason, target)
 
     local same = vim.deep_equal(before, self.changes)
 
+    if not same or not vim.deep_equal(before_stats, self.stats) then
+        self:fit_tree(true)
+    end
+
     if reason == 'poll' and same then
         if
             self.recent ~= before_recent
@@ -973,6 +963,25 @@ function Status:toggle_help(view)
     })
 end
 
+--- The columns the tree asks for, out of what the panel and the diff share.
+---@return integer
+function Status:tree_columns()
+    local panel_cells = self.panel ~= nil and self.panel:width() + 1 or 0
+
+    return self.tree:columns(
+        self.config.options,
+        panel_cells + self.preview:diff_width()
+    )
+end
+
+--- Fit the sidebar to its names. A closed pane waits for the close.
+---@param grow? boolean a narrower fit keeps the width, so the diff stays put as files come and go
+function Status:fit_tree(grow)
+    if self:is_open() and util.is_valid_win(self.pane) then
+        self.panel:fit(self:tree_columns(), { view = self.view, grow = grow })
+    end
+end
+
 --- After a resize: the 'auto' diff layout, the tree for the new size, even
 --- split panes and wrapped lines. A closed pane waits for the close.
 function Status:resized()
@@ -1005,14 +1014,17 @@ function Status:attach()
                 return
             end
 
-            -- A resize of the editor gives the sidebar its width for the
-            -- new size; one of a window keeps the width the user gave it.
-            if args.event == 'VimResized' and self:is_open() then
-                self.panel.columns = sidebar_width(self.config)
-                self.panel:restore_width()
+            if args.event == 'VimResized' then
+                self:fit_tree(true)
             end
 
             self:resized()
+        end,
+    })
+    vim.api.nvim_create_autocmd('TabEnter', {
+        group = self.group,
+        callback = function()
+            self:fit_tree(true)
         end,
     })
     vim.api.nvim_create_autocmd('WinClosed', {

@@ -348,4 +348,132 @@ T['footer']['the cursor snaps onto its items and on_select gets them'] = functio
     eq(#selected, 1)
 end
 
+T['columns'] = new_set()
+
+local LONG = 'a_rather_long_file_name_for_the_tree.lua'
+-- Gutter, letter and space, the name, the edge.
+local LONG_COLUMNS = 3 + 2 + #LONG + 1
+
+--- A page listing one file, on an editor of `columns`.
+---@param columns integer
+---@return IterReviewTree
+local function long_page(columns)
+    vim.o.columns = columns
+
+    local fitted = review_tree.new({
+        view = 'tree',
+        keys = {},
+        handlers = {},
+        header = function()
+            return {}
+        end,
+        decorate = function()
+            return {}
+        end,
+        hints = function()
+            return {}
+        end,
+        on_select = function() end,
+    })
+
+    fitted.root = tree.build({
+        { path = LONG, side = 'unstaged', code = 'M' },
+    })
+
+    return fitted
+end
+
+---@param review table
+---@param diff? table
+---@return table
+local function options(review, diff)
+    return {
+        review = vim.tbl_extend(
+            'force',
+            { tree_width = 'auto', tree_min_width = 34 },
+            review
+        ),
+        diff = vim.tbl_extend(
+            'force',
+            { layout = 'unified', split_breakpoint = 120 },
+            diff or {}
+        ),
+    }
+end
+
+T['columns']['auto fits the longest name'] = function()
+    local columns = vim.o.columns
+    local fitted = long_page(200)
+
+    eq(fitted:columns(options({}), 200), LONG_COLUMNS)
+    fitted:close()
+    vim.o.columns = columns
+end
+
+T['columns']['auto stays at the minimum with short names'] = function()
+    local columns = vim.o.columns
+    local fitted = long_page(200)
+
+    eq(fitted:columns(options({ tree_min_width = 60 }), 200), 60)
+    fitted:close()
+    vim.o.columns = columns
+end
+
+T['columns']['auto stops at half the editor'] = function()
+    local columns = vim.o.columns
+    local fitted = long_page(80)
+
+    eq(fitted:columns(options({}), 80), 40)
+    fitted:close()
+    vim.o.columns = columns
+end
+
+T['columns']['half the editor beats the minimum'] = function()
+    local columns = vim.o.columns
+    local fitted = long_page(50)
+
+    eq(fitted:columns(options({}), 50), 25)
+    fitted:close()
+    vim.o.columns = columns
+end
+
+T['columns']['a number is fixed'] = function()
+    local columns = vim.o.columns
+    local fitted = long_page(200)
+
+    eq(fitted:columns(options({ tree_width = 20 }), 200), 20)
+    fitted:close()
+    vim.o.columns = columns
+end
+
+T['columns']["under diff 'auto' leaves the diff the split layout"] = function()
+    local columns = vim.o.columns
+    local fitted = long_page(200)
+
+    -- 160 shared, less the separator and the breakpoint.
+    eq(fitted:columns(options({}, { layout = 'auto' }), 160), 39)
+    fitted:close()
+    vim.o.columns = columns
+end
+
+T['columns']["under diff 'auto' a diff unified at the least doesn't limit it"] = function()
+    local columns = vim.o.columns
+    local fitted = long_page(200)
+
+    eq(fitted:columns(options({}, { layout = 'auto' }), 140), LONG_COLUMNS)
+    fitted:close()
+    vim.o.columns = columns
+end
+
+T['least_columns'] = new_set()
+
+T['least_columns']['is the minimum under auto and the number otherwise'] = function()
+    local columns = vim.o.columns
+
+    vim.o.columns = 200
+    eq(review_tree.least_columns(options({})), 34)
+    eq(review_tree.least_columns(options({ tree_width = 50 })), 50)
+    vim.o.columns = columns
+end
+
 return T

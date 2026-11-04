@@ -13,7 +13,8 @@
 ---@field commits? integer Recent commits the status lists, drawer and sidebar alike, 0 hides them
 
 ---@class IterReviewOptions
----@field tree_width? integer Columns of the review's file tree, 10 or more
+---@field tree_width? integer|'auto' Columns of the file trees of the review, the status sidebar and the commits tab: 'auto' fits the longest name, a number of 10 or more is fixed
+---@field tree_min_width? integer Least columns under `tree_width = 'auto'`, 10 or more
 
 ---@class IterDiffOptions
 ---@field expand_step? integer Hidden context lines revealed per expand
@@ -65,7 +66,7 @@
 ---@field status { style: 'sidebar'|'drawer' }
 ---@field drawer { height: number, zindex: integer, breakpoint: integer, commits: integer }
 ---@field diff { expand_step: integer, syntax_max_lines: integer, word_diff: boolean, layout: IterLayoutOption, split_breakpoint: integer, wrap: boolean, args: string[] }
----@field review { tree_width: integer }
+---@field review { tree_width: integer|'auto', tree_min_width: integer }
 ---@field export { intro: string }
 ---@field annotate { side: 'left'|'right', width: integer, review_breakpoint: integer }
 ---@field refresh { poll_ms: integer }

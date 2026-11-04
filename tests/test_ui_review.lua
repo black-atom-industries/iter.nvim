@@ -3310,4 +3310,209 @@ T['uri']['the tab label reads iter review'] = function()
     eq(child.lua_get([[require('iter').uri()]]), 'iter://review/a.txt#L3')
 end
 
+T['tree width'] = new_set()
+
+local LONG_NAME = 'black-atom-terra-fall-light.toml'
+-- 5 cells of gutter and indent, the icon, the letter, the name, the mark
+-- with its gap and the edge.
+local LONG_WIDTH = 5 + 2 + 2 + #LONG_NAME + 3 + 1
+
+local function add_long_file()
+    helpers.write_file(vim.fs.joinpath(repo, 'themes', LONG_NAME), { 'colors' })
+end
+
+---@return integer
+local function tree_width()
+    return child.api.nvim_win_get_width(child.lua_get(H.LIST_WIN))
+end
+
+---@param width integer
+local function wait_tree_width(width)
+    helpers.wait_until(
+        child,
+        'vim.api.nvim_win_get_width(' .. H.LIST_WIN .. ') == ' .. width
+    )
+end
+
+T['tree width']['grows to show long names whole on a wide tab'] = function()
+    child.o.columns = 200
+    child.o.lines = 30
+    add_long_file()
+    H.open(child)
+
+    eq(tree_width(), LONG_WIDTH)
+    eq(
+        vim.iter(tree_rows()):any(function(row)
+            return row:find(LONG_NAME, 1, true) ~= nil
+        end),
+        true
+    )
+    H.wait_diff(child, 'unstaged d/x.txt')
+    helpers.expect_screenshot(child, 'review-tree-fit')
+end
+
+T['tree width']['a closed directory keeps its names in the fit'] = function()
+    child.o.columns = 200
+    add_long_file()
+    H.open(child)
+
+    child.lua(R .. '.tree.collapsed["themes/"] = true')
+    child.cmd('Iter review HEAD')
+    -- Against a base the rows have no staging icon.
+    wait_tree_width(LONG_WIDTH - 2)
+end
+
+T['tree width']['stays at review.tree_width with short names'] = function()
+    child.o.columns = 200
+    H.open(child)
+
+    eq(tree_width(), 34)
+end
+
+T['tree width']['review.tree_min_width is the least it takes'] = function()
+    child.o.columns = 200
+    setup('{ review = { tree_min_width = 60 } }')
+    add_long_file()
+    H.open(child)
+
+    eq(tree_width(), 60)
+end
+
+T['tree width']['stops at half the tab, the name not shortened'] = function()
+    child.o.columns = 80
+    add_long_file()
+    H.open(child)
+
+    eq(tree_width(), 40)
+
+    local rows = table.concat(tree_rows(), '\n')
+
+    eq(rows:find('black-atom-terra-fall', 1, true) ~= nil, true)
+    eq(rows:find('…', 1, true), nil)
+end
+
+T['tree width']['a fixed review.tree_width ignores the names'] = function()
+    child.o.columns = 200
+    setup('{ review = { tree_width = 30 } }')
+    add_long_file()
+    H.open(child)
+
+    eq(tree_width(), 30)
+end
+
+T['tree width']['takes at most half a narrow tab'] = function()
+    child.o.columns = 50
+    add_long_file()
+    H.open(child)
+
+    eq(tree_width(), 25)
+end
+
+T['tree width']['a refresh grows it and never narrows it'] = function()
+    child.o.columns = 200
+    H.open(child)
+    eq(tree_width(), 34)
+
+    add_long_file()
+    child.lua(R .. ':refresh()')
+    eq(tree_width(), LONG_WIDTH)
+
+    vim.fn.delete(vim.fs.joinpath(repo, 'themes'), 'rf')
+    child.lua(R .. ':refresh()')
+    eq(tree_width(), LONG_WIDTH)
+
+    child.cmd('Iter review HEAD')
+    wait_tree_width(34)
+end
+
+T['tree width']['a width the user set stays until the review closes'] = function()
+    child.o.columns = 200
+    H.open(child)
+
+    child.lua('vim.api.nvim_set_current_win(' .. H.LIST_WIN .. ')')
+    child.cmd('vertical resize 28')
+    child.lua('vim.wait(50)')
+    eq(tree_width(), 28)
+
+    add_long_file()
+    child.lua(R .. ':refresh()')
+    eq(tree_width(), 28)
+
+    child.cmd('Iter review HEAD')
+    child.lua('vim.wait(50)')
+    eq(tree_width(), 28)
+
+    child.o.columns = 180
+    child.lua('vim.wait(50)')
+    eq(tree_width(), 28)
+
+    child.o.columns = 40
+    wait_tree_width(20)
+
+    child.o.columns = 180
+    wait_tree_width(28)
+
+    child.lua(R .. ':close()')
+    H.open(child, 'Iter review')
+    -- Against a base the rows have no staging icon.
+    wait_tree_width(LONG_WIDTH - 2)
+end
+
+T['tree width']['fits on coming back to its tab'] = function()
+    child.o.columns = 200
+    H.open(child)
+    child.cmd('tabprevious')
+
+    add_long_file()
+    child.lua(R .. ':refresh()')
+    child.o.columns = 210
+    child.cmd('tabnext')
+
+    wait_tree_width(LONG_WIDTH)
+end
+
+T['tree width']['under auto it leaves the diff its split layout'] = function()
+    child.o.columns = 200
+    setup([[{
+        diff = { layout = 'auto', split_breakpoint = 120 },
+        annotate = { width = 40 },
+    }]])
+    add_long_file()
+    H.open(child)
+
+    -- 200 columns less the annotations and their separator, the tree's
+    -- separator and the breakpoint.
+    eq(tree_width(), 38)
+    H.wait_diff(child, 'unstaged d/x.txt')
+    child.lua('vim.wait(50)')
+    eq(tree_width(), 38)
+    eq(child.lua_get(R .. '.view.layout'), 'split')
+end
+
+T['tree width']['under auto reopened annotations leave the diff split'] = function()
+    child.o.columns = 200
+    setup([[{
+        diff = { layout = 'auto', split_breakpoint = 120 },
+        annotate = { width = 40 },
+    }]])
+    H.open(child)
+    H.wait_diff(child, 'unstaged d/x.txt')
+
+    child.lua(
+        'vim.api.nvim_win_close(require("iter.ui.sidebar").of('
+            .. R
+            .. '.tab).win, true)'
+    )
+    helpers.wait_until(child, R .. '.annotations_closed')
+
+    add_long_file()
+    child.lua(R .. ':refresh()')
+    eq(tree_width(), LONG_WIDTH)
+
+    child.cmd('Iter annotate')
+    child.lua('vim.wait(50)')
+    eq(tree_width(), 38)
+    eq(child.lua_get(R .. '.view.layout'), 'split')
+end
+
 return T

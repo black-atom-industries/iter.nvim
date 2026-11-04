@@ -296,9 +296,9 @@ vim.o.statuscolumn = "%!v:lua.require'iter'.statuscolumn()"
 
 ### Status
 
-`:Iter` opens the status at the left edge of the current tab,
-`review.tree_width` wide and at most half the editor. A width set with
-`:vertical resize` stays until the editor resizes. The current window shows
+`:Iter` opens the status at the left edge of the current tab, sized like the
+[review's file tree](#review-tab). A width set with `:vertical resize` stays
+until the status closes. The current window shows
 the diff of the file under the cursor. `q`, or `:Iter` again, closes the status
 and gives that window back its buffer, options and view. `:Iter` in another tab
 moves the status there, and in the commits tab opens it in the tab the commits
@@ -372,8 +372,18 @@ and the window above shows the diff. `:Iter` on an open drawer focuses it, and
 
 ### Review tab
 
-**File tree.** The left window lists the changed files as a tree, 34 cells
-wide (`review.tree_width`):
+**File tree.** The left window lists the changed files as a tree. With
+`review.tree_width = 'auto'`, the default, it grows to show every file name
+whole, from `review.tree_min_width` up to half the editor. It fits at open, on a
+base change and when the editor's columns change. A refresh only grows it, so
+the diff stays put as files come and go. Under `diff.layout = 'auto'` it stops
+before the diff would lose the split layout. A number in `review.tree_width`
+fixes the width.
+
+A name is never shortened: what doesn't fit stops at the row's marks or the
+window's edge, and the diff header shows the file's path. A width set with `:vertical resize` stays
+until the review closes, down to half the editor while the editor is too small
+for it.
 
 ```
  Review HEAD main
@@ -522,6 +532,10 @@ commits of the branch, newest first, each as its short sha and subject; the
 window beside it shows the summary of the commit under the cursor: its sha,
 date and author, its whole message, then the files it changed with the lines
 added and deleted.
+
+The list is `review.tree_min_width` wide, or a fixed `review.tree_width`. A
+commit's files size the window like the [review's file tree](#review-tab), and
+going back to the list gives it the list's width again.
 
 - `V` selects several commits; the summary then covers them all, each message
   and the files changed from the parent of the oldest to the newest, and the
@@ -751,7 +765,8 @@ require('iter').setup({
         args = {},                 -- extra flags for every `git diff`, see below
     },
     review = {
-        tree_width = 34,  -- columns of the review's file tree, 10 or more
+        tree_width = 'auto',  -- columns of the file trees of the review, the status and the commits tab: 'auto' fits the longest name, a number of 10 or more is fixed
+        tree_min_width = 34,  -- least columns under 'auto', 10 or more
     },
     export = {
         intro = 'I reviewed your changes and have these annotations.\n'

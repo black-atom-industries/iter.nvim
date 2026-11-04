@@ -362,7 +362,7 @@ T['resize']['the tree and the annotations keep their widths beside the split dif
                 S .. ' ~= nil and ' .. S .. '.placement ~= nil'
             )
             child.o.columns = 200
-            wait_widths(34)
+            wait_widths(50)
         end,
     }
 )
