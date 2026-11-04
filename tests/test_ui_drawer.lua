@@ -590,6 +590,18 @@ T['stage']['s stages a file and keeps the selection on the nearest row'] = funct
     wait_preview('unstaged untracked.txt')
 end
 
+T['stage']['<Space> stages a file, and unstages it in Staged'] = function()
+    open_drawer()
+    select_item('unstaged', 'modified.txt')
+
+    child.type_keys('<Space>')
+    eq(status()['modified.txt'], 'M ')
+
+    select_item('staged', 'modified.txt')
+    child.type_keys('<Space>')
+    eq(status()['modified.txt'], ' M')
+end
+
 T['stage']['u and s in Staged unstage a file'] = function()
     open_drawer()
     select_item('staged', 'staged.txt')
@@ -1062,9 +1074,9 @@ end
 
 -- At 80 columns the hint drops the keys that do not fit.
 local HINT =
-    's stage  u unstage  d discard  I ignore  <CR> open  r review  ? help'
+    '<Space> stage  d discard  I ignore  <CR> open  r review  = all files  ? help'
 local HINT_WIDE =
-    's stage  u unstage  d discard  I ignore  <CR> open  r review  = all files  | split  ? help'
+    '<Space> stage  d discard  I ignore  <CR> open  r review  = all files  | split  ? help'
 
 ---@param options string Lua table passed to setup(), with the status kept a drawer
 local function setup(options)
@@ -1100,12 +1112,12 @@ T['header']['names a detached HEAD'] = function()
 end
 
 T['header']['the hint follows remapped keys'] = function()
-    setup([[{ keys = { drawer = { stage = 'S', discard = false } } }]])
+    setup([[{ keys = { drawer = { toggle_stage = 'S', discard = false } } }]])
     open_drawer()
 
     eq(
         chrome().hint,
-        'S stage  u unstage  I ignore  <CR> open  r review  = all files  | split  ? help'
+        'S stage  I ignore  <CR> open  r review  = all files  | split  ? help'
     )
 end
 
@@ -1259,21 +1271,22 @@ T['help']['? lists the current keys and closes on q, ? and <Esc>'] = function()
     for _, close in ipairs({ 'q', '?', '<Esc>' }) do
         child.type_keys('?')
         eq(help_lines(), {
-            ' <CR>   Open the file and close the status',
-            ' S gs   Stage or unstage the file',
-            ' u      Unstage the file',
-            ' I      Add the untracked file to .gitignore',
-            ' r      Open the review tab',
-            ' =      Toggle one file or all files',
-            ' |      Show the diff side by side',
-            ' -      Show the diff unified',
-            ' gw     Toggle wrapping long lines',
-            ' q      Close',
-            ' ?      Show the keys',
-            ' <C-d>  Scroll the diff down',
-            ' <C-u>  Scroll the diff up',
-            ' h      Select the column to the left',
-            ' l      Select the column to the right',
+            ' <CR>     Open the file and close the status',
+            ' S gs     Stage or unstage the file',
+            ' u        Unstage the file',
+            ' <Space>  Stage or unstage the file or directory',
+            ' I        Add the untracked file to .gitignore',
+            ' r        Open the review tab',
+            ' =        Toggle one file or all files',
+            ' |        Show the diff side by side',
+            ' -        Show the diff unified',
+            ' gw       Toggle wrapping long lines',
+            ' q        Close',
+            ' ?        Show the keys',
+            ' <C-d>    Scroll the diff down',
+            ' <C-u>    Scroll the diff up',
+            ' h        Select the column to the left',
+            ' l        Select the column to the right',
         })
         eq(
             child.lua_get(
@@ -1411,6 +1424,28 @@ local function landing()
         line = vim.api.nvim_win_get_cursor(0)[1],
         text = vim.api.nvim_get_current_line(),
     }]])
+end
+
+T['preview']['<Space> stages an unstaged hunk'] = function()
+    preview_cursor('unstaged', 'a.txt', 'add', 'a2 new')
+    child.type_keys('<Space>')
+
+    eq(
+        helpers
+            .git(repo, { 'diff', '--cached', '--', 'a.txt' })
+            :find('+a2 new', 1, true) ~= nil,
+        true
+    )
+end
+
+T['preview']['<Space> unstages a staged hunk'] = function()
+    preview_cursor('staged', 'c.txt', 'add', 'c3 staged')
+    child.type_keys('<Space>')
+
+    eq(
+        helpers.git(repo, { 'diff', '--cached', '--name-only', '--', 'c.txt' }),
+        ''
+    )
 end
 
 T['preview']['<CR> on an added row opens its line and closes the drawer'] = function()

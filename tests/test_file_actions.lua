@@ -62,6 +62,16 @@ local function status()
     return vim.trim(helpers.git(repo, { 'status', '--porcelain' }))
 end
 
+T['toggle_kind()'] = new_set()
+
+T['toggle_kind()']['stages while a change is not staged, else unstages'] = function()
+    local staged = { items = { { side = 'staged' } } }
+    local partly = { items = { { side = 'unstaged' }, { side = 'staged' } } }
+
+    eq(actions.toggle_kind({ staged }), 'unstage')
+    eq(actions.toggle_kind({ staged, partly }), 'stage')
+end
+
 T['stage()'] = new_set()
 
 T['stage()']['stages an unstaged file'] = function()

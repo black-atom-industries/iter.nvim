@@ -257,7 +257,7 @@ T['open'][':Iter opens the sidebar at the left edge and the diff in the window']
 
     eq(vim.list_slice(lines, 1, #ROWS), ROWS)
     eq(vim.list_slice(lines, #lines - 1), {
-        ' s stage  u unstage  d discard',
+        ' <Space> stage  d discard',
         ' <CR> open  r review  ? help',
     })
     helpers.expect_screenshot(child, 'status-sidebar')
@@ -406,6 +406,25 @@ T['stage']['s and u act on every file below a directory'] = function()
     eq(status()['dir/sub/d.txt'], ' M')
 end
 
+T['stage']['<Space> toggles a file and a directory'] = function()
+    open_status()
+    move_to('dir/')
+
+    child.type_keys('<Space>')
+    eq(status()['dir/c.txt'], 'M ')
+    eq(status()['dir/sub/d.txt'], 'M ')
+
+    child.type_keys('<Space>')
+    eq(status()['dir/c.txt'], ' M')
+    eq(status()['dir/sub/d.txt'], ' M')
+
+    move_to('b.txt')
+    child.type_keys('<Space>')
+    eq(status()['b.txt'], 'M ')
+    child.type_keys('<Space>')
+    eq(status()['b.txt'], ' M')
+end
+
 T['stage']['d discards after a confirm, and warns on a directory'] = function()
     open_status()
     move_to('a.txt')
@@ -490,22 +509,23 @@ T['tree']['? lists the keys with collapse and expand'] = function()
     )
 
     eq(lines, {
-        ' <CR>   Open the file and close the status',
-        ' s      Stage or unstage the file',
-        ' u      Unstage the file',
-        ' d      Discard changes in the file',
-        ' I      Add the untracked file to .gitignore',
-        ' r      Open the review tab',
-        ' =      Toggle one file or all files',
-        ' |      Show the diff side by side',
-        ' -      Show the diff unified',
-        ' gw     Toggle wrapping long lines',
-        ' q      Close',
-        ' ?      Show the keys',
-        ' <C-d>  Scroll the diff down',
-        ' <C-u>  Scroll the diff up',
-        " h      Close the directory, or the file's directory",
-        ' l      Open the directory',
+        ' <CR>     Open the file and close the status',
+        ' s        Stage or unstage the file',
+        ' u        Unstage the file',
+        ' <Space>  Stage or unstage the file or directory',
+        ' d        Discard changes in the file',
+        ' I        Add the untracked file to .gitignore',
+        ' r        Open the review tab',
+        ' =        Toggle one file or all files',
+        ' |        Show the diff side by side',
+        ' -        Show the diff unified',
+        ' gw       Toggle wrapping long lines',
+        ' q        Close',
+        ' ?        Show the keys',
+        ' <C-d>    Scroll the diff down',
+        ' <C-u>    Scroll the diff up',
+        " h        Close the directory, or the file's directory",
+        ' l        Open the directory',
     })
     helpers.expect_screenshot(child, 'status-sidebar-help')
 end
@@ -539,6 +559,22 @@ T['diff'][']c and [c move between the hunks'] = function()
     eq(hunk(), { 'staged', 'hunk', 1 })
     child.type_keys('[c')
     eq(hunk(), { 'unstaged', 'hunk', 1 })
+end
+
+T['diff']['<Space> stages the hunk under the cursor, then unstages it'] = function()
+    open_status()
+    move_to('b.txt')
+    wait_preview({ 'unstaged b.txt', 'staged b.txt' })
+    focus_diff()
+
+    child.type_keys(']c', '<Space>')
+    wait_preview({ 'staged b.txt' })
+    eq(status()['b.txt'], 'M ')
+
+    child.api.nvim_win_set_cursor(0, { 1, 0 })
+    child.type_keys(']c', '<Space>')
+    wait_preview({ 'unstaged b.txt', 'staged b.txt' })
+    eq(status()['b.txt'], 'MM')
 end
 
 T['diff']['s stages the hunk under the cursor, u unstages it'] = function()
@@ -591,19 +627,20 @@ T['diff']['? lists the keys of the diff'] = function()
     )
 
     eq(lines, {
-        ' ]c     Next hunk',
-        ' [c     Previous hunk',
-        ' s      Stage the hunk or the selected lines',
-        ' u      Unstage the hunk or the selected lines',
-        ' <CR>   Expand the collapsed file or hidden context',
-        ' gf     Go to the line in the file',
-        ' =      Toggle one file or all files',
-        ' |      Show the diff side by side',
-        ' -      Show the diff unified',
-        ' gw     Toggle wrapping long lines',
-        ' <C-j>  Focus the drawer or the file tree',
-        ' q      Close',
-        ' ?      Show the keys',
+        ' ]c       Next hunk',
+        ' [c       Previous hunk',
+        ' s        Stage the hunk or the selected lines',
+        ' u        Unstage the hunk or the selected lines',
+        ' <Space>  Stage or unstage the hunk or the selected lines',
+        ' <CR>     Expand the collapsed file or hidden context',
+        ' gf       Go to the line in the file',
+        ' =        Toggle one file or all files',
+        ' |        Show the diff side by side',
+        ' -        Show the diff unified',
+        ' gw       Toggle wrapping long lines',
+        ' <C-j>    Focus the drawer or the file tree',
+        ' q        Close',
+        ' ?        Show the keys',
     })
     helpers.expect_screenshot(child, 'status-sidebar-diff-help')
 end
@@ -869,7 +906,7 @@ T['commits']['the recent commits sit above the hints, ↑ on unpushed ones'] = f
         '   sha second            ↑ 2h',
         '   sha initial             2h',
         '',
-        ' s stage  u unstage  d discard',
+        ' <Space> stage  d discard',
         ' <CR> open  r review  ? help',
     })
     helpers.expect_screenshot(child, 'status-sidebar-commits')
@@ -1012,7 +1049,7 @@ T['commits']['drawer.commits = 0 shows no commits'] = function()
 
     eq(vim.tbl_contains(lines, ' Recent commits'), false)
     eq(vim.list_slice(lines, #lines - 1), {
-        ' s stage  u unstage  d discard',
+        ' <Space> stage  d discard',
         ' <CR> open  r review  ? help',
     })
 end

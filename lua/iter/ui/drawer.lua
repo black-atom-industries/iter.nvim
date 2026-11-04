@@ -4,6 +4,7 @@ local float = require('iter.ui.float')
 local git = require('iter.git')
 local help = require('iter.ui.help')
 local highlight = require('iter.highlight')
+local hunk_actions = require('iter.ui.hunk_actions')
 local keymap = require('iter.keymap')
 local layout = require('iter.ui.layout')
 local Preview = require('iter.ui.preview')
@@ -58,8 +59,7 @@ local PREVIEW_DELAY_MS = 50
 -- Actions the key hint line shows in a file column, in order, with their
 -- short labels.
 local HINTS = {
-    { 'stage', 'stage' },
-    { 'unstage', 'unstage' },
+    { 'toggle_stage', 'stage' },
     { 'discard', 'discard' },
     { 'ignore', 'ignore' },
     { 'open', 'open' },
@@ -195,6 +195,19 @@ function Drawer.open(opts)
                 vim.api.nvim_set_current_win(self.win)
             end
         end,
+        toggle_stage = function()
+            hunk_actions.apply('toggle', {
+                view = self.view,
+                root = self.changes.root,
+                args = opts.config.options.diff.args,
+                section = function(first, last)
+                    return hunk_actions.section(self.view, first, last)
+                end,
+                refresh = function()
+                    self:refresh()
+                end,
+            })
+        end,
         expand = function()
             self.preview:open_row(function(path, line)
                 self:edit(path, line)
@@ -296,6 +309,7 @@ function Drawer:make_handlers()
         review = act('open_review'),
         stage = act('stage'),
         unstage = act('unstage'),
+        toggle_stage = act('stage'),
         discard = act('discard'),
         ignore = act('ignore'),
         mode = function()

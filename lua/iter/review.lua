@@ -287,6 +287,9 @@ function Review:view_handlers()
         unstage = function()
             self:apply_change('unstage')
         end,
+        toggle_stage = function()
+            self:apply_change('toggle')
+        end,
         goto_file = function()
             self:goto_file()
         end,
@@ -397,9 +400,9 @@ function Review:selected_section(first, last, side)
     return section, rows
 end
 
---- Stage (`stage`) or unstage (`unstage`) the hunk under the cursor of the
---- diff pane, or the selected lines.
----@param kind 'stage'|'unstage'
+--- Stage (`stage`), unstage (`unstage`) or toggle (`toggle`) the hunk under
+--- the cursor of the diff pane, or the selected lines.
+---@param kind 'stage'|'unstage'|'toggle'
 function Review:apply_change(kind)
     hunk_actions.apply(kind, {
         view = self.view,
@@ -628,8 +631,7 @@ function Review:hints()
 
     return {
         {
-            { 'stage', 'stage' },
-            { 'unstage', 'unstage' },
+            { 'toggle_stage', 'stage' },
             {
                 'reviewed',
                 'reviewed',
@@ -1089,6 +1091,22 @@ function Review:after_action(result)
     end
 end
 
+--- Stage the tree's row, or unstage it when all of it is staged.
+function Review:toggle_row()
+    local node = self.tree:node()
+
+    if node == nil then
+        return
+    end
+
+    if node.kind == 'file' then
+        self:stage_row('stage')
+        return
+    end
+
+    self:stage_row(file_actions.toggle_kind(tree.files(node)))
+end
+
 --- Stage (`stage`) or unstage (`unstage`) the tree's row: a file, or every
 --- file below a directory that has such changes.
 ---@param kind 'stage'|'unstage'
@@ -1165,6 +1183,9 @@ function Review:tree_handlers()
         end,
         unstage = function()
             self:stage_row('unstage')
+        end,
+        toggle_stage = function()
+            self:toggle_row()
         end,
         discard = function()
             local file = self:row_file()

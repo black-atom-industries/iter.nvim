@@ -53,8 +53,9 @@ iter does not commit, push or pull, and it does not talk to a host. Keep a Git p
 1. `:Iter` opens the status, a sidebar at the left edge of the current tab.
 2. Move through the files. The window beside it shows the diff of the file
    under the cursor.
-3. `s`, `u` and `d` stage, unstage and discard whole files. `I` adds an
-   untracked path to `.gitignore`.
+3. `<Space>` toggles a file or directory between staged and unstaged. `s`, `u`
+   and `d` stage, unstage and discard whole files. `I` adds an untracked path to
+   `.gitignore`.
 4. `r` opens the review.
 
 The status shows:
@@ -81,7 +82,8 @@ hidden context that `<CR>` expands.
    Neovim session, or follow the window width with
    [`diff.layout = 'auto'`](#configuration).
 2. Stage as you go: `s` and `u` take the hunk under the cursor, or in visual
-   mode only the selected lines, applied like `git add -p`.
+   mode only the selected lines, applied like `git add -p`. `<Space>` does
+   whichever fits the section the cursor is in.
 3. `r` marks the file reviewed and moves on to the next file you haven't
    reviewed. On a reviewed file it just moves on. `R` removes the mark.
 
@@ -397,7 +399,7 @@ for it.
     ◐ M git.lua                ✎2 ✓
   ○ M README.md                ✎1 ↻
 
- s stage  u unstage  r reviewed
+ <Space> stage  r reviewed
  b base  = all  ? help
 ```
 
@@ -602,7 +604,7 @@ Keys are buffer-local and set per view. A value is a key, a list of keys, or
 ```lua
 require('iter').setup({
     keys = {
-        drawer = { stage = { 's', '<Space>' }, discard = false },
+        drawer = { stage = { 's', 'a' }, discard = false },
         diff = { annotate = 'gc' },
     },
 })
@@ -610,88 +612,91 @@ require('iter').setup({
 
 The status, as a sidebar or a drawer (`drawer`):
 
-| Key     | Action         | Does                                         |
-| ------- | -------------- | -------------------------------------------- |
-| `<CR>`  | `open`         | Open the file and close the status           |
-| `s`     | `stage`        | Stage or unstage the file                    |
-| `u`     | `unstage`      | Unstage the file                             |
-| `d`     | `discard`      | Discard changes in the file                  |
-| `I`     | `ignore`       | Add the untracked file to .gitignore         |
-| `r`     | `review`       | Open the review tab                          |
-| `=`     | `mode`         | Toggle one file or all files                 |
-| `\|`    | `split`        | Show the diff side by side                   |
-| `-`     | `unified`      | Show the diff unified                        |
-| `gw`    | `wrap`         | Toggle wrapping long lines                   |
-| `q`     | `close`        | Close                                        |
-| `?`     | `help`         | Show the keys                                |
-| `<C-d>` | `scroll_down`  | Scroll the diff down                         |
-| `<C-u>` | `scroll_up`    | Scroll the diff up                           |
-| `h`     | `column_left`  | Select the column to the left                |
-| `l`     | `column_right` | Select the column to the right               |
-| `h`     | `collapse`     | Close the directory, or the file's directory |
-| `l`     | `expand`       | Open the directory                           |
+| Key       | Action         | Does                                         |
+| --------- | -------------- | -------------------------------------------- |
+| `<CR>`    | `open`         | Open the file and close the status           |
+| `s`       | `stage`        | Stage or unstage the file                    |
+| `u`       | `unstage`      | Unstage the file                             |
+| `<Space>` | `toggle_stage` | Stage or unstage the file or directory       |
+| `d`       | `discard`      | Discard changes in the file                  |
+| `I`       | `ignore`       | Add the untracked file to .gitignore         |
+| `r`       | `review`       | Open the review tab                          |
+| `=`       | `mode`         | Toggle one file or all files                 |
+| `\|`      | `split`        | Show the diff side by side                   |
+| `-`       | `unified`      | Show the diff unified                        |
+| `gw`      | `wrap`         | Toggle wrapping long lines                   |
+| `q`       | `close`        | Close                                        |
+| `?`       | `help`         | Show the keys                                |
+| `<C-d>`   | `scroll_down`  | Scroll the diff down                         |
+| `<C-u>`   | `scroll_up`    | Scroll the diff up                           |
+| `h`       | `column_left`  | Select the column to the left                |
+| `l`       | `column_right` | Select the column to the right               |
+| `h`       | `collapse`     | Close the directory, or the file's directory |
+| `l`       | `expand`       | Open the directory                           |
 
 `collapse` and `expand` work in the sidebar, `column_left` and `column_right`
 in the drawer.
 
 The review's file tree (`tree`):
 
-| Key     | Action          | Does                                          |
-| ------- | --------------- | --------------------------------------------- |
-| `<CR>`  | `open`          | Open the diff, or open or close the directory |
-| `s`     | `stage`         | Stage or unstage the file or directory        |
-| `u`     | `unstage`       | Unstage the file or directory                 |
-| `d`     | `discard`       | Discard changes in the file                   |
-| `I`     | `ignore`        | Add the untracked file to .gitignore          |
-| `r`     | `reviewed`      | Mark reviewed and go to the next file         |
-| `R`     | `unreviewed`    | Remove the reviewed mark                      |
-| `b`     | `base`          | Pick what the review compares with            |
-| `=`     | `mode`          | Toggle one file or all files                  |
-| `\|`    | `split`         | Show the diff side by side                    |
-| `-`     | `unified`       | Show the diff unified                         |
-| `gw`    | `wrap`          | Toggle wrapping long lines                    |
-| `A`     | `annotate_file` | Annotate the file                             |
-| `y`     | `yank`          | Copy the file's annotations                   |
-| `Y`     | `yank_all`      | Copy all annotations                          |
-| `h`     | `collapse`      | Close the directory, or the file's directory  |
-| `l`     | `expand`        | Open the directory                            |
-| `q`     | `close`         | Close                                         |
-| `?`     | `help`          | Show the keys                                 |
-| `<C-d>` | `scroll_down`   | Scroll the diff down                          |
-| `<C-u>` | `scroll_up`     | Scroll the diff up                            |
+| Key       | Action          | Does                                          |
+| --------- | --------------- | --------------------------------------------- |
+| `<CR>`    | `open`          | Open the diff, or open or close the directory |
+| `s`       | `stage`         | Stage or unstage the file or directory        |
+| `u`       | `unstage`       | Unstage the file or directory                 |
+| `<Space>` | `toggle_stage`  | Stage or unstage the file or directory        |
+| `d`       | `discard`       | Discard changes in the file                   |
+| `I`       | `ignore`        | Add the untracked file to .gitignore          |
+| `r`       | `reviewed`      | Mark reviewed and go to the next file         |
+| `R`       | `unreviewed`    | Remove the reviewed mark                      |
+| `b`       | `base`          | Pick what the review compares with            |
+| `=`       | `mode`          | Toggle one file or all files                  |
+| `\|`      | `split`         | Show the diff side by side                    |
+| `-`       | `unified`       | Show the diff unified                         |
+| `gw`      | `wrap`          | Toggle wrapping long lines                    |
+| `A`       | `annotate_file` | Annotate the file                             |
+| `y`       | `yank`          | Copy the file's annotations                   |
+| `Y`       | `yank_all`      | Copy all annotations                          |
+| `h`       | `collapse`      | Close the directory, or the file's directory  |
+| `l`       | `expand`        | Open the directory                            |
+| `q`       | `close`         | Close                                         |
+| `?`       | `help`          | Show the keys                                 |
+| `<C-d>`   | `scroll_down`   | Scroll the diff down                          |
+| `<C-u>`   | `scroll_up`     | Scroll the diff up                            |
 
 The diff pane (`diff`), in the review tab and beside the status. Beside the
-status sidebar it takes `]c`, `[c`, `s`, `u`, `<CR>`, `gf`, `=`, `|`, `-`,
-`gw`, `<C-j>`, `q` and `?`; above the status drawer `<CR>`, `=`, `|`, `-`, `gw`
+status sidebar it takes `]c`, `[c`, `s`, `u`, `<Space>`, `<CR>`, `gf`, `=`, `|`,
+`-`, `gw`, `<C-j>`, `q` and `?`; above the status drawer `<Space>`, `<CR>`, `=`, `|`, `-`, `gw`
 and `<C-j>`.
 
-| Key     | Action            | Does                                                            |
-| ------- | ----------------- | --------------------------------------------------------------- |
-| `]c`    | `next_hunk`       | Next hunk                                                       |
-| `[c`    | `prev_hunk`       | Previous hunk                                                   |
-| `]a`    | `next_annotation` | Next annotation                                                 |
-| `[a`    | `prev_annotation` | Previous annotation                                             |
-| `]f`    | `next_file`       | Next file                                                       |
-| `[f`    | `prev_file`       | Previous file                                                   |
-| `s`     | `stage`           | Stage the hunk or the selected lines (normal and visual mode)   |
-| `u`     | `unstage`         | Unstage the hunk or the selected lines (normal and visual mode) |
-| `a`     | `annotate`        | Annotate the line or range (normal and visual mode)             |
-| `A`     | `annotate_file`   | Annotate the file                                               |
-| `e`     | `edit`            | Edit the annotation                                             |
-| `d`     | `delete`          | Delete the annotation                                           |
-| `<CR>`  | `expand`          | Expand the collapsed file or hidden context                     |
-| `gf`    | `goto_file`       | Go to the line in the file                                      |
-| `r`     | `reviewed`        | Mark reviewed and go to the next file                           |
-| `R`     | `unreviewed`      | Remove the reviewed mark                                        |
-| `=`     | `mode`            | Toggle one file or all files                                    |
-| `\|`    | `split`           | Show the diff side by side                                      |
-| `-`     | `unified`         | Show the diff unified                                           |
-| `gw`    | `wrap`            | Toggle wrapping long lines                                      |
-| `y`     | `yank`            | Copy the annotation or file                                     |
-| `Y`     | `yank_all`        | Copy all annotations                                            |
-| `<C-j>` | `focus_drawer`    | Focus the drawer or the file tree                               |
-| `q`     | `close`           | Close                                                           |
-| `?`     | `help`            | Show the keys                                                   |
+| Key       | Action            | Does                                                            |
+| --------- | ----------------- | --------------------------------------------------------------- |
+| `]c`      | `next_hunk`       | Next hunk                                                       |
+| `[c`      | `prev_hunk`       | Previous hunk                                                   |
+| `]a`      | `next_annotation` | Next annotation                                                 |
+| `[a`      | `prev_annotation` | Previous annotation                                             |
+| `]f`      | `next_file`       | Next file                                                       |
+| `[f`      | `prev_file`       | Previous file                                                   |
+| `s`       | `stage`           | Stage the hunk or the selected lines (normal and visual mode)   |
+| `u`       | `unstage`         | Unstage the hunk or the selected lines (normal and visual mode) |
+| `<Space>` | `toggle_stage`    | Toggle the hunk or the selected lines (normal and visual mode)  |
+| `a`       | `annotate`        | Annotate the line or range (normal and visual mode)             |
+| `A`       | `annotate_file`   | Annotate the file                                               |
+| `e`       | `edit`            | Edit the annotation                                             |
+| `d`       | `delete`          | Delete the annotation                                           |
+| `<CR>`    | `expand`          | Expand the collapsed file or hidden context                     |
+| `gf`      | `goto_file`       | Go to the line in the file                                      |
+| `r`       | `reviewed`        | Mark reviewed and go to the next file                           |
+| `R`       | `unreviewed`      | Remove the reviewed mark                                        |
+| `=`       | `mode`            | Toggle one file or all files                                    |
+| `\|`      | `split`           | Show the diff side by side                                      |
+| `-`       | `unified`         | Show the diff unified                                           |
+| `gw`      | `wrap`            | Toggle wrapping long lines                                      |
+| `y`       | `yank`            | Copy the annotation or file                                     |
+| `Y`       | `yank_all`        | Copy all annotations                                            |
+| `<C-j>`   | `focus_drawer`    | Focus the drawer or the file tree                               |
+| `q`       | `close`           | Close                                                           |
+| `?`       | `help`            | Show the keys                                                   |
 
 The annotation sidebar (`annotate`):
 

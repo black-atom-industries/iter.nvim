@@ -140,8 +140,7 @@ function Status.open(opts)
         hints = function()
             return {
                 {
-                    { 'stage', 'stage' },
-                    { 'unstage', 'unstage' },
+                    { 'toggle_stage', 'stage' },
                     { 'discard', 'discard' },
                 },
                 {
@@ -707,6 +706,22 @@ function Status:after_action(result)
     end
 end
 
+--- Stage the row under the cursor, or unstage it when all of it is staged.
+function Status:toggle_row()
+    local node = self.tree:node()
+
+    if node == nil then
+        return
+    end
+
+    if node.kind == 'file' then
+        self:stage_row('stage')
+        return
+    end
+
+    self:stage_row(file_actions.toggle_kind(tree.files(node)))
+end
+
 --- Stage (`stage`) or unstage (`unstage`) the row under the cursor: a file,
 --- all of a partly staged one, or every file below a directory.
 ---@param kind 'stage'|'unstage'
@@ -800,9 +815,9 @@ local function diff_handlers(self)
     }
 end
 
---- Stage (`stage`) or unstage (`unstage`) the hunk under the diff's cursor,
---- or the selected lines.
----@param kind 'stage'|'unstage'
+--- Stage (`stage`), unstage (`unstage`) or toggle (`toggle`) the hunk under
+--- the diff's cursor, or the selected lines.
+---@param kind 'stage'|'unstage'|'toggle'
 function Status:apply_change(kind)
     hunk_actions.apply(kind, {
         view = self.view,
@@ -831,6 +846,9 @@ function Status:view_handlers()
         end,
         unstage = function()
             self:apply_change('unstage')
+        end,
+        toggle_stage = function()
+            self:apply_change('toggle')
         end,
         expand = function()
             self.preview:open_row(function(path, line)
@@ -884,6 +902,9 @@ function Status:handlers()
         end,
         unstage = function()
             self:stage_row('unstage')
+        end,
+        toggle_stage = function()
+            self:toggle_row()
         end,
         discard = function()
             local file = self:row_file()

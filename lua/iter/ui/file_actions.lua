@@ -36,6 +36,13 @@ function M.below(files, kind)
     return items
 end
 
+--- What toggling `files` does: `stage`, or `unstage` when all of it is staged.
+---@param files IterTreeFile[]
+---@return 'stage'|'unstage'
+function M.toggle_kind(files)
+    return #M.below(files, 'stage') > 0 and 'stage' or 'unstage'
+end
+
 --- Whether one of `items` is a change against a base, where `action`
 --- doesn't apply; says so when it is.
 ---@param items IterChange[]

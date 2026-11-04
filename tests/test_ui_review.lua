@@ -510,6 +510,19 @@ T['tree']['s on a directory stages its files, u unstages them'] = function()
     eq(git_staged(), { 'b.txt' })
 end
 
+T['tree']['<Space> on a directory stages its files, then unstages them'] = function()
+    H.open(child)
+    H.select(child, 'unstaged', 'd/x.txt')
+    child.type_keys('h', '<Space>')
+
+    helpers.wait_until(child, [[#]] .. R .. [[.changes.staged == 2]])
+    eq(git_staged(), { 'b.txt', 'd/x.txt' })
+
+    child.type_keys('<Space>')
+    helpers.wait_until(child, [[#]] .. R .. [[.changes.staged == 1]])
+    eq(git_staged(), { 'b.txt' })
+end
+
 T['tree']['d and I on a directory warn'] = function()
     H.open(child)
     H.select(child, 'unstaged', 'd/x.txt')
@@ -1274,6 +1287,43 @@ T['hunks']['s stages the hunk under the cursor and keeps the other'] = function(
     eq(child.lua_get('_G.notes'), {})
 end
 
+T['hunks']['<Space> stages an unstaged hunk and unstages a staged one'] = function()
+    H.open(child)
+    H.select(child, 'unstaged', 'a.txt')
+    H.wait_diff(child, 'unstaged a.txt')
+    cursor_on('a3 changed')
+    child.type_keys('<Space>')
+
+    local cached = git_out({ 'diff', '--cached', '--', 'a.txt' })
+    eq(cached:find('+a3 changed', 1, true) ~= nil, true)
+
+    wait_cursor('hunk @@ -22,7 +22,7 @@ a21')
+    cursor_on('a3 changed')
+    child.type_keys('<Space>')
+
+    cached = git_out({ 'diff', '--cached', '--', 'a.txt' })
+    eq(cached:find('a3 changed', 1, true), nil)
+    eq(child.lua_get('_G.notes'), {})
+end
+
+T['hunks']['<Space> toggles the selected lines'] = function()
+    H.open(child)
+    H.select(child, 'unstaged', 'a.txt')
+    H.wait_diff(child, 'unstaged a.txt')
+    cursor_on('a3 changed')
+    child.type_keys('V', '<Space>')
+
+    eq(child.fn.mode(), 'n')
+    eq(
+        git_out({ 'diff', '--cached', '--', 'a.txt' }):find(
+            '+a3 changed',
+            1,
+            true
+        ) ~= nil,
+        true
+    )
+end
+
 T['hunks']['s on a hunk fires IterStage with the file'] = function()
     H.open(child)
     H.select(child, 'unstaged', 'a.txt')
@@ -1629,31 +1679,32 @@ T['hunks']['? in the diff pane lists its keys'] = function()
                     .. [[.buf, 0, -1, false))]]
             ),
             {
-                ' ]c     Next hunk',
-                ' [c     Previous hunk',
-                ' ]a     Next annotation',
-                ' [a     Previous annotation',
-                ' ]f     Next file',
-                ' [f     Previous file',
-                ' S      Stage the hunk or the selected lines',
-                ' u      Unstage the hunk or the selected lines',
-                ' a      Annotate the line or range',
-                ' A      Annotate the file',
-                ' e      Edit the annotation',
-                ' d      Delete the annotation',
-                ' <CR>   Expand the collapsed file or hidden context',
-                ' gf     Go to the line in the file',
-                ' r      Mark reviewed and go to the next file',
-                ' R      Remove the reviewed mark',
-                ' =      Toggle one file or all files',
-                ' |      Show the diff side by side',
-                ' -      Show the diff unified',
-                ' gw     Toggle wrapping long lines',
-                ' y      Copy the annotation or file',
-                ' Y      Copy all annotations',
-                ' <C-j>  Focus the drawer or the file tree',
-                ' q      Close',
-                ' ?      Show the keys',
+                ' ]c       Next hunk',
+                ' [c       Previous hunk',
+                ' ]a       Next annotation',
+                ' [a       Previous annotation',
+                ' ]f       Next file',
+                ' [f       Previous file',
+                ' S        Stage the hunk or the selected lines',
+                ' u        Unstage the hunk or the selected lines',
+                ' <Space>  Stage or unstage the hunk or the selected lines',
+                ' a        Annotate the line or range',
+                ' A        Annotate the file',
+                ' e        Edit the annotation',
+                ' d        Delete the annotation',
+                ' <CR>     Expand the collapsed file or hidden context',
+                ' gf       Go to the line in the file',
+                ' r        Mark reviewed and go to the next file',
+                ' R        Remove the reviewed mark',
+                ' =        Toggle one file or all files',
+                ' |        Show the diff side by side',
+                ' -        Show the diff unified',
+                ' gw       Toggle wrapping long lines',
+                ' y        Copy the annotation or file',
+                ' Y        Copy all annotations',
+                ' <C-j>    Focus the drawer or the file tree',
+                ' q        Close',
+                ' ?        Show the keys',
             }
         )
         eq(

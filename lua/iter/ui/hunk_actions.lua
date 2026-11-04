@@ -115,14 +115,15 @@ local function is_link(raw)
     return false
 end
 
---- Stage (`stage`) or unstage (`unstage`) the hunk under the cursor of the
+--- Stage (`stage`), unstage (`unstage`) or, by its section's side, either
+--- (`toggle`) the hunk under the cursor of the
 --- view, or in visual mode the selected del and add rows, in the split
 --- layout those on both sides of the selected lines. The patch comes from
 --- git's diff text of this moment, byte for byte, and only when that text
 --- is still the one on screen; `git apply --check` runs before the apply.
 --- After a hunk the cursor goes to the hunk that took its place, else the
 --- last one. Fires `User IterStage` when it applied.
----@param kind 'stage'|'unstage'
+---@param kind 'stage'|'unstage'|'toggle'
 ---@param opts IterHunkActionOptions
 function M.apply(kind, opts)
     local view = opts.view
@@ -140,6 +141,11 @@ function M.apply(kind, opts)
     end
 
     local file = section.file
+
+    if kind == 'toggle' then
+        kind = file.side == 'staged' and 'unstage' or 'stage'
+    end
+    ---@cast kind 'stage'|'unstage'
 
     local what = visual and 'selected lines' or 'hunk'
 
