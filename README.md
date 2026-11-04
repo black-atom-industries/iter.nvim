@@ -999,7 +999,7 @@ event, so no colorscheme needs to define them.
 | `IterDiffHeader`             | File header rows in the diff                              | fg of `Normal`; bg of `Title` fg, blended with `Normal`; bold               |
 | `IterDiffHeaderRule`         | Rule above a file header and the drawer, code letter      | fg of `Title`                                                               |
 | `IterDiffHunk`               | Hunk headers and stats                                    | link to `Comment`                                                           |
-| `IterDiffGap`                | Collapsed unchanged lines                                 | link to `Folded`                                                            |
+| `IterDiffGap`                | Collapsed unchanged lines                                 | link to `Comment`                                                           |
 | `IterDiffFiller`             | Filler rows beside a one-sided change, without ribbons    | link to `NonText`                                                           |
 | `IterDiffAnnotation`         | Annotation text                                           | link to `NormalFloat`                                                       |
 | `IterDiffAnnotationOutdated` | Annotation whose lines changed                            | link to `Comment`                                                           |

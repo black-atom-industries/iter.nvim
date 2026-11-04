@@ -295,12 +295,12 @@ T['IterDiff groups follow the colorscheme'] = function()
 
     local default_add = hl('IterDiffAdd', false).bg
     neq(default_add, nil)
-    eq(hl('IterDiffGap', true).link, 'Folded')
+    eq(hl('IterDiffGap', true).link, 'Comment')
 
     child.cmd('colorscheme habamax')
     neq(hl('IterDiffAdd', false).bg, nil)
     neq(hl('IterDiffAdd', false).bg, default_add)
-    eq(hl('IterDiffGap', true).link, 'Folded')
+    eq(hl('IterDiffGap', true).link, 'Comment')
 
     -- Blended 60 % towards Normal: 0x33 * 0.6 = 0x1e.
     child.lua([[

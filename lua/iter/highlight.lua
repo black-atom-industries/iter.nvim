@@ -200,7 +200,7 @@ function M.apply()
         },
         IterDiffHeaderRule = { fg = title },
         IterDiffHunk = { link = 'Comment' },
-        IterDiffGap = { link = 'Folded' },
+        IterDiffGap = { link = 'Comment' },
         IterDiffFiller = { link = 'NonText' },
         IterDiffAnnotation = { link = 'NormalFloat' },
         IterDiffAnnotationOutdated = { link = 'Comment' },
