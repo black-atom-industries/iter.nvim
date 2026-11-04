@@ -1037,3 +1037,8 @@ iter.nvim started as a fork of
 [vieitesss](https://github.com/vieitesss). The review follows
 [tuicr](https://github.com/agavra/tuicr), and annotations in normal buffers
 follow [annotator.nvim](https://github.com/chpeters/annotator.nvim).
+
+[diffbandit.nvim](https://github.com/CoreyKaylor/diffbandit.nvim) by
+[CoreyKaylor](https://github.com/CoreyKaylor) is our reference for diff
+rendering: bezier connector ribbons between the two sides, drawn with the Kitty
+graphics protocol, and change blocks from a Lua port of IntelliJ's diff engine.
