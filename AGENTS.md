@@ -38,3 +38,6 @@ Scope, architecture and Lua conventions live in `docs/CONVENTIONS.md`. Read it b
 
 All UI designs live in the "iter.nvim" Design canvas artifact (https://claude.ai/artifact/N3QkZ8nf9AuZvRTnR3geRQ), one
 page per milestone. Create and iterate designs there.
+
+An issue that needs a design links the canvas and names the page and boards to open, or says the design is still to do.
+A new UI idea whose usefulness is unsettled gets its design first and its issue after.
