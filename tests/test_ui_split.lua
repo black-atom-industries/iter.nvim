@@ -521,6 +521,113 @@ T['sync']['the tree scrolls both windows under scrolloff'] = function()
     eq(p[1], p[2])
 end
 
+T['sync']['scrolloffpad keeps both windows together inside the document'] = function()
+    if child.fn.exists('+scrolloffpad') == 0 then
+        MiniTest.skip('this Neovim has no scrolloffpad')
+    end
+
+    child.stop()
+    helpers.cleanup(repo)
+    local lines = numbered('line ', 1, 200)
+    repo = helpers.create_repo({ ['f.txt'] = lines })
+    for i = 1, 200, 3 do
+        lines[i] = 'changed ' .. i
+    end
+    helpers.write_file(vim.fs.joinpath(repo, 'f.txt'), lines)
+    helpers.start_child(child, repo, { lines = 40, columns = 120 })
+    pin_drawer()
+    stub_ui()
+    child.o.scrolloff = 11
+    child.o.scrolloffpad = 99
+
+    open_review()
+    split()
+
+    local height =
+        child.lua_get('vim.api.nvim_win_get_height(' .. R .. '.view.win)')
+    local count =
+        child.lua_get('vim.api.nvim_buf_line_count(' .. R .. '.view.buf)')
+    local last_top = count - height + 1
+    local keys = { 'G', '<C-u>', 'gg', 'G', 'gg' }
+
+    for _ = 1, 20 do
+        table.insert(keys, 1, '<C-d>')
+    end
+
+    for _, key in ipairs(keys) do
+        child.type_keys(key)
+
+        local p = positions()
+
+        eq(p[1], p[2])
+        eq(p[2][2] <= last_top, true)
+    end
+
+    child.type_keys('gg')
+    eq(positions()[2][2], 1)
+end
+
+T['sync']['the mouse wheel over either window scrolls both'] = function()
+    child.stop()
+    helpers.cleanup(repo)
+    local lines = numbered('line ', 1, 200)
+    repo = helpers.create_repo({ ['f.txt'] = lines })
+    for i = 1, 200, 3 do
+        lines[i] = 'changed ' .. i
+    end
+    helpers.write_file(vim.fs.joinpath(repo, 'f.txt'), lines)
+    helpers.start_child(child, repo, { lines = 40, columns = 120 })
+    pin_drawer()
+    stub_ui()
+
+    open_review()
+    split()
+
+    local function wheel(pane, direction)
+        child.lua(string.format(
+            [[
+                local win = %s.view.%s
+                local pos = vim.api.nvim_win_get_position(win)
+                vim.api.nvim_input_mouse(
+                    'wheel', %q, '', 0, pos[1] + 5, pos[2] + 10
+                )
+            ]],
+            R,
+            pane,
+            direction
+        ))
+        child.lua('vim.cmd.redraw()')
+    end
+
+    for _, focus in ipairs({ '.view.win', '.view.old.win', '.panel.win' }) do
+        child.lua('vim.api.nvim_set_current_win(' .. R .. focus .. ')')
+
+        for _, pane in ipairs({ 'win', 'old.win' }) do
+            local before = positions()[2][2]
+
+            wheel(pane, 'down')
+            helpers.wait_until(
+                child,
+                string.format(
+                    [[vim.fn.getwininfo(%s.view.%s)[1].topline > %d]],
+                    R,
+                    pane,
+                    before
+                )
+            )
+            helpers.wait_until(
+                child,
+                string.format(
+                    [[vim.fn.getwininfo(%s.view.win)[1].topline
+                        == vim.fn.getwininfo(%s.view.old.win)[1].topline]],
+                    R,
+                    R
+                )
+            )
+        end
+    end
+end
+
 T['sync']['<CR> on a gap in the left window expands both sides'] = function()
     open_review()
     split()

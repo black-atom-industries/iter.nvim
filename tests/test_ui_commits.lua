@@ -600,6 +600,60 @@ T['files']['in the split layout the tree stays at the left edge'] = function()
     eq(#child.api.nvim_tabpage_list_wins(0), 3)
 end
 
+T['files']['under scrolloffpad a scrolled diff stays together and in bounds'] = function()
+    if child.fn.exists('+scrolloffpad') == 0 then
+        MiniTest.skip('this Neovim has no scrolloffpad')
+    end
+
+    local lines = {}
+
+    for i = 1, 60 do
+        lines[i] = 'long ' .. i
+    end
+
+    helpers.write_file(vim.fs.joinpath(repo, 'long.txt'), lines)
+    helpers.git(repo, { 'add', 'long.txt' })
+    helpers.git(repo, { 'commit', '--quiet', '-m', 'add long' })
+
+    child.o.scrolloff = 11
+    child.o.scrolloffpad = 99
+    open_commits()
+    child.type_keys('<CR>', '|')
+    helpers.wait_until(child, C .. '.view.old ~= nil')
+
+    local function check()
+        local tops = child.lua_get(string.format(
+            [[{
+                vim.fn.getwininfo(%s.view.old.win)[1].topline,
+                vim.fn.getwininfo(%s.view.win)[1].topline,
+                vim.api.nvim_buf_line_count(%s.view.buf)
+                    - vim.api.nvim_win_get_height(%s.view.win) + 1,
+            }]],
+            C,
+            C,
+            C,
+            C
+        ))
+
+        eq(tops[1], tops[2])
+        eq(tops[2] <= tops[3], true)
+    end
+
+    child.api.nvim_set_current_win(panel_win())
+
+    for _, key in ipairs({ '<C-d>', '<C-d>', '<C-d>', '<C-d>', '<C-u>' }) do
+        child.type_keys(key)
+        check()
+    end
+
+    child.lua('vim.api.nvim_set_current_win(' .. C .. '.view.win)')
+
+    for _, key in ipairs({ 'G', '<C-u>', 'gg', 'G' }) do
+        child.type_keys(key)
+        check()
+    end
+end
+
 T['files']['a resize keeps the split panes even'] = function()
     child.o.columns = 200
     open_commits()

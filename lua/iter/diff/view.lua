@@ -119,6 +119,12 @@ local WINOPTS = {
     cursorbind = false,
 }
 
+-- A document ends at the bottom of its window: scrolled past that end, the
+-- panes lose their scrollbind offset. Neovim 0.12 doesn't have the option.
+if vim.fn.exists('+scrolloffpad') == 1 then
+    WINOPTS.scrolloffpad = 0
+end
+
 -- The window options of both panes in the split layout.
 local SPLIT_WINOPTS =
     vim.tbl_extend('force', WINOPTS, { scrollbind = true, cursorbind = true })
@@ -290,11 +296,22 @@ function View.new(opts)
     vim.api.nvim_create_autocmd('WinScrolled', {
         group = self.group,
         callback = function()
+            local scrolled
+
             for _, pane in ipairs(self:panes()) do
                 if vim.v.event[tostring(pane.win)] ~= nil then
-                    self:update_viewport()
-                    return
+                    if
+                        scrolled == nil
+                        or pane.win == vim.api.nvim_get_current_win()
+                    then
+                        scrolled = pane
+                    end
                 end
+            end
+
+            if scrolled ~= nil then
+                self:follow_scroll(scrolled)
+                self:update_viewport()
             end
         end,
     })
@@ -696,6 +713,27 @@ function View:sync(from)
         vim.cmd('syncbind')
     end)
     self:draw_gutter()
+end
+
+--- Bring the other pane to the top line of `pane`. Scrollbind follows only the
+--- current window, and the mouse wheel scrolls the window under it.
+---@param pane IterDiffPane
+function View:follow_scroll(pane)
+    if self.old == nil or not util.is_valid_win(pane.win) then
+        return
+    end
+
+    local top = vim.fn.getwininfo(pane.win)[1].topline
+
+    for _, other in ipairs(self:panes()) do
+        if
+            util.is_valid_win(other.win)
+            and vim.fn.getwininfo(other.win)[1].topline ~= top
+        then
+            self:sync(pane)
+            return
+        end
+    end
 end
 
 --- Show the documents in `layout` from now on, the one shown at once.
