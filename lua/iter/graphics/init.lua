@@ -47,6 +47,12 @@ local function has_terminal_ui()
     return false
 end
 
+local function notify()
+    for _, listener in ipairs(listeners) do
+        listener()
+    end
+end
+
 ---@param new 'on'|'off'
 local function settle(new)
     if probe_timer ~= nil then
@@ -60,9 +66,7 @@ local function settle(new)
     status = new
 
     if changed then
-        for _, listener in ipairs(listeners) do
-            listener()
-        end
+        notify()
     end
 end
 
@@ -122,8 +126,15 @@ function M.probe()
             group = group,
             callback = function()
                 if not rejected and status ~= 'probing' then
+                    local was_on = status == 'on'
+
                     status = 'unknown'
                     M.probe()
+
+                    -- This UI can't be asked, so what was on is off now.
+                    if was_on and status == 'unknown' then
+                        notify()
+                    end
                 end
             end,
         })

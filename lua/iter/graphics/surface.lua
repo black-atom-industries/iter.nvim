@@ -1,7 +1,10 @@
+-- The blending follows diffbandit.nvim's lua/diffbandit/kitty/raster.lua
+-- (https://github.com/CoreyKaylor/diffbandit.nvim), Apache License 2.0, see
+-- LICENSES/Apache-2.0-diffbandit.txt. Changed: rewritten for iter, and a column
+-- sums the coverage of its samples before it blends.
+
 --- A rectangle of RGBA pixels to draw on, in memory. It knows nothing of the
 --- terminal: `canvas` shows its bytes.
-
-local ffi = require('ffi')
 
 ---@class IterSurface
 ---@field width integer
@@ -17,7 +20,7 @@ function Surface.new(width, height)
     return setmetatable({
         width = width,
         height = height,
-        pixels = ffi.new('uint8_t[?]', width * height * 4),
+        pixels = require('ffi').new('uint8_t[?]', width * height * 4),
     }, Surface)
 end
 
@@ -119,7 +122,7 @@ end
 --- The pixels as RGBA bytes.
 ---@return string
 function Surface:bytes()
-    return ffi.string(self.pixels, self.width * self.height * 4)
+    return require('ffi').string(self.pixels, self.width * self.height * 4)
 end
 
 return Surface

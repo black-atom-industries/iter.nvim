@@ -1,3 +1,8 @@
+-- The compression follows diffbandit.nvim's lua/diffbandit/kitty/zlib.lua
+-- (https://github.com/CoreyKaylor/diffbandit.nvim), Apache License 2.0, see
+-- LICENSES/Apache-2.0-diffbandit.txt. Changed: restyled, and zlib loads on first
+-- use.
+
 --- An image over cells of a window: a non-focusable float holding placeholder
 --- text that never changes, and the image behind it, sent anew by `draw`. Other
 --- floats cover it as they cover text, so it stays under all of them.
@@ -6,27 +11,34 @@ local graphics = require('iter.graphics')
 local protocol = require('iter.graphics.protocol')
 local util = require('iter.util')
 
-local ffi = require('ffi')
-
-pcall(
-    ffi.cdef,
-    [[
-    unsigned long compressBound(unsigned long source_length);
-    int compress2(uint8_t *dest, unsigned long *dest_length,
-                  const uint8_t *source, unsigned long source_length,
-                  int level);
-]]
-)
-
-local has_zlib, zlib = pcall(ffi.load, 'z')
-
 -- Below every other float, whose default is 50.
 local ZINDEX = 1
+
+---@type any
+local zlib
 
 ---@param data string
 ---@return string? compressed nil when it can't be compressed
 local function compress(data)
-    if not has_zlib then
+    local ffi = require('ffi')
+
+    if zlib == nil then
+        pcall(
+            ffi.cdef,
+            [[
+            unsigned long compressBound(unsigned long source_length);
+            int compress2(uint8_t *dest, unsigned long *dest_length,
+                          const uint8_t *source, unsigned long source_length,
+                          int level);
+        ]]
+        )
+
+        local loaded, library = pcall(ffi.load, 'z')
+
+        zlib = loaded and library or false
+    end
+
+    if not zlib then
         return nil
     end
 

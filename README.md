@@ -1073,5 +1073,5 @@ follow [annotator.nvim](https://github.com/chpeters/annotator.nvim).
 [CoreyKaylor](https://github.com/CoreyKaylor) is our reference for diff
 rendering: bezier connector ribbons between the two sides, drawn with the Kitty
 graphics protocol, and change blocks from a Lua port of IntelliJ's diff engine.
-`lua/iter/graphics/` adapts its code under the Apache License 2.0, in
-`LICENSES/Apache-2.0-diffbandit.txt`.
+`lua/iter/graphics/` and `lua/iter/diff/ribbons.lua` adapt its code under the
+Apache License 2.0, in `LICENSES/Apache-2.0-diffbandit.txt`.

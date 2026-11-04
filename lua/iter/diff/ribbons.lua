@@ -1,3 +1,8 @@
+-- The curve follows diffbandit.nvim's lua/diffbandit/kitty/raster.lua
+-- (https://github.com/CoreyKaylor/diffbandit.nvim), Apache License 2.0, see
+-- LICENSES/Apache-2.0-diffbandit.txt. Changed: rewritten for iter's chunks,
+-- colours and gutter.
+
 --- The bands between the two sides of the split layout, see
 --- tests/visual_contract.md. A chunk is a run of lines with a change on either
 --- side. The functions here are pure, from the document and the rows it takes

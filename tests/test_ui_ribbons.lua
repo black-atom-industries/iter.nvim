@@ -453,4 +453,21 @@ T['fallback']['a rejected image brings the fillers back'] = function()
     )
 end
 
+T['fallback']['a UI that cannot be asked closes the gutter'] = function()
+    open_split()
+
+    local win = child.lua_get(V .. '.gutter.canvas.win')
+
+    child.lua([[
+        vim.api.nvim_list_uis = function()
+            return {}
+        end
+        vim.api.nvim_exec_autocmds('UIEnter', {})
+    ]])
+    helpers.wait_until(child, V .. '.gutter == nil')
+
+    eq(child.lua_get('vim.api.nvim_win_is_valid(' .. win .. ')'), false)
+    eq(child.lua_get(V .. '.old ~= nil'), true)
+end
+
 return T

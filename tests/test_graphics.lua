@@ -225,6 +225,47 @@ T['probe()']['a rejected image turns images off for good'] = function()
     eq(child.lua_get([[require('iter.graphics').on()]]), false)
 end
 
+T['probe()']['a UI that cannot be asked turns images off'] = function()
+    fake_terminal()
+    child.lua([[
+        vim.env.TMUX = nil
+        _G.changes = 0
+        require('iter.graphics').probe()
+    ]])
+    respond(OK)
+    respond(DA1)
+    helpers.wait_until(child, [[require('iter.graphics').on()]])
+
+    child.lua([[
+        require('iter.graphics').subscribe(function()
+            _G.changes = _G.changes + 1
+        end)
+        vim.api.nvim_list_uis = function()
+            return {}
+        end
+        vim.api.nvim_exec_autocmds('UIEnter', {})
+    ]])
+
+    eq(child.lua_get([[require('iter.graphics').on()]]), false)
+    eq(child.lua_get('_G.changes'), 1)
+end
+
+T['probe()']['without LuaJIT the diff view loads and images stay off'] = function()
+    fake_terminal()
+    child.lua([[
+        vim.env.TMUX = nil
+        package.loaded.ffi = nil
+        package.preload.ffi = function()
+            error('no LuaJIT')
+        end
+        require('iter.diff.view')
+        require('iter.graphics').probe()
+    ]])
+
+    eq(child.lua_get('#_G.sent'), 0)
+    eq(child.lua_get([[require('iter.graphics').on()]]), false)
+end
+
 T['pixel()'] = new_set()
 
 T['pixel()']['keeps sRGB outside Ghostty on macOS'] = function()

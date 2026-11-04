@@ -2201,11 +2201,18 @@ end
 
 -- The answer about images can come after a split opened, or change later.
 graphics.subscribe(function()
+    local shown = {}
+
     for buf, view in pairs(views) do
         if view.buf == buf and view.layout == 'split' and view:is_shown() then
-            view:show_document(view.document)
-            view:even_widths()
+            table.insert(shown, view)
         end
+    end
+
+    -- Showing a document can open buffers, which adds to `views`.
+    for _, view in ipairs(shown) do
+        view:show_document(view.document)
+        view:even_widths()
     end
 end)
 
