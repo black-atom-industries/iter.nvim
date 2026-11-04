@@ -27,7 +27,12 @@ local SCHEMA = {
         wrap = 'boolean',
         args = 'table',
     },
-    review = { tree_width = 'integer_or_auto', tree_min_width = 'integer' },
+    review = {
+        tree_width = 'integer_or_auto',
+        tree_min_width = 'integer',
+        tree_max_width = 'integer',
+        tree_counts = 'boolean',
+    },
     export = { intro = 'string' },
     annotate = {
         side = 'string',
@@ -270,6 +275,12 @@ local function validate(opts)
 
     if tree_min_width ~= nil and tree_min_width < 10 then
         error('opts.review.tree_min_width must be 10 or more', 0)
+    end
+
+    local tree_max_width = opts.review and opts.review.tree_max_width
+
+    if tree_max_width ~= nil and tree_max_width < 10 then
+        error('opts.review.tree_max_width must be 10 or more', 0)
     end
 
     local review_breakpoint = opts.annotate and opts.annotate.review_breakpoint

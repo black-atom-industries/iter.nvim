@@ -240,6 +240,7 @@ local T = new_set({
         pre_case = function()
             repo = create_marks_repo()
             helpers.start_child(child, repo, { lines = 36 })
+            helpers.hide_tree_counts(child)
             pin_drawer()
             stub_ui()
         end,

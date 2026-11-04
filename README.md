@@ -376,14 +376,21 @@ and the window above shows the diff. `:Iter` on an open drawer focuses it, and
 
 **File tree.** The left window lists the changed files as a tree. With
 `review.tree_width = 'auto'`, the default, it grows to show every file name
-whole, from `review.tree_min_width` up to half the editor. It fits at open, on a
+whole, from `review.tree_min_width` up to `review.tree_max_width` or half the
+editor, whichever is less. It fits at open, on a
 base change and when the editor's columns change. A refresh only grows it, so
 the diff stays put as files come and go. Under `diff.layout = 'auto'` it stops
 before the diff would lose the split layout. A number in `review.tree_width`
 fixes the width.
 
-A name is never shortened: what doesn't fit stops at the row's marks or the
-window's edge, and the diff header shows the file's path. A width set with `:vertical resize` stays
+**Line counts.** Every file row of the review, the status and the commits tab
+shows the lines it adds and deletes, `+n` for an untracked file and `bin` for a
+binary one. The counts keep their cells inside the tree's width, so a long name
+fades out before them. `gc` (`counts`) hides or shows them in all the trees and
+holds for the session; `review.tree_counts` sets how a session starts.
+
+A name is never shortened with `…`: what doesn't fit fades out before the row's
+marks or the window's edge, and the diff header shows the file's path. A width set with `:vertical resize` stays
 until the review closes, down to half the editor while the editor is too small
 for it.
 
@@ -625,6 +632,7 @@ The status, as a sidebar or a drawer (`drawer`):
 | `\|`      | `split`        | Show the diff side by side                   |
 | `-`       | `unified`      | Show the diff unified                        |
 | `gw`      | `wrap`         | Toggle wrapping long lines                   |
+| `gc`      | `counts`       | Toggle the line counts in the tree           |
 | `q`       | `close`        | Close                                        |
 | `?`       | `help`         | Show the keys                                |
 | `<C-d>`   | `scroll_down`  | Scroll the diff down                         |
@@ -654,6 +662,7 @@ The review's file tree (`tree`):
 | `\|`      | `split`         | Show the diff side by side                    |
 | `-`       | `unified`       | Show the diff unified                         |
 | `gw`      | `wrap`          | Toggle wrapping long lines                    |
+| `gc`      | `counts`        | Toggle the line counts in the tree            |
 | `A`       | `annotate_file` | Annotate the file                             |
 | `y`       | `yank`          | Copy the file's annotations                   |
 | `Y`       | `yank_all`      | Copy all annotations                          |
@@ -731,6 +740,7 @@ The commits tab (`commits`):
 | `\|`    | `split`       | Show the diff side by side                                  |
 | `-`     | `unified`     | Show the diff unified                                       |
 | `gw`    | `wrap`        | Toggle wrapping long lines                                  |
+| `gc`    | `counts`      | Toggle the line counts in the tree                          |
 | `h`     | `collapse`    | Close the directory, or the file's directory                |
 | `l`     | `expand`      | Open the directory                                          |
 | `q`     | `close`       | Back to the commits, or close                               |
@@ -772,6 +782,8 @@ require('iter').setup({
     review = {
         tree_width = 'auto',  -- columns of the file trees of the review, the status and the commits tab: 'auto' fits the longest name, a number of 10 or more is fixed
         tree_min_width = 34,  -- least columns under 'auto', 10 or more
+        tree_max_width = 60,  -- most columns under 'auto', 10 or more; tree_min_width wins over it
+        tree_counts = true,   -- whether a Neovim session starts with line counts in the file trees
     },
     export = {
         intro = 'I reviewed your changes and have these annotations.\n'
@@ -989,6 +1001,8 @@ event, so no colorscheme needs to define them.
 | `IterDrawerKey`              | Key hints                                                 | link to `Special`                                                           |
 | `IterDrawerHint`             | Dimmed drawer and tree text, `○` in the tree              | link to `Comment`                                                           |
 | `IterDrawerCount`            | Counts in section titles, `✎n` in the tree                | link to `Special`                                                           |
+| `IterTreeFade1` to `4`       | Last cells of a name cut short in the tree                | fg of `IterSidebar`, blended with its bg in fading shares                   |
+| `IterDiffHeaderFade1` to `4` | Last cells of a path cut short in the diff header         | fg of `IterDiffHeader`, blended with its bg in fading shares                |
 | `IterCommitSha`              | Commit sha in the commits tab, the base list and previews | link to `Constant`                                                          |
 | `IterCommitDate`             | Commit date and time in the commit and base previews      | link to `Special`                                                           |
 | `IterCommitAuthor`           | Commit author in the commit and base previews             | link to `Identifier`                                                        |

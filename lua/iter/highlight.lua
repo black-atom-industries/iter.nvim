@@ -20,6 +20,10 @@ local TEXT_BLEND = 0.15
 -- colour; the rest is Normal.
 local TEXT_VISUAL_BLEND = 0.35
 
+-- Share of the text colour in each fade group, in order along the end of a name
+-- cut short; the rest is the background behind it.
+local FADE_SHARES = { 0.8, 0.6, 0.4, 0.2 }
+
 -- Distance from Normal, 0 to 1, below which a diff background can't be seen.
 local MIN_DIFF_DISTANCE = 0.04
 
@@ -244,6 +248,32 @@ function M.apply()
             CURSOR_BLEND
         ),
     })
+
+    -- From the tree's group, which the colorscheme may define.
+    local tree_groups = { 'IterSidebar', 'NormalFloat', 'Normal' }
+    local tree_fg = color(tree_groups, 'fg')
+        or color({ 'Normal' }, 'fg')
+        or (dark and 0xe0e0e0 or 0x202020)
+    local tree_bg = color(tree_groups, 'bg') or text_base
+
+    for step, share in ipairs(FADE_SHARES) do
+        set_derived(
+            'IterTreeFade' .. step,
+            { fg = blend(tree_fg, tree_bg, share) }
+        )
+    end
+
+    -- From the header's group, which the colorscheme may define.
+    local header_fg = color({ 'IterDiffHeader', 'Normal' }, 'fg')
+        or (dark and 0xe0e0e0 or 0x202020)
+    local header_band = color({ 'IterDiffHeader' }, 'bg') or header_bg
+
+    for step, share in ipairs(FADE_SHARES) do
+        set_derived(
+            'IterDiffHeaderFade' .. step,
+            { fg = blend(header_fg, header_band, share), bold = true }
+        )
+    end
 end
 
 local augroup

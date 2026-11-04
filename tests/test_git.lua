@@ -1095,6 +1095,62 @@ T['between commits']['stats() counts lines per file, a rename with both paths'] 
     eq(git.stats(repo, 'nope', second), nil)
 end
 
+T['working_stats()'] = new_set()
+
+T['working_stats()']['adds the untracked files of the items to what git counts'] = function()
+    write('tracked.txt', { 'one', 'two' })
+    write('new.txt', { 'one', 'two', 'three' })
+
+    local stats = git.working_stats(repo, 'HEAD', {
+        { path = 'tracked.txt', code = 'M' },
+        { path = 'new.txt', code = '?' },
+    })
+
+    eq(stats['tracked.txt'].added, 1)
+    eq(stats['new.txt'], { path = 'new.txt', added = 3, deleted = 0 })
+end
+
+T['working_stats()']['counts a last line without a newline, none in an empty file'] = function()
+    local function write_raw(path, content)
+        local file = assert(io.open(vim.fs.joinpath(repo, path), 'wb'))
+        file:write(content)
+        file:close()
+    end
+
+    write_raw('open.txt', 'one\ntwo')
+    write_raw('empty.txt', '')
+
+    local stats = git.working_stats(repo, 'HEAD', {
+        { path = 'open.txt', code = '?' },
+        { path = 'empty.txt', code = '?' },
+    })
+
+    eq(stats['open.txt'].added, 2)
+    eq(stats['empty.txt'].added, 0)
+end
+
+T['working_stats()']['leaves the counts of a binary file empty'] = function()
+    local file = assert(io.open(vim.fs.joinpath(repo, 'blob.bin'), 'wb'))
+    file:write('a\0b\n')
+    file:close()
+
+    eq(
+        git.working_stats(repo, 'HEAD', { { path = 'blob.bin', code = '?' } })['blob.bin'],
+        { path = 'blob.bin' }
+    )
+end
+
+T['working_stats()']['reads an untracked file again once it changed'] = function()
+    write('new.txt', { 'one' })
+
+    local items = { { path = 'new.txt', code = '?' } }
+
+    eq(git.working_stats(repo, 'HEAD', items)['new.txt'].added, 1)
+
+    write('new.txt', { 'one', 'two' })
+    eq(git.working_stats(repo, 'HEAD', items)['new.txt'].added, 2)
+end
+
 T['between commits']['stats() without head counts against the worktree'] = function()
     local _, second = create_commits()
 

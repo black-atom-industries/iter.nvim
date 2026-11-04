@@ -154,15 +154,17 @@ the review straight to an agent pane.
   panel or the diff with `:edit` opens in the tab the review came from and the page or the diff comes back.
 - A tree page gives the panel its width (`review_tree`'s `columns`), in the review, the status sidebar and the commits
   tab's files page. A number in `review.tree_width` is fixed. Under `'auto'` it is what `tree.width` measures, every name
-  whole, closed directories included, a rename's old path left out: at least `review.tree_min_width`, at most half the
+  whole, closed directories included, a rename's old path left out: at least `review.tree_min_width`, at most `review.tree_max_width` (the minimum wins) or half the
   editor (`panel.bounded` holds both, and the half wins), and under `diff.layout = 'auto'` no more than leaves the diff
   the split layout it has at the least. The commits list has no names to fit and takes the least (`least_columns`).
+- The trees' line counts come from `git.working_stats`, or `git.stats` for a commit's files. `review_tree.counts_shown`
+  holds whether they show, for the session, starting from `review.tree_counts`.
 - `Panel:fit` applies a width. It runs in full at open, on a base change, when a commit's files or the list take over the
   panel, and when the review's annotations reopen. A refresh that changed something only grows the width, so the diff
   stays put; a change of the editor's columns, also one missed in another tab (`TabEnter`), fits in full. A width iter
   didn't set is the user's (`Panel.held`, a `WinResized` that finds the window differing from `panel.columns`). It stays
   until the panel closes and across editor resizes returns as far as half the editor allows.
-- Tree rows never shorten a name. What doesn't fit stops at the row's right chunks or the window's edge, without `…`.
+- Tree rows never shorten a name with `…`. What doesn't fit fades out (`IterTreeFade1` to `4`) before the row's right chunks or the window's edge, and the right chunks keep their cells.
 - The review's tree comes from `iter.ui.tree`, pure functions from the changes to a directory tree, its visible rows and
   render lines: directories first, a chain of single directories on one row, a path's changes on one row. A closed
   directory is kept per review by path across refreshes and base changes. Tree order drives `=`, `]f` and `[f`, the

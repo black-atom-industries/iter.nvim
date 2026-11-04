@@ -15,6 +15,8 @@
 ---@class IterReviewOptions
 ---@field tree_width? integer|'auto' Columns of the file trees of the review, the status sidebar and the commits tab: 'auto' fits the longest name, a number of 10 or more is fixed
 ---@field tree_min_width? integer Least columns under `tree_width = 'auto'`, 10 or more
+---@field tree_max_width? integer Most columns under `tree_width = 'auto'`, 10 or more; `tree_min_width` wins over it
+---@field tree_counts? boolean Whether a Neovim session starts with line counts in the file trees
 
 ---@class IterDiffOptions
 ---@field expand_step? integer Hidden context lines revealed per expand
@@ -66,7 +68,7 @@
 ---@field status { style: 'sidebar'|'drawer' }
 ---@field drawer { height: number, zindex: integer, breakpoint: integer, commits: integer }
 ---@field diff { expand_step: integer, syntax_max_lines: integer, word_diff: boolean, layout: IterLayoutOption, split_breakpoint: integer, wrap: boolean, args: string[] }
----@field review { tree_width: integer|'auto', tree_min_width: integer }
+---@field review { tree_width: integer|'auto', tree_min_width: integer, tree_max_width: integer, tree_counts: boolean }
 ---@field export { intro: string }
 ---@field annotate { side: 'left'|'right', width: integer, review_breakpoint: integer }
 ---@field refresh { poll_ms: integer }

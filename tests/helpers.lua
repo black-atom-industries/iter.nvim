@@ -138,6 +138,16 @@ function M.cleanup(repo)
     end
 end
 
+--- Hide the line counts in the file trees of `child` for its session, for tests
+--- whose rows and screenshots aren't about them.
+---@param child table MiniTest child Neovim
+function M.hide_tree_counts(child)
+    child.lua([[
+        local options = require('iter.config').resolve().options
+        require('iter.ui.review_tree').toggle_counts(options)
+    ]])
+end
+
 --- Start `child` with the plugin loaded, cwd in `repo` and a screen setup
 --- that renders the same on every machine: fixed size, no statusline,
 --- ruler or showmode, and a cmdheight that never triggers hit-enter.

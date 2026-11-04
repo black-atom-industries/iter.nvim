@@ -1119,6 +1119,84 @@ end
 ---@field added? integer nil for a binary file
 ---@field deleted? integer nil for a binary file
 
+-- Line count per untracked file with the stat it was read at, by full path.
+---@type table<string, { key: string, stat: GitStat }>
+local untracked_counts = {}
+
+--- The lines an untracked file adds, read once until its stat changes. Nil
+--- when it can't be read.
+---@param root string
+---@param path string
+---@return GitStat?
+local function untracked_stat(root, path)
+    local full_path = vim.fs.joinpath(root, path)
+    local key = util.stat_key(full_path)
+
+    if key == nil then
+        return nil
+    end
+
+    local cached = untracked_counts[full_path]
+
+    if cached ~= nil and cached.key == key then
+        return cached.stat
+    end
+
+    local file = io.open(full_path, 'rb')
+    local content = file and file:read('*a')
+
+    if file ~= nil then
+        file:close()
+    end
+
+    if content == nil then
+        return nil
+    end
+
+    ---@type GitStat
+    local stat = { path = path, deleted = 0 }
+
+    -- A NUL in the start of a file is what makes git call it binary.
+    if not content:sub(1, 8000):find('\0', 1, true) then
+        local _, newlines = content:gsub('\n', '')
+
+        stat.added = newlines
+            + ((#content > 0 and content:sub(-1) ~= '\n') and 1 or 0)
+    else
+        stat.deleted = nil
+    end
+
+    untracked_counts[full_path] = { key = key, stat = stat }
+
+    return stat
+end
+
+--- The line counts of the working tree against `base` by path, the untracked
+--- files of `items` with them. Empty when git can't read them, as without a
+--- commit to count against.
+---@param root string
+---@param base string commit or tree
+---@param items { path: string, code: string, dir?: boolean }[]
+---@return table<string, GitStat>
+function git.working_stats(root, base, items)
+    vim.validate('base', base, 'string')
+    vim.validate('items', items, 'table')
+
+    local stats = {}
+
+    for _, stat in ipairs(git.stats(root, base) or {}) do
+        stats[stat.path] = stat
+    end
+
+    for _, item in ipairs(items) do
+        if item.code == '?' and not item.dir then
+            stats[item.path] = untracked_stat(root, item.path)
+        end
+    end
+
+    return stats
+end
+
 --- The lines added and deleted per file from `base` to `head`, or to the
 --- worktree's tracked files without `head`, in git's order.
 ---@param root string

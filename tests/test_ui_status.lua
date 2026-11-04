@@ -225,7 +225,7 @@ local ROWS = {
     '     ● M c.txt                 +1',
     '   ○ M a.txt                +1 −1',
     '   ◐ M b.txt                +2 −2',
-    '   ○ ? new.txt',
+    '   ○ ? new.txt                 +1',
 }
 
 T['open'] = new_set()
@@ -520,6 +520,7 @@ T['tree']['? lists the keys with collapse and expand'] = function()
         ' |        Show the diff side by side',
         ' -        Show the diff unified',
         ' gw       Toggle wrapping long lines',
+        ' gc       Toggle the line counts in the tree',
         ' q        Close',
         ' ?        Show the keys',
         ' <C-d>    Scroll the diff down',
@@ -1071,6 +1072,51 @@ T['commits']['a clean tree puts the cursor on the newest commit'] = function()
     eq(wait_summary()[3], ' initial')
 end
 
+T['counts'] = new_set()
+
+T['counts']['gc hides and shows the line counts and fits the sidebar'] = function()
+    child.o.columns = 200
+    helpers.write_file(
+        vim.fs.joinpath(repo, 'themes', 'black-atom-terra-fall-light.toml'),
+        { 'colors' }
+    )
+    open_status()
+    wait_preview({ 'unstaged dir/sub/d.txt' })
+
+    local function row(pattern)
+        return vim.iter(panel_lines()):find(function(line)
+            return line:find(pattern, 1, true) ~= nil
+        end)
+    end
+
+    local width = S .. '.panel.win'
+
+    eq(row('? new.txt'):match('%+1$'), '+1')
+    eq(child.api.nvim_win_get_width(child.lua_get(width)), 45)
+
+    child.type_keys('gc')
+
+    eq(row('? new.txt'), '   ○ ? new.txt')
+    eq(child.api.nvim_win_get_width(child.lua_get(width)), 42)
+
+    child.type_keys('gc')
+
+    eq(row('? new.txt'):match('%+1$'), '+1')
+    eq(child.api.nvim_win_get_width(child.lua_get(width)), 45)
+end
+
+T['counts']['review.tree_counts = false starts without them'] = function()
+    child.lua([[require('iter').setup({ review = { tree_counts = false } })]])
+    open_status()
+
+    eq(
+        vim.iter(panel_lines()):any(function(line)
+            return line == '   ○ ? new.txt'
+        end),
+        true
+    )
+end
+
 T['hand back'] = new_set()
 
 --- The window options the panel sets, as the current window has them.
@@ -1315,7 +1361,7 @@ T['hand back']['the sidebar grows to show long names whole'] = function()
     open_status()
     wait_preview({ 'unstaged dir/sub/d.txt' })
 
-    eq(child.api.nvim_win_get_width(child.lua_get(S .. '.panel.win')), 42)
+    eq(child.api.nvim_win_get_width(child.lua_get(S .. '.panel.win')), 45)
 end
 
 T['hand back']['a fixed review.tree_width keeps the sidebar there'] = function()

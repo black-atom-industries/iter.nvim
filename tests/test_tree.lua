@@ -328,6 +328,44 @@ T['lines']['stops the name before the right chunks, without shortening it'] = fu
     eq(vim.fn.strdisplaywidth(lines[1].text), 20)
 end
 
+T['lines']['fades the last cells of a cut name and keeps the right chunks'] = function()
+    local root = tree.build({ change('a_very_long_file_name.lua') })
+    local lines = tree.lines(tree.rows(root, {}), 21, {}, function()
+        return { right = { { '✎12', 'IterDrawerCount' } } }
+    end)
+    local spans = vim.tbl_map(function(span)
+        return {
+            lines[1].text:sub(span.start_col + 1, span.end_col),
+            span.group,
+        }
+    end, lines[1].highlights)
+
+    eq(spans, {
+        { 'M', 'IterDiffHeaderRule' },
+        { 'l', 'IterTreeFade1' },
+        { 'o', 'IterTreeFade2' },
+        { 'n', 'IterTreeFade3' },
+        { 'g', 'IterTreeFade4' },
+        { '✎12', 'IterDrawerCount' },
+    })
+end
+
+T['lines']['leaves a whole name unfaded'] = function()
+    local root = tree.build({ change('short.lua') })
+    local lines = tree.lines(tree.rows(root, {}), 21, {}, no_decor)
+
+    eq(#lines[1].highlights, 1)
+end
+
+T['lines']['fades a name shorter than the fade with the faintest steps'] = function()
+    local root = tree.build({ change('abc.lua') })
+    local lines = tree.lines(tree.rows(root, {}), 7, {}, no_decor)
+
+    eq(texts(lines), { '   M ab' })
+    eq(lines[1].highlights[2].group, 'IterTreeFade3')
+    eq(lines[1].highlights[3].group, 'IterTreeFade4')
+end
+
 T['width'] = new_set()
 
 T['width']['is what lines needs to cut no name, plus an edge cell'] = function()

@@ -39,6 +39,9 @@ local GUTTER = '   '
 local INDENT = '  '
 local ARROW = ' ← '
 
+local FADE_GROUPS =
+    { 'IterTreeFade1', 'IterTreeFade2', 'IterTreeFade3', 'IterTreeFade4' }
+
 ---@param items IterChange[]
 ---@return 'staged'|'partly'|'unstaged'|nil
 local function stage_of(items)
@@ -302,6 +305,24 @@ local function head(text, width)
     return kept
 end
 
+--- The chunks of a name cut short, its last cells fading out.
+---@param name string
+---@return [string, string?][]
+local function faded(name)
+    local count = vim.fn.strchars(name)
+    local steps = math.min(#FADE_GROUPS, count)
+    local chunks = { { vim.fn.strcharpart(name, 0, count - steps) } }
+
+    for step = 1, steps do
+        table.insert(chunks, {
+            vim.fn.strcharpart(name, count - steps + step - 1, 1),
+            FADE_GROUPS[#FADE_GROUPS - steps + step],
+        })
+    end
+
+    return chunks
+end
+
 --- `line` cut to `width` cells, its highlights cut with it.
 ---@param line IterRenderLine
 ---@param width integer
@@ -388,7 +409,13 @@ local function file_line(row, width, decor)
         table.insert(chunks, { file.name })
         table.insert(chunks, { ARROW .. renamed.orig_path, 'IterDrawerHint' })
     else
-        table.insert(chunks, { head(file.name, room) })
+        local name = head(file.name, room)
+
+        if name == file.name then
+            table.insert(chunks, { name })
+        else
+            vim.list_extend(chunks, faded(name))
+        end
     end
 
     if right_width > 0 then

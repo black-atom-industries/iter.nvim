@@ -184,6 +184,26 @@ T['apply()']['annotated text has a background without Normal and Visual'] = func
     neq(hl('IterAnnotationText').bg, nil)
 end
 
+T['apply()']['the tree fade steps from its text colour to its background'] = function()
+    vim.cmd('hi Normal guifg=#ffffff guibg=#000000')
+    vim.cmd('hi NormalFloat guifg=#ffffff guibg=#000000')
+    highlight.apply()
+
+    eq(hl('IterTreeFade1').fg, 0xcccccc)
+    eq(hl('IterTreeFade2').fg, 0x999999)
+    eq(hl('IterTreeFade3').fg, 0x666666)
+    eq(hl('IterTreeFade4').fg, 0x333333)
+end
+
+T['apply()']['the header fade steps from its text colour to its band'] = function()
+    vim.cmd('hi IterDiffHeader guifg=#ffffff guibg=#000000')
+    highlight.apply()
+
+    eq(hl('IterDiffHeaderFade1').fg, 0xcccccc)
+    eq(hl('IterDiffHeaderFade4').fg, 0x333333)
+    eq(hl('IterDiffHeaderFade1').bold, true)
+end
+
 T['setup()'] = new_set()
 
 T['setup()']['a colorscheme with an invisible diff background still shows rows'] = function()

@@ -445,6 +445,20 @@ T['files']["<CR> shows the commit's files as a tree with line counts"] = functio
     helpers.expect_screenshot(child, 'commits-files')
 end
 
+T['files']['gc hides and shows the line counts'] = function()
+    open_commits()
+    child.type_keys('jj')
+    summary(sha('HEAD~3'), sha('HEAD~2'))
+    child.type_keys('<CR>')
+    eq(page()[5], '   M a.txt                     ±2')
+
+    child.type_keys('gc')
+    eq(page()[5], '   M a.txt')
+
+    child.type_keys('gc')
+    eq(page()[5], '   M a.txt                     ±2')
+end
+
 T['files']['<CR> on a selection lists the files of its commits'] = function()
     open_commits()
     child.type_keys('j', 'V', 'j', '<CR>')

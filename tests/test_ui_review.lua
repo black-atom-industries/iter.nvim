@@ -207,6 +207,7 @@ local T = new_set({
         pre_case = function()
             repo = create_review_repo()
             helpers.start_child(child, repo)
+            helpers.hide_tree_counts(child)
             pin_drawer()
             stub_ui()
         end,
@@ -375,6 +376,7 @@ T['open']['outside a git repository warns and opens nothing'] = function()
     repo = vim.fn.resolve(vim.fn.tempname())
     vim.fn.mkdir(repo, 'p')
     helpers.start_child(child, repo)
+    helpers.hide_tree_counts(child)
     pin_drawer()
     stub_ui()
 
@@ -1024,6 +1026,7 @@ T['clean'] = new_set({
             helpers.cleanup(repo)
             repo = helpers.create_repo({ ['a.txt'] = { 'a' } })
             helpers.start_child(child, repo)
+            helpers.hide_tree_counts(child)
             pin_drawer()
             stub_ui()
         end,
@@ -1892,7 +1895,38 @@ T['reviewed']['in a narrow pane the diff header keeps the path readable'] = func
         child,
         [[require('iter').current_review.view:text_width() < 10]]
     )
-    eq(diff_header(), '')
+    eq(diff_header(), '  +2 −2 ')
+end
+
+T['reviewed']['a path too long for the header fades out before the line counts'] = function()
+    local name = string.rep('a', 100) .. '.txt'
+
+    helpers.write_file(vim.fs.joinpath(repo, name), { 'one' })
+    H.open(child)
+    H.select(child, 'unstaged', name)
+    H.wait_diff(child, 'unstaged ' .. name)
+
+    eq(diff_header(), '  +1 ')
+    eq(
+        child.lua_get([[(function()
+            local view = require('iter').current_review.view
+            local ns = vim.api.nvim_get_namespaces()['iter.diff']
+            local marks = vim.api.nvim_buf_get_extmarks(view.buf, ns, { 0, 0 }, { 0, -1 }, { details = true })
+            for _, mark in ipairs(marks) do
+                if mark[4].virt_text_pos == 'overlay' then
+                    return vim.tbl_map(function(chunk)
+                        return chunk[2]
+                    end, mark[4].virt_text)
+                end
+            end
+        end)()]]),
+        {
+            'IterDiffHeaderFade1',
+            'IterDiffHeaderFade2',
+            'IterDiffHeaderFade3',
+            'IterDiffHeaderFade4',
+        }
+    )
 end
 
 T['reviewed']['in the split layout at 70 columns the header fits beside the path'] = function()
@@ -2138,6 +2172,7 @@ T['reviewed']['reviewed marks survive a restart'] = function()
 
     child.stop()
     helpers.start_child(child, repo)
+    helpers.hide_tree_counts(child)
     pin_drawer()
     stub_ui()
     H.open(child)
@@ -2545,6 +2580,7 @@ T['files']['u without commits makes the file untracked again'] = function()
     helpers.write_file(vim.fs.joinpath(repo, 'm.txt'), { 'm' })
     helpers.git(repo, { 'add', 'm.txt' })
     helpers.start_child(child, repo)
+    helpers.hide_tree_counts(child)
     pin_drawer()
     stub_ui()
     H.open(child)
@@ -3185,6 +3221,7 @@ T['uri']['stale buffers with iter names give way'] = function()
     )
     child.stop()
     helpers.start_child(child, repo)
+    helpers.hide_tree_counts(child)
     pin_drawer()
     stub_ui()
     child.cmd('source ' .. vim.fn.fnameescape(session))
@@ -3441,6 +3478,58 @@ T['tree width']['stops at half the tab, the name not shortened'] = function()
 
     eq(rows:find('black-atom-terra-fall', 1, true) ~= nil, true)
     eq(rows:find('…', 1, true), nil)
+end
+
+T['tree width']['review.tree_max_width stops it and the cut name fades'] = function()
+    child.o.columns = 300
+    setup('{ review = { tree_max_width = 50 } }')
+    helpers.write_file(
+        vim.fs.joinpath(repo, 'themes', string.rep('a', 80) .. '.toml'),
+        { 'colors' }
+    )
+    H.open(child)
+
+    eq(tree_width(), 50)
+
+    local groups =
+        child.lua('local buf = vim.api.nvim_win_get_buf(' .. H.LIST_WIN .. [[)
+        local found = {}
+        for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, -1, 0, -1, { details = true })) do
+            local group = mark[4].hl_group
+            if type(group) == 'string' and group:find('^IterTreeFade') then
+                found[#found + 1] = group
+            end
+        end
+        table.sort(found)
+        return found
+    ]])
+
+    eq(groups, {
+        'IterTreeFade1',
+        'IterTreeFade2',
+        'IterTreeFade3',
+        'IterTreeFade4',
+    })
+end
+
+T['tree width']['gc shows and hides the line counts, untracked files with them'] = function()
+    child.o.columns = 200
+    helpers.write_file(vim.fs.joinpath(repo, 'new.txt'), { 'one', 'two' })
+    H.open(child)
+
+    local function new_row()
+        return vim.iter(tree_rows()):find(function(row)
+            return row:find('new.txt', 1, true) ~= nil
+        end)
+    end
+
+    eq(new_row():match('%+2'), nil)
+
+    child.type_keys('gc')
+    eq(new_row():match('%+2'), '+2')
+
+    child.type_keys('gc')
+    eq(new_row():match('%+2'), nil)
 end
 
 T['tree width']['a fixed review.tree_width ignores the names'] = function()

@@ -134,7 +134,10 @@ function Status.open(opts)
 
             return {
                 icon = tree.stage_icon(file.stage),
-                right = stat and layout.line_counts(stat),
+                right = stat
+                        and review_tree.counts_shown(self.config.options)
+                        and layout.line_counts(stat)
+                    or nil,
             }
         end,
         hints = function()
@@ -281,12 +284,7 @@ function Status:load()
         self.config.options.drawer.commits,
         self.recent
     )
-    self.stats = {}
-
-    -- Without a commit there is no HEAD to count against.
-    for _, stat in ipairs(git.stats(snapshot.root, 'HEAD') or {}) do
-        self.stats[stat.path] = stat
-    end
+    self.stats = git.working_stats(snapshot.root, 'HEAD', self.changes.unstaged)
 
     self.tree.root = tree.build(
         vim.list_extend(
@@ -882,6 +880,11 @@ end
 ---@return table<string, fun()>
 function Status:handlers()
     return vim.tbl_extend('error', diff_handlers(self), {
+        counts = function()
+            review_tree.toggle_counts(self.config.options)
+            self:fit_tree()
+            self:render()
+        end,
         open = function()
             local node = self.tree:node()
             local commit = self.tree:extra()

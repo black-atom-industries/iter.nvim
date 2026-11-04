@@ -321,6 +321,7 @@ local T = new_set({
         pre_case = function()
             repo = create_annotations_repo()
             helpers.start_child(child, repo, { lines = 30, columns = 120 })
+            helpers.hide_tree_counts(child)
             child.lua([[require('iter').setup()]])
             stub_ui()
             seed()
@@ -938,6 +939,7 @@ T['clean'] = new_set({
             helpers.cleanup(repo)
             repo = helpers.create_repo({ ['a.txt'] = { 'a' } })
             helpers.start_child(child, repo, { lines = 30, columns = 120 })
+            helpers.hide_tree_counts(child)
             child.lua([[require('iter').setup()]])
             stub_ui()
             child.lua(

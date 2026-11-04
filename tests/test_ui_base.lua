@@ -190,6 +190,7 @@ local T = new_set({
         pre_case = function()
             repo = create_base_repo()
             helpers.start_child(child, repo)
+            helpers.hide_tree_counts(child)
             stub_ui()
         end,
         post_case = function()
@@ -905,6 +906,7 @@ T['picker']['before the first commit Working changes lists the files as addition
     helpers.git(repo, { 'add', 'a.txt' })
     helpers.write_file(vim.fs.joinpath(repo, 'b.txt'), { 'b' })
     helpers.start_child(child, repo)
+    helpers.hide_tree_counts(child)
     stub_ui()
     H.open(child)
     child.type_keys('b')

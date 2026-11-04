@@ -35,7 +35,7 @@ local words = require('iter.diff.words')
 ---@field win integer
 ---@field side? 'old'|'new' side the pane shows in the split layout
 ---@field rows IterDocRow[] one per buffer line
----@field headers { mark?: integer, code?: integer, label?: integer }[] extmark ids of each section's header row
+---@field headers { mark?: integer, code?: integer, label?: integer, fade?: integer }[] extmark ids of each section's header row
 ---@field width integer digits of the widest line number
 ---@field drawn table<integer, true> lines whose syntax and words this render requested
 ---@field marks_width? integer text width the marks were wrapped to
@@ -136,6 +136,9 @@ local ROW_HL = {
     add = 'IterDiffAdd',
     del = 'IterDiffDelete',
 }
+
+-- Cells of a header's path that fade out, one `IterDiffHeaderFade` group each.
+local HEADER_FADE_STEPS = 4
 
 -- Header text and group per reviewed state.
 local REVIEWED_HEADER = {
@@ -816,15 +819,22 @@ end
 --- The chunks of `chunks` that fit in `width` cells, dropping from the
 --- front.
 ---@param chunks [string, string][]
----@param width integer
----@return [string, string][]
-local function fit_chunks(chunks, width)
+---@return integer
+local function virt_width(chunks)
     local total = 0
 
     for _, chunk in ipairs(chunks) do
         total = total + vim.fn.strdisplaywidth(chunk[1])
     end
 
+    return total
+end
+
+---@param chunks [string, string][]
+---@param width integer
+---@return [string, string][]
+local function fit_chunks(chunks, width)
+    local total = virt_width(chunks)
     local first = 1
 
     while first <= #chunks and total > width do
@@ -835,6 +845,40 @@ local function fit_chunks(chunks, width)
     return vim.list_slice(chunks, first)
 end
 
+--- The overlay of a path's last cells before `room`, fading out, as a byte
+--- column and chunks. Nil when the path fits.
+---@param path string
+---@param room integer
+---@return integer? col
+---@return [string, string][]? chunks
+local function path_fade(path, room)
+    if room < 1 or vim.fn.strdisplaywidth(path) <= room then
+        return nil
+    end
+
+    local kept = 0
+
+    for i = 1, vim.fn.strchars(path) do
+        if vim.fn.strdisplaywidth(vim.fn.strcharpart(path, 0, i)) > room then
+            break
+        end
+
+        kept = i
+    end
+
+    local start = math.max(0, kept - HEADER_FADE_STEPS)
+    local chunks = {}
+
+    for i = start, kept - 1 do
+        table.insert(chunks, {
+            vim.fn.strcharpart(path, i, 1),
+            'IterDiffHeaderFade' .. (HEADER_FADE_STEPS - (kept - 1 - i)),
+        })
+    end
+
+    return #vim.fn.strcharpart(path, 0, start), chunks
+end
+
 --- Draw the header row of section `index`: the code letter, and at the
 --- right the reviewed state, a mode change, the stat (`untracked · +n` for
 --- an untracked file) and, where the reviewed state shows, the count of
@@ -842,17 +886,19 @@ end
 --- any. In the split layout each side names its version after the path;
 --- in the unified layout a path the document shows twice names its side
 --- (`unstaged`, `staged`) there. Only the new side shows the right part,
---- with the reviewed state as its glyph. The right part sheds its parts from
---- the left where it would cover the path. Drawn again in place, so the
+--- with the reviewed state as its glyph. Where the right part would cover the
+--- path it shrinks to the line counts alone, which stay, and a path too long
+--- for what's left fades out before them. Drawn again in place, so the
 --- reviewed state and the count can change alone.
 ---@param index integer
 function View:decorate_header(index)
     local section = self.document.sections[index]
     local file = section.file
     local untracked = file.code == '?'
-    local stat = file.binary and 'binary'
+    local counts = file.binary and 'binary'
         or untracked and string.format('+%d', file.stat.add)
         or string.format('+%d −%d', file.stat.add, file.stat.del)
+    local stat = counts
 
     if untracked then
         stat = 'untracked · ' .. stat
@@ -917,7 +963,35 @@ function View:decorate_header(index)
                 + vim.fn.strdisplaywidth(label or '')
 
             right = fit_chunks(right, self:text_width(pane) - left - 1)
-            right = #right > 0 and right or nil
+            right = #right > 0 and right
+                or { { '  ' .. counts .. ' ', 'IterDiffHunk' } }
+        end
+
+        local fade_col, fade_chunks
+
+        if
+            vim.api.nvim_win_is_valid(pane.win)
+            and not vim.wo[pane.win].wrap
+        then
+            fade_col, fade_chunks = path_fade(
+                text,
+                self:text_width(pane)
+                    - vim.fn.strdisplaywidth(file.code .. ' ')
+                    - (right and virt_width(right) or 0)
+            )
+        end
+
+        if fade_col ~= nil then
+            ids.fade =
+                vim.api.nvim_buf_set_extmark(pane.buf, NS, lnum, fade_col, {
+                    id = ids.fade,
+                    virt_text = fade_chunks,
+                    virt_text_pos = 'overlay',
+                    hl_mode = 'combine',
+                })
+        elseif ids.fade ~= nil then
+            vim.api.nvim_buf_del_extmark(pane.buf, NS, ids.fade)
+            ids.fade = nil
         end
 
         ids.code = vim.api.nvim_buf_set_extmark(pane.buf, NS, lnum, 0, {

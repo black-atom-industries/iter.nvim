@@ -443,7 +443,12 @@ function Commits:files_page()
         decorate = function(file)
             local stat = opened.stats[file.path]
 
-            return { right = stat and { layout.line_count(stat) } }
+            return {
+                right = stat
+                        and review_tree.counts_shown(self.config.options)
+                        and { layout.line_count(stat) }
+                    or nil,
+            }
         end,
         hints = function()
             local split = self.view.layout == 'split'
@@ -783,6 +788,16 @@ function Commits:make_handlers()
         split = view.split,
         unified = view.unified,
         wrap = view.wrap,
+        counts = function()
+            review_tree.toggle_counts(self.config.options)
+
+            if self.files ~= nil then
+                self:fit_panel()
+                self.quiet = true
+                self.panel:render()
+                self.quiet = false
+            end
+        end,
         collapse = function()
             self:fold('collapse')
         end,

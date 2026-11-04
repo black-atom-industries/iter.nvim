@@ -53,7 +53,12 @@ T['resolve()']['returns the defaults without options'] = function()
     eq(resolved.keys.diff.yank, { 'y' })
     eq(resolved.keys.diff.yank_all, { 'Y' })
     eq(resolved.keys.diff.delete, { 'd' })
-    eq(resolved.options.review, { tree_width = 'auto', tree_min_width = 34 })
+    eq(resolved.options.review, {
+        tree_width = 'auto',
+        tree_min_width = 34,
+        tree_max_width = 60,
+        tree_counts = true,
+    })
     eq(resolved.keys.tree.yank, { 'y' })
     eq(resolved.keys.tree.yank_all, { 'Y' })
     eq(resolved.keys.tree.collapse, { 'h' })
@@ -243,6 +248,18 @@ T['resolve() errors']['on a review.tree_min_width below 10'] = function()
     expect_error(function()
         config.resolve({ review = { tree_min_width = 9 } })
     end, 'opts%.review%.tree_min_width must be 10 or more')
+end
+
+T['resolve() errors']['on a review.tree_max_width below 10'] = function()
+    expect_error(function()
+        config.resolve({ review = { tree_max_width = 9 } })
+    end, 'opts%.review%.tree_max_width must be 10 or more')
+end
+
+T['resolve() errors']['on a review.tree_counts that is no boolean'] = function()
+    expect_error(function()
+        config.resolve({ review = { tree_counts = 'yes' } })
+    end, 'opts%.review%.tree_counts')
 end
 
 T['resolve()']['takes a fixed review.tree_width'] = function()

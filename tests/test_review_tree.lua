@@ -390,7 +390,7 @@ local function options(review, diff)
     return {
         review = vim.tbl_extend(
             'force',
-            { tree_width = 'auto', tree_min_width = 34 },
+            { tree_width = 'auto', tree_min_width = 34, tree_max_width = 60 },
             review
         ),
         diff = vim.tbl_extend(
@@ -425,6 +425,35 @@ T['columns']['auto stops at half the editor'] = function()
 
     eq(fitted:columns(options({}), 80), 40)
     fitted:close()
+    vim.o.columns = columns
+end
+
+T['columns']['auto stops at tree_max_width on a wide editor'] = function()
+    local columns = vim.o.columns
+    local fitted = long_page(300)
+
+    fitted.root = tree.build({
+        { path = string.rep('a', 80) .. '.lua', side = 'unstaged', code = 'M' },
+    })
+
+    eq(fitted:columns(options({}), 300), 60)
+    eq(fitted:columns(options({ tree_max_width = 50 }), 300), 50)
+
+    vim.o.columns = columns
+end
+
+T['columns']['tree_min_width beats tree_max_width'] = function()
+    local columns = vim.o.columns
+    local fitted = long_page(300)
+
+    eq(
+        fitted:columns(
+            options({ tree_min_width = 70, tree_max_width = 50 }),
+            300
+        ),
+        70
+    )
+
     vim.o.columns = columns
 end
 
@@ -463,6 +492,28 @@ T['columns']["under diff 'auto' a diff unified at the least doesn't limit it"] =
     eq(fitted:columns(options({}, { layout = 'auto' }), 140), LONG_COLUMNS)
     fitted:close()
     vim.o.columns = columns
+end
+
+T['counts_shown'] = new_set()
+
+T['counts_shown']['follows the option until toggled, then holds the choice'] = function()
+    package.loaded['iter.ui.review_tree'] = nil
+
+    local fresh = require('iter.ui.review_tree')
+    local shown = { review = { tree_counts = true } }
+    local hidden = { review = { tree_counts = false } }
+
+    eq(fresh.counts_shown(shown), true)
+    eq(fresh.counts_shown(hidden), false)
+
+    fresh.toggle_counts(shown)
+    eq(fresh.counts_shown(shown), false)
+    eq(fresh.counts_shown(hidden), false)
+
+    fresh.toggle_counts(shown)
+    eq(fresh.counts_shown(hidden), true)
+
+    package.loaded['iter.ui.review_tree'] = review_tree
 end
 
 T['least_columns'] = new_set()

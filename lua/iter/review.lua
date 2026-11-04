@@ -493,7 +493,14 @@ function Review:load()
 
     self.tree.root = tree.build(items)
 
-    return true, self:load_store()
+    local before_stats = self.stats
+
+    self.stats =
+        git.working_stats(snapshot.root, base and base.sha or 'HEAD', items)
+
+    local stored = self:load_store()
+
+    return true, stored or not vim.deep_equal(before_stats, self.stats)
 end
 
 --- Read the stored annotations and reviewed records through the store cache,
@@ -527,8 +534,8 @@ function Review:load_store()
         or not vim.deep_equal(before_reviewed, self.reviewed)
 end
 
---- A file row shows its staging state in working changes, its annotation
---- count and its reviewed mark at the right.
+--- A file row shows its staging state in working changes, and at the right its
+--- line counts, its annotation count and its reviewed mark.
 ---@return fun(file: IterTreeFile): IterTreeDecor
 function Review:decorator()
     local counts, annotations
@@ -543,6 +550,11 @@ function Review:decorator()
         local count = file_count(counts, file)
         local mark = not file.items[1].dir
             and REVIEWED_MARKS[self.reviewed[file.path]]
+        local stat = self.stats[file.path]
+
+        if stat ~= nil and review_tree.counts_shown(self.config.options) then
+            vim.list_extend(right, layout.line_counts(stat))
+        end
 
         if count > 0 then
             table.insert(right, { ' ✎' .. count, 'IterDrawerCount' })
@@ -1243,6 +1255,11 @@ function Review:tree_handlers()
         end,
         wrap = function()
             self.preview:toggle_wrap()
+        end,
+        counts = function()
+            review_tree.toggle_counts(self.config.options)
+            self:fit_tree()
+            self:render()
         end,
         annotate_file = function()
             local file = self:row_file()

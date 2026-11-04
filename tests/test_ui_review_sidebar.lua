@@ -85,6 +85,7 @@ local T = new_set({
         pre_case = function()
             repo = create_sidebar_repo()
             helpers.start_child(child, repo, { lines = 30, columns = 200 })
+            helpers.hide_tree_counts(child)
             child.lua([[require('iter').setup()]])
             seed()
         end,

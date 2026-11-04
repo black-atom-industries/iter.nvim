@@ -10,6 +10,11 @@ local tree = require('iter.ui.tree')
 
 local M = {}
 
+-- Whether the trees show line counts, chosen last in any tree and held for the
+-- session. Before any choice, a tree starts with `review.tree_counts`.
+---@type boolean?
+local counts_shown = nil
+
 ---@class IterReviewTreeOptions
 ---@field view IterView the keys view the page maps
 ---@field keys table<string, string[]> resolved keys of `view`
@@ -78,6 +83,23 @@ function M.least_columns(options)
     )
 end
 
+--- Whether the trees show line counts.
+---@param options IterResolvedOptions
+---@return boolean
+function M.counts_shown(options)
+    if counts_shown == nil then
+        return options.review.tree_counts
+    end
+
+    return counts_shown
+end
+
+--- Show the line counts if the trees hide them, else hide them.
+---@param options IterResolvedOptions
+function M.toggle_counts(options)
+    counts_shown = not M.counts_shown(options)
+end
+
 --- The hint chunks of each line for `width` cells, one cell in.
 ---@param self IterReviewTree
 ---@param width integer
@@ -92,9 +114,9 @@ local function hint_chunks(self, width)
 end
 
 --- The columns of the panel for the page. Under `review.tree_width = 'auto'`
---- the longest name asks, from `least_columns` to half the editor, and under
---- `diff.layout = 'auto'` to no more than leaves the diff the split layout it
---- has at the least.
+--- the longest name asks, from `least_columns` to `review.tree_max_width` or
+--- half the editor, whichever is less, and under `diff.layout = 'auto'` to no
+--- more than leaves the diff the split layout it has at the least.
 ---@param options IterResolvedOptions
 ---@param available integer the cells the panel, its separator and the diff share
 ---@return integer
@@ -105,7 +127,10 @@ function Tree:columns(options, available)
         return least
     end
 
-    local most = math.max(least, math.floor(vim.o.columns / 2))
+    local most = math.max(
+        least,
+        math.min(options.review.tree_max_width, math.floor(vim.o.columns / 2))
+    )
 
     if options.diff.layout == 'auto' then
         local room = available - 1 - options.diff.split_breakpoint

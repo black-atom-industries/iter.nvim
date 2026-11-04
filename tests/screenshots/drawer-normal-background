@@ -21,7 +21,7 @@
 20|                                                                                
 21| Recent commits                                                                 
 22| 021b9c0  initial                                                            2h 
-23| s stage  u unstage  d discard  I ignore  <CR> open  r review  ? help           
+23| <Space> stage  d discard  I ignore  <CR> open  r review  = all files  ? help   
 24|                                                                                
 
 --|---------|---------|---------|---------|---------|---------|---------|---------|
@@ -47,5 +47,5 @@
 20|<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 21|;;;;;;;;;;;;;;;<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 22|<BBBBBBB<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<BBBB
-23|<C44444444C4444444444C4444444444C444444444CCCC4444444C444444444C44444<<<<<<<<<<<
+23|<CCCCCCC44444444C4444444444C444444444CCCC4444444C444444444C444444444444C44444<<<
 24|DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
