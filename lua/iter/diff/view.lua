@@ -1,10 +1,13 @@
+local Gutter = require('iter.diff.gutter')
 local anchor = require('iter.annotations.anchor')
 local document = require('iter.diff.document')
+local graphics = require('iter.graphics')
 local highlight = require('iter.highlight')
 local keymap = require('iter.keymap')
 local list = require('iter.annotations.list')
 local marks = require('iter.annotations.marks')
 local model = require('iter.diff.model')
+local ribbons = require('iter.diff.ribbons')
 local syntax = require('iter.diff.syntax')
 local util = require('iter.util')
 local words = require('iter.diff.words')
@@ -44,6 +47,7 @@ local words = require('iter.diff.words')
 ---@field layout IterDocLayout layout of the documents the view shows
 ---@field wrap boolean long lines wrap in the unified layout
 ---@field old? IterDiffPane the old side, in the split layout
+---@field gutter? IterDiffGutter the ribbons, in the split layout of a terminal that shows them
 ---@field name? string buffer name, see `set_name`
 ---@field files IterFileDiff[] the files of the document, in order
 ---@field saved_winopts? table<string, any> restored when the view leaves a user window
@@ -83,9 +87,13 @@ local NS_ANNOTATION_TEXT =
 -- emphasis background also shows over a capture that sets one.
 local ROW_PRIORITY = vim.hl.priorities.treesitter - 50
 local NS_CURSOR = vim.api.nvim_create_namespace('iter.diff.cursor')
+local NS_ACTIVE = vim.api.nvim_create_namespace('iter.diff.active')
 local WORD_PRIORITY = vim.hl.priorities.treesitter + 50
 
 local WORD_HL = { add = 'IterDiffAddText', del = 'IterDiffDeleteText' }
+
+-- The blank cells of the new side's rail that the gutter's canvas covers.
+local GUTTER_CELLS = string.rep(' ', ribbons.EXTRA)
 
 -- Fill of a filler row, wider than any pane.
 local FILL = string.rep('╱', 300)
@@ -215,6 +223,7 @@ function View.new(opts)
     )
 
     highlight.setup()
+    graphics.probe()
 
     local self = setmetatable({
         buf = vim.api.nvim_create_buf(false, true),
@@ -264,6 +273,10 @@ function View.new(opts)
         buffer = self.buf,
         callback = function()
             self:restore_winopts()
+
+            if self.gutter ~= nil then
+                self.gutter:hide()
+            end
         end,
     })
     vim.api.nvim_create_autocmd('BufWipeout', {
@@ -283,6 +296,12 @@ function View.new(opts)
                     return
                 end
             end
+        end,
+    })
+    vim.api.nvim_create_autocmd({ 'WinResized', 'VimResized', 'ColorScheme' }, {
+        group = self.group,
+        callback = function()
+            self:draw_gutter()
         end,
     })
     self:watch_cursor(self.buf)
@@ -336,6 +355,8 @@ function View:watch_cursor(buf)
         buffer = buf,
         callback = function()
             local win = vim.api.nvim_get_current_win()
+
+            self:draw_gutter(true)
 
             if
                 self.on_cursor ~= nil
@@ -397,7 +418,9 @@ function View:open_old()
     local win = vim.api.nvim_open_win(buf, false, {
         split = 'left',
         win = self.win,
-        width = math.floor((vim.api.nvim_win_get_width(self.win) - 1) / 2),
+        width = math.floor(
+            (vim.api.nvim_win_get_width(self.win) - 1 - self:gutter_cells()) / 2
+        ),
     })
 
     -- A new window copies the jumplist of the window it opens from.
@@ -502,6 +525,7 @@ function View:close_old()
         return
     end
 
+    self:close_gutter()
     self.old = nil
     views[old.buf] = nil
 
@@ -529,7 +553,73 @@ function View:close_old()
     end
 end
 
---- Give both panes of the split layout half of their width together.
+--- Close the ribbons.
+function View:close_gutter()
+    if self.gutter ~= nil then
+        self.gutter:close()
+        self.gutter = nil
+    end
+end
+
+--- The cells the new side's rail gives the gutter.
+---@return integer
+function View:gutter_cells()
+    return self.gutter ~= nil and ribbons.EXTRA or 0
+end
+
+--- Bring the ribbons up to date with the view and the terminal. With
+--- `cursor_moved` only the chunk under the cursor can have changed.
+---@param cursor_moved? boolean
+function View:draw_gutter(cursor_moved)
+    local gutter = self.gutter
+
+    if
+        gutter == nil
+        or not self:is_shown()
+        or not util.is_valid_win(self.win)
+    then
+        return
+    end
+
+    local lnum = vim.api.nvim_win_get_cursor(self:active().win)[1]
+    local changed = gutter:set_cursor(lnum)
+
+    if changed then
+        self:mark_active()
+    end
+
+    if changed or not cursor_moved then
+        gutter:draw()
+    end
+end
+
+--- Draw the change rows of the chunk under the cursor in the stronger tint,
+--- the one the band takes too.
+function View:mark_active()
+    local chunk = self.gutter.active
+
+    for _, pane in ipairs(self:panes()) do
+        vim.api.nvim_buf_clear_namespace(pane.buf, NS_ACTIVE, 0, -1)
+
+        for lnum = chunk and chunk.first or 1, chunk and chunk.last or 0 do
+            local group = CURSOR_HL[pane.rows[lnum].kind]
+
+            if group ~= nil then
+                vim.api.nvim_buf_set_extmark(pane.buf, NS_ACTIVE, lnum - 1, 0, {
+                    end_row = lnum,
+                    end_col = 0,
+                    strict = false,
+                    hl_eol = true,
+                    hl_group = group,
+                    priority = ROW_PRIORITY + 1,
+                })
+            end
+        end
+    end
+end
+
+--- Give both panes of the split layout half of their width together, the
+--- gutter's cells aside, so their text is equally wide.
 function View:even_widths()
     local old = self.old
 
@@ -542,7 +632,9 @@ function View:even_widths()
     end
 
     local width = vim.api.nvim_win_get_width(old.win)
-    local half = math.floor((width + vim.api.nvim_win_get_width(self.win)) / 2)
+    local half = math.floor(
+        (width + vim.api.nvim_win_get_width(self.win) - self:gutter_cells()) / 2
+    )
 
     if width ~= half then
         -- A fixed neighbor would make the old pane take its width from the
@@ -603,6 +695,7 @@ function View:sync(from)
     vim.api.nvim_win_call(from.win, function()
         vim.cmd('syncbind')
     end)
+    self:draw_gutter()
 end
 
 --- Show the documents in `layout` from now on, the one shown at once.
@@ -829,6 +922,10 @@ function View:decorate(pane, row, lnum, expand_lhs)
     local mark
 
     if row.kind == 'filler' then
+        if self.gutter ~= nil then
+            return
+        end
+
         mark = {
             virt_text = { { FILL, 'IterDiffFiller' } },
             virt_text_pos = 'overlay',
@@ -1101,6 +1198,8 @@ function View:update_viewport(lnum)
     if first <= last then
         self:decorate_lines(first, last)
     end
+
+    self:draw_gutter()
 end
 
 --- The text of `row` in `pane`: the row's own, except that in the split
@@ -1145,6 +1244,12 @@ function View:arrange()
     local had_old = self.old ~= nil
 
     if self.document.layout == 'split' and util.is_valid_win(self.win) then
+        if graphics.on() then
+            self.gutter = self.gutter or Gutter.new(self.win)
+        else
+            self:close_gutter()
+        end
+
         self:open_old()
         self.old.rows = self.document.old_rows
         self.side = 'new'
@@ -1180,6 +1285,7 @@ function View:render()
             NS_WORDS,
             NS_ANNOTATIONS,
             NS_ANNOTATION_TEXT,
+            NS_ACTIVE,
         }) do
             vim.api.nvim_buf_clear_namespace(pane.buf, ns, 0, -1)
         end
@@ -1214,6 +1320,10 @@ function View:render()
         end
     end
 
+    if self.gutter ~= nil then
+        self.gutter:set_document(doc)
+    end
+
     self:update_viewport()
 
     if self:is_shown() then
@@ -1237,6 +1347,10 @@ function View:text_width(pane)
     end
 
     local rail = pane.side ~= nil and pane.width + 3 or 2 * pane.width + 4
+
+    if pane.side == 'new' then
+        rail = rail + self:gutter_cells()
+    end
 
     return math.max(1, vim.api.nvim_win_get_width(pane.win) - rail)
 end
@@ -2015,19 +2129,11 @@ local function formats_for(width, side)
     return formats
 end
 
---- 'statuscolumn' of a diff view: old and new line numbers and the change
---- sign, in the split layout the number of the pane's side, the header
---- band on a file header, the rule above it, blank on virtual and wrapped
---- lines.
+--- The rail of the line being drawn in `pane`.
+---@param pane IterDiffPane
+---@param gutter? IterDiffGutter
 ---@return string
-function View.statuscolumn()
-    local buf = vim.api.nvim_win_get_buf(vim.g.statusline_winid)
-    local pane = pane_of(buf)
-
-    if pane == nil then
-        return ''
-    end
-
+local function rail(pane, gutter)
     local formats = formats_for(pane.width, pane.side)
     local row = pane.rows[vim.v.lnum]
 
@@ -2038,7 +2144,7 @@ function View.statuscolumn()
     local kind = row.kind
 
     if kind == 'filler' then
-        return formats.filler or formats.blank
+        return gutter == nil and formats.filler or formats.blank
     elseif kind == 'header' then
         return formats.header
     elseif kind == 'blank' then
@@ -2054,8 +2160,9 @@ function View.statuscolumn()
         return string.format(formats.context, row.old, row.new)
     end
 
-    local cursor = vim.v.relnum == 0
-        and vim.wo[vim.g.statusline_winid].cursorline
+    local cursor = (
+        vim.v.relnum == 0 and vim.wo[vim.g.statusline_winid].cursorline
+    ) or (gutter ~= nil and gutter:is_active(vim.v.lnum))
 
     if kind == 'del' then
         return string.format(
@@ -2071,5 +2178,35 @@ function View.statuscolumn()
 
     return formats.blank
 end
+
+--- 'statuscolumn' of a diff view: old and new line numbers and the change
+--- sign, in the split layout the number of the pane's side, the header
+--- band on a file header, the rule above it, blank on virtual and wrapped
+--- lines. With ribbons the new side's starts with the cells under the gutter's
+--- canvas, in every case, since the column's width comes from one line's.
+---@return string
+function View.statuscolumn()
+    local buf = vim.api.nvim_win_get_buf(vim.g.statusline_winid)
+    local pane = pane_of(buf)
+
+    if pane == nil then
+        return ''
+    end
+
+    local gutter = views[buf].gutter
+    local text = rail(pane, gutter)
+
+    return gutter ~= nil and pane.side == 'new' and GUTTER_CELLS .. text or text
+end
+
+-- The answer about images can come after a split opened, or change later.
+graphics.subscribe(function()
+    for buf, view in pairs(views) do
+        if view.buf == buf and view.layout == 'split' and view:is_shown() then
+            view:show_document(view.document)
+            view:even_widths()
+        end
+    end
+end)
 
 return View

@@ -74,6 +74,16 @@ the review straight to an agent pane.
   `cursorbind`; both have the same lines, and an annotation's `virt_lines` on one side get blank `virt_lines` of the
   same height on the other. Moves the code makes go through `View:sync()`, since the binds follow only the current
   window.
+- In a terminal that shows images the split draws ribbons between its sides (`iter.diff.ribbons` for shapes and pixels,
+  `iter.diff.gutter` for one view's on screen, rules in `tests/visual_contract.md`). The rows, binds, staging and
+  annotations stay the same. The gutter is 5 cells: the separator and 4 blank cells at the left of the new side's
+  `statuscolumn`, in every branch of it. `View:even_widths` leaves both sides the same text width. A non-focusable float
+  (`relative = 'win'`, `col = -1`, `zindex` 1, `scrollbind` and `cursorbind` off) covers them; it opens and closes with
+  the old side's pane, and every window count that matters skips floats or sees it go with that pane.
+- `iter.graphics` knows the terminal and has no idea of diffs: `iter.graphics` the probe (a graphics query and a device
+  attributes sentinel, never a terminal's name; off in tmux, without a terminal UI or true colour) and the cell size,
+  `protocol` the escape sequences, `surface` pixels in memory, `canvas` a float showing them. The answer can change
+  after a split opened, also when a terminal rejects an image late; every split view then shows its document again.
 - A patch of selected lines (`patch.lines`) writes each change group in pair order, the split layout's: a deleted
   line next to the added line it pairs with, so a staged or unstaged line goes next to its partner, which stays unless the selection takes it too.
 - A document of several files decorates per viewport: syntax, word emphasis and annotation `virt_lines` for the lines
@@ -134,7 +144,7 @@ the review straight to an agent pane.
   (`reviewed.base_key`). Empty buckets are pruned.
 - Discard never touches the index or ignored files: an unstaged row restores from the index, an untracked row deletes
   only its untracked files, and the confirm names the paths. The Staged column has no discard.
-- The drawer float sits at the bottom of its pane (`relative = 'win'`, `anchor = 'SW'`) at `drawer.zindex`; the help
+- The ribbons' float sits under every other float at `zindex` 1. The drawer float sits at the bottom of its pane (`relative = 'win'`, `anchor = 'SW'`) at `drawer.zindex`; the help
   float uses `drawer.zindex + 10`, the annotation float `+ 20`. Every float follows editor and window resizes through
   `iter.ui.float`: the drawer through `float.open`, the help and annotation floats through `float.follow_resize`.
 - The review tab is three splits: the panel (`iter.ui.panel`), a full-height window at the tab's left edge,

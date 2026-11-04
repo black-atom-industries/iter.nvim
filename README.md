@@ -989,8 +989,8 @@ event, so no colorscheme needs to define them.
 | `IterCommitAuthor`           | Commit author in the commit and base previews             | link to `Identifier`                                                        |
 | `IterDiffAdd`                | Added line rows                                           | bg of `DiffAdd`, blended with `Normal`                                      |
 | `IterDiffDelete`             | Deleted line rows                                         | bg of `DiffDelete`, blended with `Normal`                                   |
-| `IterDiffAddCursor`          | Added line row under the cursor                           | bg of `IterDiffAdd`, 10 % towards the fg of `IterDiffAddNr`                 |
-| `IterDiffDeleteCursor`       | Deleted line row under the cursor                         | bg of `IterDiffDelete`, 10 % towards the fg of `IterDiffDeleteNr`           |
+| `IterDiffAddCursor`          | Added row under the cursor, its change with ribbons       | bg of `IterDiffAdd`, 10 % towards the fg of `IterDiffAddNr`                 |
+| `IterDiffDeleteCursor`       | Deleted row under the cursor, its change with ribbons     | bg of `IterDiffDelete`, 10 % towards the fg of `IterDiffDeleteNr`           |
 | `IterDiffAddText`            | Changed words in added lines                              | bg of `DiffAdd`                                                             |
 | `IterDiffDeleteText`         | Changed words in deleted lines                            | bg of `DiffDelete`                                                          |
 | `IterDiffAddNr`              | Line number of added lines                                | fg of `diffAdded`, `Added`, `DiffAdd`; bg as `IterDiffAdd`                  |
@@ -1000,12 +1000,24 @@ event, so no colorscheme needs to define them.
 | `IterDiffHeaderRule`         | Rule above a file header and the drawer, code letter      | fg of `Title`                                                               |
 | `IterDiffHunk`               | Hunk headers and stats                                    | link to `Comment`                                                           |
 | `IterDiffGap`                | Collapsed unchanged lines                                 | link to `Folded`                                                            |
-| `IterDiffFiller`             | Filler rows beside a one-sided change                     | link to `NonText`                                                           |
+| `IterDiffFiller`             | Filler rows beside a one-sided change, without ribbons    | link to `NonText`                                                           |
 | `IterDiffAnnotation`         | Annotation text                                           | link to `NormalFloat`                                                       |
 | `IterDiffAnnotationOutdated` | Annotation whose lines changed                            | link to `Comment`                                                           |
 | `IterDiffAnnotationFocus`    | Focused annotation                                        | link to `Visual`                                                            |
 | `IterAnnotationSign`         | Annotation sign in the gutter                             | link to `Special`                                                           |
 | `IterAnnotationText`         | Annotated text: the words of a passage, else full lines   | fg of `@function`, `Function`, blended 15 % into `Normal`; else `Visual` bg |
+
+The ribbons take their colours from these groups: bands from the bg of
+`IterDiffAdd` and `IterDiffDelete`, the change under the cursor from the bg of
+`IterDiffAddCursor` and `IterDiffDeleteCursor`.
+
+### Ribbons
+
+In the split layout, smooth bands between the two sides show how a change on one
+side maps to the other, and the change under the cursor takes a stronger tint on
+both sides and its band. They need a terminal based on Ghostty or Kitty: iter draws them as
+pixels with the Kitty graphics protocol and Unicode placeholders. Every other
+terminal, tmux included, shows the split with `╱` filler rows.
 
 ### Files
 
@@ -1043,7 +1055,11 @@ pinned in `deps/` by `just test` and moved with `just bump-mini`.
   it again.
 
 The README clips are recorded with [VHS](https://github.com/charmbracelet/vhs)
-from the tapes in `docs/assets/tapes/`; each tape says how to run it.
+from the tapes in `docs/assets/tapes/`; each tape says how to run it. VHS has no
+Kitty graphics, so its clips show the split without ribbons.
+
+`tests/visual_contract.md` holds the rules of the ribbons that screenshots can't
+express, since a test's child Neovim shows no images.
 
 ## Credits
 
@@ -1057,3 +1073,5 @@ follow [annotator.nvim](https://github.com/chpeters/annotator.nvim).
 [CoreyKaylor](https://github.com/CoreyKaylor) is our reference for diff
 rendering: bezier connector ribbons between the two sides, drawn with the Kitty
 graphics protocol, and change blocks from a Lua port of IntelliJ's diff engine.
+`lua/iter/graphics/` adapts its code under the Apache License 2.0, in
+`LICENSES/Apache-2.0-diffbandit.txt`.

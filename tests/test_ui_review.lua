@@ -2510,8 +2510,8 @@ end
 
 T['flow'] = new_set()
 
--- Everything the whole flow could leave behind. The augroups of setup()
--- and of the highlight groups live for the session.
+-- Everything the whole flow could leave behind. The augroups of setup(),
+-- of the highlight groups and of the graphics probe live for the session.
 local FLOW_STATE = [[(function()
     local handles = {}
     vim.uv.walk(function(handle)
@@ -2526,6 +2526,7 @@ local FLOW_STATE = [[(function()
             vim.startswith(name, 'iter.')
             and name ~= 'iter.buffer_annotations'
             and name ~= 'iter.highlight'
+            and name ~= 'iter.graphics'
         then
             table.insert(groups, name)
         end
