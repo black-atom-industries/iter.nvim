@@ -1131,4 +1131,46 @@ T['api']["annotation({ scope = 'review' }) adds a review annotation"] = function
     eq(stored()[1].body, 'overall')
 end
 
+T['lifecycle']['a hidden draft saves only on the branch it was opened on'] = function()
+    start_annotation('on main')
+    child.type_keys('<C-t>')
+    helpers.git(repo, { 'switch', '--quiet', '-c', 'other' })
+    child.type_keys('<C-t>')
+    wait_editor()
+    child.type_keys('<C-s>')
+
+    eq(stored(), {})
+    eq(editor_shown(), true)
+    eq(child.lua_get([[vim.bo.modified]]), true)
+    eq(
+        notes(),
+        { '[iter] The annotation was started on main; go back to save it' }
+    )
+    eq(child.cmd_capture('messages'):find('E%d+') == nil, true)
+
+    helpers.git(repo, { 'switch', '--quiet', 'main' })
+    child.type_keys('<C-s>')
+
+    eq(
+        vim.tbl_map(function(c)
+            return c.body
+        end, stored()),
+        { 'on main' }
+    )
+end
+
+T['lifecycle']['a saved, hidden draft gives way to the next one'] = function()
+    start_annotation('first')
+    child.type_keys('<Esc>')
+    child.cmd('write')
+    child.type_keys('<C-t>')
+    eq(editor_shown(), false)
+    diff_cursor('l4')
+    child.type_keys('a')
+    wait_editor()
+
+    eq(child.lua_get([[vim.api.nvim_buf_get_lines(0, 0, -1, false)]]), { '' })
+    eq(notes(), {})
+end
+
 return T

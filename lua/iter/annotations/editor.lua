@@ -534,7 +534,7 @@ function M.open(opts)
     vim.validate('opts.on_save', opts.on_save, 'function', true)
 
     if draft ~= nil then
-        if not is_visible() or has_unsaved() then
+        if has_unsaved() then
             util.warn('Finish the open annotation first')
             M.show()
             return
