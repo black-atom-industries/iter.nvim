@@ -123,10 +123,18 @@ function git.run(args, opts)
 
     local cwd = opts.cwd or vim.fn.getcwd()
 
-    local job = vim.system(
+    -- A spawn that fails, such as on a root removed meanwhile, reads as a
+    -- failed command.
+    local spawned, job = pcall(
+        vim.system,
         cmd,
         { text = not opts.bytes, cwd = cwd, stdin = opts.stdin }
     )
+
+    if not spawned then
+        return { output = '', exit_code = 127, stderr = tostring(job) }
+    end
+
     local result = job:wait()
 
     local output = result.stdout or ''

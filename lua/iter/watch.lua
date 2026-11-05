@@ -121,6 +121,11 @@ end
 
 ---@param reason IterWatchReason
 function Shared:notify(reason)
+    -- A worktree removed while its view is open has nothing left to read.
+    if vim.uv.fs_stat(self.root) == nil then
+        return
+    end
+
     for _, sub in ipairs(vim.list_slice(self.subs)) do
         sub:notify(reason)
     end

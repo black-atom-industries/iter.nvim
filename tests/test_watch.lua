@@ -264,4 +264,18 @@ T['stop']['ends every event and closes its handles'] = function()
     helpers.cleanup(repo)
 end
 
+T['poll']['stays quiet once the root is gone'] = function()
+    local root = helpers.create_repo({ ['a.txt'] = { 'one' } })
+
+    start(root, 20)
+    wait_for(1)
+    vim.fn.delete(root, 'rf')
+    vim.wait(50)
+
+    local before = #reasons
+
+    vim.wait(200)
+    eq(#reasons, before)
+end
+
 return T
