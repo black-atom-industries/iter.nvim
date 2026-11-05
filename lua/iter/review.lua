@@ -592,9 +592,46 @@ function Review:header(width)
         })
     end
 
-    local total = #self:paths()
+    local files = self:paths()
+    local count =
+        string.format('%d %s', #files, #files == 1 and 'file' or 'files')
     local what = since ~= nil and changes_mod.base_title(since)
         or 'Working changes'
+    local summary = string.format(' %s · %s', what, count)
+    local added, deleted = 0, 0
+
+    for _, file in ipairs(files) do
+        local stat = self.stats[file.path]
+
+        if stat ~= nil then
+            added = added + (stat.added or 0)
+            deleted = deleted + (stat.deleted or 0)
+        end
+    end
+
+    local summary_chunks = { { summary, 'IterDrawerHint' } }
+
+    if
+        added + deleted > 0
+        and review_tree.counts_shown(self.config.options)
+    then
+        local lines_added = '+' .. added
+        local lines_deleted = '−' .. deleted
+        local tail = ' · ' .. lines_added .. ' ' .. lines_deleted
+
+        -- The numbers stay; the name of the comparison also stands above.
+        if vim.fn.strdisplaywidth(summary .. tail) > width - 1 then
+            summary = ' ' .. count
+        end
+
+        summary_chunks = {
+            { summary .. ' · ', 'IterDrawerHint' },
+            { lines_added, 'IterStage' },
+            { ' ' },
+            { lines_deleted, 'IterUnstage' },
+        }
+    end
+
     local progress = render.line('')
 
     -- Starts one cell in, as the title does, and keeps a cell to the edge.
@@ -607,17 +644,7 @@ function Review:header(width)
 
     return {
         render.chunks_line(title),
-        render.chunks_line({
-            {
-                string.format(
-                    ' %s · %d %s',
-                    what,
-                    total,
-                    total == 1 and 'file' or 'files'
-                ),
-                'IterDrawerHint',
-            },
-        }),
+        render.chunks_line(summary_chunks),
         progress,
     }
 end

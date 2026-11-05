@@ -3532,6 +3532,47 @@ T['tree width']['gc shows and hides the line counts, untracked files with them']
     eq(new_row():match('%+2'), nil)
 end
 
+--- The added and deleted lines of the tree's files, summed.
+---@return string
+local function summed_counts()
+    return child.lua_get([[(function()
+        local r = ]] .. R .. [[
+        local added, deleted = 0, 0
+        for _, stat in pairs(r.stats) do
+            added = added + (stat.added or 0)
+            deleted = deleted + (stat.deleted or 0)
+        end
+        return '+' .. added .. ' −' .. deleted
+    end)()]])
+end
+
+T['tree width']['the header sums the line counts while they show'] = function()
+    child.o.columns = 200
+    setup('{ review = { tree_width = 60 } }')
+    helpers.write_file(vim.fs.joinpath(repo, 'new.txt'), { 'one', 'two' })
+    H.open(child)
+
+    local files = tree_header()[2]
+
+    child.type_keys('gc')
+    eq(tree_header()[2], files .. ' · ' .. summed_counts())
+
+    child.type_keys('gc')
+    eq(tree_header()[2], files)
+end
+
+T['tree width']['a narrow header keeps the numbers and drops the name'] = function()
+    child.o.columns = 200
+    setup('{ review = { tree_width = 24 } }')
+    helpers.write_file(vim.fs.joinpath(repo, 'new.txt'), { 'one', 'two' })
+    H.open(child)
+
+    local files = tree_header()[2]:gsub('^Working changes · ', '')
+
+    child.type_keys('gc')
+    eq(tree_header()[2], files .. ' · ' .. summed_counts())
+end
+
 T['tree width']['a fixed review.tree_width ignores the names'] = function()
     child.o.columns = 200
     setup('{ review = { tree_width = 30 } }')

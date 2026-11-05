@@ -159,7 +159,10 @@ the review straight to an agent pane.
   whole, closed directories included, a rename's old path left out: at least `review.tree_min_width`, at most `review.tree_max_width` (the minimum wins) or half the
   editor (`panel.bounded` holds both, and the half wins), and under `diff.layout = 'auto'` no more than leaves the diff
   the split layout it has at the least. The commits list has no names to fit and takes the least (`least_columns`).
-- The trees' line counts come from `git.working_stats`, or `git.stats` for a commit's files. `review_tree.counts_shown`
+- The trees' line counts come from `git.working_stats`, or `git.stats` for a commit's files. An untracked file above
+  10 MB has no count, since counting reads it whole on the main thread. The review's header sums the tree's counts;
+  when the line doesn't fit, the comparison's name leaves it, since the title above names it too.
+  `review_tree.counts_shown`
   holds whether they show, for the session, starting from `review.tree_counts`.
 - `Panel:fit` applies a width. It runs in full at open, on a base change, when a commit's files or the list take over the
   panel, and when the review's annotations reopen. A refresh that changed something only grows the width, so the diff

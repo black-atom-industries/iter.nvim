@@ -396,7 +396,7 @@ for it.
 
 ```
  Review HEAD main
- Working changes · 6 files
+ Working changes · 6 files · +120 −14
  reviewed ▰▰▱▱▱▱▱▱▱▱▱▱ 2 of 6 · ↻ 1
 
   ▾ lua/iter/
