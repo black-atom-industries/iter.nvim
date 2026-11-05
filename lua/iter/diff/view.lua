@@ -1001,7 +1001,10 @@ function View:decorate_header(index)
             virt_text = {
                 {
                     file.code .. ' ',
-                    { 'IterDiffHeader', 'IterDiffHeaderRule' },
+                    {
+                        'IterDiffHeader',
+                        highlight.code_group(file.code),
+                    },
                 },
             },
             virt_text_pos = 'inline',

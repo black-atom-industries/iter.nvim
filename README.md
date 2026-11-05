@@ -989,6 +989,9 @@ event, so no colorscheme needs to define them.
 | `IterUnstage`                | Unstaged files in the drawer, `◐` in the tree             | fg of `Removed`, `Error`                                                    |
 | `IterUntracked`              | Untracked files                                           | fg of `DiagnosticInfo`, `Directory`, `Identifier`                           |
 | `IterConflict`               | Files with merge conflicts                                | fg of `DiagnosticError`, `ErrorMsg`, `Error`                                |
+| `IterCodeAdded`              | Letter `A` in the trees and the diff header               | fg of `Added`, `String`                                                     |
+| `IterCodeChanged`            | `M` and other letters in the trees and the diff header    | fg of `Changed`, `Identifier`                                               |
+| `IterCodeRemoved`            | Letter `D` in the trees and the diff header               | fg of `Removed`, `Error`                                                    |
 | `IterHead`                   | Branch name in the drawer and the tree                    | fg of `Identifier`, `Keyword`                                               |
 | `IterUnpushed`               | Unpushed commits and the ahead count                      | fg of `Constant`, `Number`                                                  |
 | `IterBehind`                 | Behind count                                              | fg of `Removed`, `Error`                                                    |
@@ -1017,7 +1020,7 @@ event, so no colorscheme needs to define them.
 | `IterDiffDeleteNr`           | Line number of deleted lines                              | fg of `diffRemoved`, `Removed`, `DiffDelete`; bg as `IterDiffDelete`        |
 | `IterDiffNr`                 | Line number of context lines                              | link to `LineNr`                                                            |
 | `IterDiffHeader`             | File header rows in the diff                              | fg of `Normal`; bg of `Title` fg, blended with `Normal`; bold               |
-| `IterDiffHeaderRule`         | Rule above a file header and the drawer, code letter      | fg of `Title`                                                               |
+| `IterDiffHeaderRule`         | Rule above a file header and the drawer                   | fg of `Title`                                                               |
 | `IterDiffHunk`               | Hunk headers and stats                                    | link to `Comment`                                                           |
 | `IterDiffGap`                | Collapsed unchanged lines                                 | link to `Comment`                                                           |
 | `IterDiffFiller`             | Filler rows beside a one-sided change, without ribbons    | link to `NonText`                                                           |

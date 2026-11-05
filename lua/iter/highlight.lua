@@ -102,6 +102,12 @@ local FOREGROUNDS = {
         sources = { 'DiagnosticError', 'ErrorMsg', 'Error' },
         fallback = 0xE06C75,
     },
+    IterCodeAdded = { sources = { 'Added', 'String' }, fallback = 0x98C379 },
+    IterCodeChanged = {
+        sources = { 'Changed', 'Identifier' },
+        fallback = 0x61AFEF,
+    },
+    IterCodeRemoved = { sources = { 'Removed', 'Error' }, fallback = 0xE06C75 },
     IterHead = { sources = { 'Identifier', 'Keyword' }, fallback = 0x61AFEF },
     IterUnpushed = { sources = { 'Constant', 'Number' }, fallback = 0xD19A66 },
     IterBehind = { sources = { 'Removed', 'Error' }, fallback = 0xE06C75 },
@@ -111,6 +117,21 @@ local FOREGROUNDS = {
         fallback = 0xE5C07B,
     },
 }
+
+-- Group of a change's status letter; every other letter is a change in place.
+local CODE_GROUPS = {
+    ['?'] = 'IterUntracked',
+    U = 'IterConflict',
+    A = 'IterCodeAdded',
+    D = 'IterCodeRemoved',
+}
+
+--- The group of the status letter `code` in the trees and the diff header.
+---@param code string
+---@return string
+function M.code_group(code)
+    return CODE_GROUPS[code] or 'IterCodeChanged'
+end
 
 -- Definition each group had right after iter last set it, by group name.
 ---@type table<string, table>

@@ -1,6 +1,7 @@
 --- Changed files as a directory tree: the tree, its visible rows and their
 --- render lines. Pure: it builds tables and touches no window or buffer.
 
+local highlight = require('iter.highlight')
 local render = require('iter.ui.render')
 
 ---@class IterTreeFile one row per path
@@ -257,18 +258,6 @@ function M.ancestors(path)
     return result
 end
 
----@param code string
----@return string
-local function code_group(code)
-    if code == '?' then
-        return 'IterUntracked'
-    elseif code == 'U' then
-        return 'IterConflict'
-    end
-
-    return 'IterDiffHeaderRule'
-end
-
 ---@param chunks [string, string][]
 ---@return integer
 local function chunks_width(chunks)
@@ -381,7 +370,7 @@ local function file_line(row, width, decor)
         table.insert(chunks, { ' ' })
     end
 
-    table.insert(chunks, { code, code_group(code) })
+    table.insert(chunks, { code, highlight.code_group(code) })
     table.insert(chunks, { ' ' })
 
     local right = decor.right or {}

@@ -274,7 +274,7 @@ T['lines']['draws directories, files, icons and right chunks'] = function()
     eq(lines[2].highlights, {
         { group = 'IterUnstage', start_col = icon, end_col = icon + #'◐' },
         {
-            group = 'IterDiffHeaderRule',
+            group = 'IterCodeChanged',
             start_col = letter,
             end_col = letter + 1,
         },
@@ -341,7 +341,7 @@ T['lines']['fades the last cells of a cut name and keeps the right chunks'] = fu
     end, lines[1].highlights)
 
     eq(spans, {
-        { 'M', 'IterDiffHeaderRule' },
+        { 'M', 'IterCodeChanged' },
         { 'l', 'IterTreeFade1' },
         { 'o', 'IterTreeFade2' },
         { 'n', 'IterTreeFade3' },
@@ -453,7 +453,7 @@ T['lines']['shows the rename of a partly staged file'] = function()
     local lines = tree.lines(tree.rows(root, {}), 34, {}, no_decor)
 
     eq(texts(lines), { '   R new.lua ← old.lua' })
-    eq(lines[1].highlights[1].group, 'IterDiffHeaderRule')
+    eq(lines[1].highlights[1].group, 'IterCodeChanged')
 end
 
 T['lines']['keeps the right chunks when a deep row has no room'] = function()

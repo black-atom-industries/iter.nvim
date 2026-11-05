@@ -805,4 +805,19 @@ T['side labels']['the split layout keeps its version labels'] = function()
     eq(side_labels()['1'], 'worktree')
 end
 
+T['the header colours the status letter by its change'] = function()
+    open_view()
+
+    local groups = child.lua_get([[(function()
+        local ns = vim.api.nvim_create_namespace('iter.diff')
+        for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(_G.view.buf, ns, 0, 0, { details = true })) do
+            if mark[4].virt_text_pos == 'inline' and vim.startswith(mark[4].virt_text[1][1], 'M ') then
+                return mark[4].virt_text[1][2]
+            end
+        end
+    end)()]])
+
+    eq(groups, { 'IterDiffHeader', 'IterCodeChanged' })
+end
+
 return T

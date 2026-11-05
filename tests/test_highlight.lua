@@ -146,6 +146,37 @@ T['apply()']['file and drawer headers take a band of the title colour and a rule
     eq(hl('IterDrawerHeader').bg, 0x333333)
 end
 
+T['apply()']['status letters take the git colours'] = function()
+    vim.api.nvim_set_hl(0, 'Added', { fg = 0x00ff00 })
+    vim.api.nvim_set_hl(0, 'Changed', { fg = 0x0000ff })
+    vim.api.nvim_set_hl(0, 'Removed', { fg = 0xff0000 })
+
+    highlight.apply()
+
+    eq(hl('IterCodeAdded').fg, 0x00ff00)
+    eq(hl('IterCodeChanged').fg, 0x0000ff)
+    eq(hl('IterCodeRemoved').fg, 0xff0000)
+end
+
+T['code_group()'] = function()
+    local groups = {}
+
+    for _, code in ipairs({ 'A', 'M', 'D', 'R', 'C', 'T', '?', 'U' }) do
+        groups[code] = highlight.code_group(code)
+    end
+
+    eq(groups, {
+        A = 'IterCodeAdded',
+        M = 'IterCodeChanged',
+        D = 'IterCodeRemoved',
+        R = 'IterCodeChanged',
+        C = 'IterCodeChanged',
+        T = 'IterCodeChanged',
+        ['?'] = 'IterUntracked',
+        U = 'IterConflict',
+    })
+end
+
 T['apply()']['annotated text takes a faint share of the function colour over Normal'] = function()
     vim.api.nvim_set_hl(0, 'Normal', { bg = 0x000000 })
     vim.api.nvim_set_hl(0, 'Function', { fg = 0xc8c8c8 })
