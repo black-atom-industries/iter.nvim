@@ -572,4 +572,20 @@ T['version()']['names the version an anchor follows'] = function()
     eq(anchor.version({ side = 'old', base = 'index' }), 'index')
 end
 
+T['resolve()']['a shared first byte of two characters is no context'] = function()
+    local start = anchor.resolve({
+        path = 'f.lua',
+        side = 'new',
+        start_line = 9,
+        end_line = 9,
+        start_col = 0,
+        quote = 'foo',
+        before = '',
+        after = ' ä',
+        lines = { 'foo ä' },
+    }, { 'foo ö', 'foo z' })
+
+    eq(start, nil)
+end
+
 return T

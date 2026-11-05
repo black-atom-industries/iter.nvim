@@ -336,6 +336,17 @@ local function common_prefix(a, b)
         n = n + 1
     end
 
+    -- Two characters sharing their first bytes don't match.
+    while
+        n > 0
+        and (
+            is_continuation(a:byte(n + 1) or 0)
+            or is_continuation(b:byte(n + 1) or 0)
+        )
+    do
+        n = n - 1
+    end
+
     return n
 end
 
@@ -347,6 +358,11 @@ local function common_suffix(a, b)
 
     while n < #a and n < #b and a:byte(#a - n) == b:byte(#b - n) do
         n = n + 1
+    end
+
+    -- Two characters sharing their last bytes don't match.
+    while n > 0 and is_continuation(a:byte(#a - n + 1)) do
+        n = n - 1
     end
 
     return n
