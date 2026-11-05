@@ -4,6 +4,7 @@
 --- back from any buffer; a user mapping on that key returns afterwards.
 
 local float = require('iter.ui.float')
+local git = require('iter.git')
 local keymap = require('iter.keymap')
 local store = require('iter.store')
 local util = require('iter.util')
@@ -17,6 +18,7 @@ local util = require('iter.util')
 
 ---@class IterEditorDraft
 ---@field buf integer
+---@field branch? string the branch at open, nil on a detached HEAD
 ---@field win? integer nil while hidden
 ---@field root string
 ---@field annotation table the stored annotation once it has an id
@@ -301,6 +303,17 @@ local function save()
         return false
     end
 
+    -- The store file follows the branch, the anchor stays on the old one.
+    if git.head_branch(draft.root) ~= draft.branch then
+        util.warn(
+            string.format(
+                'The annotation was started on %s; go back to save it',
+                draft.branch or 'a detached HEAD'
+            )
+        )
+        return false
+    end
+
     local annotation = vim.deepcopy(draft.annotation)
     annotation.body = text
 
@@ -544,6 +557,7 @@ function M.open(opts)
     draft = {
         buf = buf,
         root = opts.root,
+        branch = git.head_branch(opts.root),
         annotation = vim.deepcopy(opts.annotation),
         keys = keys,
         pane = pane,

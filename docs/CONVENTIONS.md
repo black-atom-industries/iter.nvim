@@ -135,6 +135,8 @@ the review straight to an agent pane.
   warning says so, and the next write of that file saves it first. Leaving Neovim waits for the lock up to the stale
   timeout and takes it over then; a change it still can't save is reported as lost. The review and the buffer
   marks read through one cache per root (`store.cached`), read again when the file's stat or HEAD changes.
+- A draft in the annotation float saves only on the branch it opened on, since the store file follows the branch and
+  the anchor's lines don't. On another branch saving warns and keeps the draft.
 - The store file also holds the branch's `base` (a base spec), the base the review opens with. A `base` or
   `reviewed_by_base` entry iter can't read is dropped on read without setting the file aside, so the annotations stay.
   Switching branches switches to that branch's stored base. Annotations are shared across bases.
