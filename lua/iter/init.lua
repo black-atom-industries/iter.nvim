@@ -2,12 +2,10 @@
 ---@field drawer (IterDrawer|IterStatus)? the open status, a drawer or a sidebar
 ---@field current_review IterReview? the open review tab
 ---@field current_commits IterCommits? the open commits tab
----@field did_setup boolean
 ---@field config IterConfig
 local M = {
     drawer = nil,
     current_review = nil,
-    did_setup = false,
     config = require('iter.config').resolve(),
 }
 
@@ -495,7 +493,6 @@ end
 function M.setup(opts)
     local config = require('iter.config')
     M.config = config.resolve(opts)
-    M.did_setup = true
     require('iter.annotations.marks').watch_buffers()
     require('iter.statusline').setup()
 

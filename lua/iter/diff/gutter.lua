@@ -12,7 +12,6 @@ local ribbons = require('iter.diff.ribbons')
 ---@field canvas IterCanvas
 ---@field chunks IterRibbonChunk[]
 ---@field rows IterDocRow[] the new side
----@field old_rows IterDocRow[] the old side
 ---@field active? IterRibbonChunk the chunk under the cursor
 ---@field key? string what the image sent last shows
 local Gutter = {}
@@ -33,7 +32,6 @@ function Gutter.new(win)
         canvas = Canvas.new({ anchor = win, col = -1, cols = ribbons.COLS }),
         chunks = {},
         rows = {},
-        old_rows = {},
     }, Gutter)
 end
 
@@ -42,7 +40,6 @@ end
 function Gutter:set_document(doc)
     self.chunks = ribbons.chunks(doc)
     self.rows = doc.rows
-    self.old_rows = doc.old_rows or {}
     self.active = nil
     self.key = nil
 end
