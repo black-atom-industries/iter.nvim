@@ -896,6 +896,7 @@ function View:decorate_header(index)
     local file = section.file
     local untracked = file.code == '?'
     local counts = file.binary and 'binary'
+        or file.code == 'U' and 'conflicted'
         or untracked and string.format('+%d', file.stat.add)
         or string.format('+%d −%d', file.stat.add, file.stat.del)
     local stat = counts

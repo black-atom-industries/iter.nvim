@@ -100,6 +100,8 @@ the review straight to an agent pane.
 - Hidden context is gap rows in the model that expand in batches, not folds.
 - A collapsed file (reviewed, in all-files mode) is a document section of its header row alone, in both layouts,
   not a fold. Its annotations are placed hidden on the header, so the header still counts them.
+- A conflicted file (code `U`) is a section of its header row alone, which says `conflicted`; iter reads no combined
+  diffs.
 - The renderer is pure Lua. A binary dependency (such as libvscode-diff) comes in only after Nik decides for it.
 - `Iter*` highlight groups derive from the colorscheme on every `ColorScheme` event.
 - Annotations are `virt_lines` extmarks: line and range annotations under their last row, deleted-line annotations on

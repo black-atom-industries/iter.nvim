@@ -489,6 +489,7 @@ base's branch is gone, or a remembered commit is no longer in the history of
 
 - A mode change reads `mode 100644 → 100755`.
 - An untracked file reads `untracked · +n`.
+- A conflicted file reads `conflicted` and shows no hunks.
 
 **Staging in the diff.**
 
