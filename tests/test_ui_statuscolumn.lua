@@ -195,4 +195,30 @@ T['draws the note bar in the sign column under the sign'] = function()
     helpers.expect_screenshot(child, 'statuscolumn-note-bar')
 end
 
+T['reads the bars of a buffer without annotations once per render'] = function()
+    child.lua(
+        [[
+        local long = ...
+        local marks = require('iter.annotations.marks')
+        local signs = marks.signs
+
+        _G.reads = 0
+        marks.signs = function(buf)
+            _G.reads = _G.reads + 1
+            return signs(buf)
+        end
+
+        vim.cmd.enew()
+        vim.api.nvim_buf_set_lines(0, 0, -1, false, { long, long, long })
+        vim.wo.wrap = true
+        vim.wo.statuscolumn = "%!v:lua.require'iter'.statuscolumn()"
+        vim.cmd.redraw({ bang = true })
+        vim.cmd.redraw({ bang = true })
+    ]],
+        { string.rep(LONG, 8) }
+    )
+
+    eq(child.lua_get('_G.reads'), 1)
+end
+
 return T

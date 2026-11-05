@@ -30,9 +30,7 @@ local function bars_of(buf)
 
     local bars = require('iter.annotations.marks').signs(buf)
 
-    if next(bars) ~= nil then
-        cache[buf] = { tick = tick, bars = bars }
-    end
+    cache[buf] = { tick = tick, bars = bars }
 
     return bars
 end
