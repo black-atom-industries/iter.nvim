@@ -62,10 +62,16 @@ end
 ---@field buf? integer
 ---@field rows integer rows the float and its placeholders have
 ---@field on_anchor_closed integer
+---@field closed? true its id is free
 local Canvas = {}
 Canvas.__index = Canvas
 
 local next_id = graphics.FIRST_ID
+
+-- Ids of closed canvases. Each id has a highlight group, which Neovim never
+-- forgets, so ids go round instead of growing.
+---@type integer[]
+local free_ids = {}
 
 ---@param opts { anchor: integer, col: integer, cols: integer }
 ---@return IterCanvas
@@ -74,9 +80,12 @@ function Canvas.new(opts)
     vim.validate('opts.col', opts.col, 'number')
     vim.validate('opts.cols', opts.cols, 'number')
 
-    local id = next_id
+    local id = table.remove(free_ids)
 
-    next_id = next_id + 1
+    if id == nil then
+        id = next_id
+        next_id = next_id + 1
+    end
 
     local self = setmetatable({
         id = id,
@@ -222,12 +231,19 @@ end
 
 --- Close the float for good.
 function Canvas:close()
+    if self.closed then
+        return
+    end
+
+    self.closed = true
     self:hide()
     pcall(vim.api.nvim_del_autocmd, self.on_anchor_closed)
 
     if graphics.on() then
         graphics.send(protocol.delete(self.id))
     end
+
+    table.insert(free_ids, self.id)
 end
 
 return Canvas

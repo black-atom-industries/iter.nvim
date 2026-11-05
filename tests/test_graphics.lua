@@ -276,4 +276,33 @@ T['pixel()']['keeps sRGB outside Ghostty on macOS'] = function()
     vim.env.GHOSTTY_RESOURCES_DIR = saved
 end
 
+T['canvas'] = new_set()
+
+T['canvas']['close() frees the id once, new() takes it again'] = function()
+    local Canvas = require('iter.graphics.canvas')
+
+    ---@return IterCanvas
+    local function new()
+        return Canvas.new({
+            anchor = vim.api.nvim_get_current_win(),
+            col = 0,
+            cols = 1,
+        })
+    end
+
+    local first = new()
+    local id = first.id
+
+    first:close()
+    first:close()
+
+    local second, third = new(), new()
+
+    eq(second.id, id)
+    eq(third.id ~= id, true)
+
+    second:close()
+    third:close()
+end
+
 return T
