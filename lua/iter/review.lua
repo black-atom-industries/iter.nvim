@@ -470,10 +470,6 @@ function Review:load()
     end
 
     local result = changes_mod.build(snapshot)
-
-    self.changes = result
-    require('iter.statusline').update(result)
-
     local base = self:resolve_base(snapshot.root)
 
     if base ~= nil then
@@ -487,6 +483,9 @@ function Review:load()
 
         result.base, result.since = items, base
     end
+
+    self.changes = result
+    require('iter.statusline').update(result)
 
     local items = result.base
         or vim.list_extend(vim.list_extend({}, result.unstaged), result.staged)
