@@ -1284,15 +1284,14 @@ function git.empty_tree(root)
     return return_result(empty)
 end
 
---- The full sha of `sha`'s first parent, or the empty tree for a root
---- commit.
+--- The full sha of the commit `sha` names and of its first parent, the
+--- empty tree for a root commit.
 ---@param root string
 ---@param sha string
----@return string? sha
+---@return string? commit
+---@return string? parent
 ---@return string? error
-function git.parent_of(root, sha)
-    vim.validate('sha', sha, 'string')
-
+local function commit_and_parent(root, sha)
     local out = git.run({
         'rev-list',
         '--parents',
@@ -1303,16 +1302,33 @@ function git.parent_of(root, sha)
     }, { cwd = root, ignore_error = true })
 
     if out.exit_code ~= 0 then
-        return nil, return_result(out)
+        return nil, nil, return_result(out)
     end
 
-    local parent = vim.split(return_result(out), ' ', { plain = true })[2]
+    local commit, parent =
+        unpack(vim.split(return_result(out), ' ', { plain = true }))
 
     if parent ~= nil then
-        return parent
+        return commit, parent
     end
 
-    return git.empty_tree(root)
+    local empty, err = git.empty_tree(root)
+
+    return commit, empty, err
+end
+
+--- The full sha of `sha`'s first parent, or the empty tree for a root
+--- commit.
+---@param root string
+---@param sha string
+---@return string? sha
+---@return string? error
+function git.parent_of(root, sha)
+    vim.validate('sha', sha, 'string')
+
+    local _, parent, err = commit_and_parent(root, sha)
+
+    return parent, err
 end
 
 ---@class IterBaseSpec what a review compares the worktree with
@@ -1355,17 +1371,10 @@ function git.resolve_base(root, spec)
 
     vim.validate('spec.sha', spec.sha, 'string')
 
-    local out = git.run({
-        'rev-list',
-        '--parents',
-        '--max-count=1',
-        '--end-of-options',
-        spec.sha .. '^{commit}',
-        '--',
-    }, { cwd = root, ignore_error = true })
+    local commit, parent, err = commit_and_parent(root, spec.sha)
 
-    if out.exit_code ~= 0 then
-        return nil, return_result(out)
+    if commit == nil then
+        return nil, err
     end
 
     local ancestor = git.run(
@@ -1379,16 +1388,11 @@ function git.resolve_base(root, spec)
                 or 'Not in the history of HEAD'
     end
 
-    local commit, parent =
-        unpack(vim.split(return_result(out), ' ', { plain = true }))
-
     if spec.kind == 'rev' then
         return commit
-    elseif parent ~= nil then
-        return parent
     end
 
-    return git.empty_tree(root)
+    return parent, err
 end
 
 --- Each ref in `refs` with the count of commits on HEAD and not on it, the
