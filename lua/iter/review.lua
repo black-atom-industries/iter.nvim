@@ -2269,6 +2269,10 @@ end
 ---@param path string
 ---@param line? integer
 function Review:reveal(path, line)
+    if self.picker ~= nil then
+        return
+    end
+
     local found
 
     for _, file in ipairs(self:paths()) do
