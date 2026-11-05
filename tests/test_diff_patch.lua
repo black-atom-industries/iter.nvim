@@ -664,6 +664,16 @@ T['lines']['unstages the deletion of a last line without a newline'] = function(
     eq(index_hash('f.txt'), hash_of(join(expected, '\n', false)))
 end
 
+T['lines']['unstages a deletion after a kept last line without a newline'] = function()
+    commit('f.txt', 'a\nline one\nzz\n')
+    write('f.txt', 'a\nline 1')
+    run({ 'add', 'f.txt' })
+
+    apply('unstage', assert(lines_patch(STAGED_F, pick({ 3 }, {}), 'unstage')))
+
+    eq(index_hash('f.txt'), hash_of('a\nline 1\nzz\n'))
+end
+
 T['lines']['stages rows of a CRLF file byte for byte'] = function()
     local lines = three_hunks('\r\n', true)
 

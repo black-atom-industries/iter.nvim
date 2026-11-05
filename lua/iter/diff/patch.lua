@@ -237,13 +237,15 @@ local function select_body(raw, hunk, selection, kind)
 end
 
 --- `body` as patch lines. A line without a newline that a kept line
---- follows on its side gains one: a context line becomes the old line
---- deleted and added again with a newline, so the old side still matches;
---- a deleted line, which only unstaging leaves before context, just drops
---- its marker, as the old side is the result there.
+--- follows on its side gains one: a context line becomes the line deleted
+--- and added again, the side the patch applies to keeping it without a
+--- newline (the old side for staging, the new side for unstaging); a deleted
+--- line, which only unstaging leaves before context, just drops its marker,
+--- as the old side is the result there.
 ---@param body IterPatchLine[]
+---@param kind 'stage'|'unstage'
 ---@return string[]
-local function body_lines(body)
+local function body_lines(body, kind)
     local lines = {}
     local marker = '\\ No newline at end of file'
 
@@ -259,7 +261,9 @@ local function body_lines(body)
         elseif line.eof and line.sign == ' ' and index < #body then
             vim.list_extend(
                 lines,
-                { '-' .. line.text, marker, '+' .. line.text }
+                kind == 'stage'
+                        and { '-' .. line.text, marker, '+' .. line.text }
+                    or { '-' .. line.text, '+' .. line.text, marker }
             )
         else
             table.insert(lines, line.sign .. line.text)
@@ -321,7 +325,7 @@ function M.lines(raw, selection, kind)
         local body, picked = select_body(raw, hunk, selection, kind)
 
         if picked then
-            local lines = body_lines(body)
+            local lines = body_lines(body, kind)
             local old_count, new_count = counts(lines)
             local section = file_header(raw, hunk.raw_header_row)
 
