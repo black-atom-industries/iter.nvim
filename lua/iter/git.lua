@@ -1127,20 +1127,25 @@ end
 ---@field added? integer nil for a binary file
 ---@field deleted? integer nil for a binary file
 
+-- An untracked file above this size has no line count: counting reads the
+-- whole file on the main thread.
+local MAX_COUNTED_BYTES = 10 * 1024 * 1024
+
 -- Line count per untracked file with the stat it was read at, by full path.
 ---@type table<string, { key: string, stat: GitStat }>
 local untracked_counts = {}
 
 --- The lines an untracked file adds, read once until its stat changes. Nil
---- when it can't be read.
+--- when it can't be read or is above `MAX_COUNTED_BYTES`.
 ---@param root string
 ---@param path string
 ---@return GitStat?
 local function untracked_stat(root, path)
     local full_path = vim.fs.joinpath(root, path)
     local key = util.stat_key(full_path)
+    local info = vim.uv.fs_stat(full_path)
 
-    if key == nil then
+    if key == nil or info == nil or info.size > MAX_COUNTED_BYTES then
         return nil
     end
 

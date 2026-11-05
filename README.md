@@ -385,7 +385,7 @@ fixes the width.
 
 **Line counts.** Every file row of the review, the status and the commits tab
 shows the lines it adds and deletes, `+n` for an untracked file and `bin` for a
-binary one. The counts keep their cells inside the tree's width, so a long name
+binary one. An untracked file above 10 MB shows no count. The counts keep their cells inside the tree's width, so a long name
 fades out before them. `gc` (`counts`) hides or shows them in all the trees and
 holds for the session; `review.tree_counts` sets how a session starts.
 

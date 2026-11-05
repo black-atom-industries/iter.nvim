@@ -1230,4 +1230,49 @@ T['base refs']['base_spec() refuses an unknown ref and an option'] = function()
     eq({ git.base_spec(repo, '--all') }, { nil, 'Unknown ref --all' })
 end
 
+T['file_diff()']['takes a file name with glob characters literally'] = function()
+    write('[id].txt', { 'one' })
+    write('i.txt', { 'one' })
+    helpers.git(repo, { 'add', '--all' })
+    helpers.git(repo, { 'commit', '--quiet', '-m', 'globs' })
+    write('[id].txt', { 'two' })
+    write('i.txt', { 'two' })
+
+    local source = assert(
+        git.file_diff(
+            repo,
+            { path = '[id].txt', side = 'unstaged', code = 'M' },
+            {}
+        )
+    )
+    local files = vim.tbl_filter(function(line)
+        return vim.startswith(line, 'diff ')
+    end, source.raw)
+
+    eq(files, { 'diff --git a/[id].txt b/[id].txt' })
+end
+
+T['working_stats()']['leaves out the count of a large untracked file'] = function()
+    local path = vim.fs.joinpath(repo, 'big.log')
+    local fd = assert(vim.uv.fs_open(path, 'w', 420))
+
+    assert(vim.uv.fs_ftruncate(fd, 11 * 1024 * 1024))
+    vim.uv.fs_close(fd)
+
+    local stats =
+        git.working_stats(repo, 'HEAD', { { path = 'big.log', code = '?' } })
+
+    eq(stats['big.log'], nil)
+end
+
+T['run()']['a folder that is gone reads as a failed command'] = function()
+    local out = git.run(
+        { 'status' },
+        { cwd = repo .. '/gone', ignore_error = true }
+    )
+
+    eq(out.exit_code, 127)
+    eq(out.output, '')
+end
+
 return T
