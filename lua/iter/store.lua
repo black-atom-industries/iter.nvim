@@ -300,9 +300,10 @@ local function write(path, data)
     local written, write_err = vim.uv.fs_write(fd, encoded)
     vim.uv.fs_close(fd)
 
-    if written == nil then
+    -- A full disk writes short without an error.
+    if written ~= #encoded then
         vim.uv.fs_unlink(tmp)
-        return nil, write_err
+        return nil, write_err or ('Cannot write ' .. tmp)
     end
 
     local ok, rename_err = vim.uv.fs_rename(tmp, path)

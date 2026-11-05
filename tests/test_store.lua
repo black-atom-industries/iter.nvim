@@ -876,4 +876,30 @@ T['reviewed_by_base']['drops entries it cannot read and keeps the rest'] = funct
     eq(store.load(repo).annotations, { saved })
 end
 
+T['a short write keeps the stored file'] = function()
+    assert(store.put_annotation(repo, annotation('first')))
+
+    local path = assert(store.path(repo))
+    local stored = read(path)
+    local fs_write = vim.uv.fs_write
+
+    -- Only the store's JSON: the lock file holds a token.
+    vim.uv.fs_write = function(fd, data)
+        if data:sub(1, 1) == '{' then
+            return fs_write(fd, data:sub(1, 10))
+        end
+
+        return fs_write(fd, data)
+    end
+
+    local saved, err = store.put_annotation(repo, annotation('second'))
+
+    vim.uv.fs_write = fs_write
+
+    eq(saved, nil)
+    eq(type(err), 'string')
+    eq(read(path), stored)
+    eq(vim.fn.glob(path .. '.tmp-*'), '')
+end
+
 return T
