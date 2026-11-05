@@ -565,7 +565,8 @@ function View:close_old()
             end
         end
 
-        vim.api.nvim_win_close(old.win, true)
+        -- It is the last window when the new side's buffer was wiped.
+        pcall(vim.api.nvim_win_close, old.win, true)
     end
 
     if vim.api.nvim_buf_is_valid(old.buf) then
