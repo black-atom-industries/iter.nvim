@@ -670,9 +670,9 @@ local function diff_text(root, change, args, bytes)
         vim.list_extend(cmd, { '/dev/null', change.path })
     else
         if change.orig_path ~= nil then
-            table.insert(cmd, change.orig_path)
+            table.insert(cmd, ':(literal)' .. change.orig_path)
         end
-        table.insert(cmd, change.path)
+        table.insert(cmd, ':(literal)' .. change.path)
     end
 
     local out = git.run(cmd, { cwd = root, ignore_error = true, bytes = bytes })
