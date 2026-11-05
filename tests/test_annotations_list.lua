@@ -159,4 +159,51 @@ T['line_of()']['returns the columns of a passage'] = function()
     eq({ list.line_of(annotation, { 'one' }) }, { nil, nil, true })
 end
 
+T['groups()'] = new_set()
+
+T['groups()']['orders a file by resolved line, not stored line'] = function()
+    ---@param id string
+    ---@param line integer
+    ---@param text string
+    ---@return IterAnnotation
+    local function at(id, line, text)
+        return {
+            id = id,
+            scope = 'line',
+            body = id,
+            outdated = false,
+            anchor = {
+                path = 'a.txt',
+                side = 'new',
+                start_line = line,
+                end_line = line,
+                lines = { text },
+            },
+        }
+    end
+
+    local lines = {}
+
+    for i = 1, 40 do
+        lines[i] = 'filler ' .. i
+    end
+
+    lines[5], lines[30] = 'moved up', 'moved down'
+
+    local groups = list.groups(
+        { at('down', 10, 'moved down'), at('up', 20, 'moved up') },
+        nil,
+        function()
+            return lines
+        end
+    )
+
+    eq(
+        vim.tbl_map(function(item)
+            return { item.annotation.id, item.start }
+        end, groups[1].items),
+        { { 'up', 5 }, { 'down', 30 } }
+    )
+end
+
 return T

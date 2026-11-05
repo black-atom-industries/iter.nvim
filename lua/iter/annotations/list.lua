@@ -211,8 +211,8 @@ function M.groups(annotations, order, lines_of)
 
     for _, group in ipairs(groups) do
         table.sort(group.items, function(a, b)
-            local sa = a.annotation.anchor.start_line or 0
-            local sb = b.annotation.anchor.start_line or 0
+            local sa = a.start or a.annotation.anchor.start_line or 0
+            local sb = b.start or b.annotation.anchor.start_line or 0
 
             if a.annotation.scope == 'file' then
                 sa = 0
@@ -224,6 +224,13 @@ function M.groups(annotations, order, lines_of)
 
             if sa ~= sb then
                 return sa < sb
+            end
+
+            local stored_a = a.annotation.anchor.start_line or 0
+            local stored_b = b.annotation.anchor.start_line or 0
+
+            if stored_a ~= stored_b then
+                return stored_a < stored_b
             end
 
             return a.index < b.index
