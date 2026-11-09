@@ -2954,6 +2954,8 @@ T['uri'][':edit in an iter window draws it again'] = function()
     child.type_keys('a')
     helpers.wait_until(child, [[require('iter.annotations.editor').is_shown()]])
     child.type_keys('kept', '<Esc>')
+    -- The markdown ftplugin's `silent! nunmap` would set v:errmsg.
+    child.lua([[vim.b.undo_ftplugin = '']])
     child.cmd('edit!')
     eq(child.lua_get('vim.api.nvim_buf_get_lines(0, 0, -1, false)'), { 'kept' })
     eq(child.lua_get('vim.bo.modified'), true)

@@ -195,7 +195,11 @@ function M.expect_screenshot(child, name)
         error('Missing reference screenshot: ' .. path, 2)
     end
 
-    MiniTest.expect.reference_screenshot(child.get_screenshot(), path)
+    -- The references hold a release's default highlights, which a prerelease
+    -- Neovim can change.
+    MiniTest.expect.reference_screenshot(child.get_screenshot(), path, {
+        ignore_attr = vim.version().prerelease ~= nil,
+    })
 end
 
 --- Wait in the child until the Lua expression `condition` is truthy.
