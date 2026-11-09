@@ -58,8 +58,8 @@ local ACTIONS = {
         { 'scroll_up', 'Scroll the diff up' },
     },
     diff = {
-        { 'next_hunk', 'Next hunk' },
-        { 'prev_hunk', 'Previous hunk' },
+        { 'next_hunk', 'Next change' },
+        { 'prev_hunk', 'Previous change' },
         { 'next_annotation', 'Next annotation' },
         { 'prev_annotation', 'Previous annotation' },
         { 'next_file', 'Next file' },

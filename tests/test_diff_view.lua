@@ -262,6 +262,27 @@ T['statuscolumn is blank on virtual lines'] = function()
     eq(rail:match('^%s*$') ~= nil, true)
 end
 
+T['jump_change stops at the start of each run of changed lines'] = function()
+    open_view('code.lua')
+    child.api.nvim_win_set_cursor(0, { 1, 0 })
+
+    local function jump(dir)
+        child.lua('_G.view:jump_change(...)', { dir })
+
+        return child.api.nvim_get_current_line()
+    end
+
+    eq(jump(1), 'five')
+    eq(jump(1), '  local count = 0')
+    eq(jump(1), '    count = count + item.size')
+    eq(jump(1), '')
+    eq(jump(1), '')
+    eq(jump(-1), '    count = count + item.size')
+    eq(jump(-1), '  local count = 0')
+    eq(jump(-1), 'five')
+    eq(jump(-1), 'five')
+end
+
 T['expand reveals a gap under the cursor'] = function()
     open_view()
 

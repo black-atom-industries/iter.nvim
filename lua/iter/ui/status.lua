@@ -834,10 +834,10 @@ end
 function Status:view_handlers()
     return vim.tbl_extend('error', diff_handlers(self), {
         next_hunk = function()
-            self.view:jump_hunk(1)
+            self.view:jump_change(1)
         end,
         prev_hunk = function()
-            self.view:jump_hunk(-1)
+            self.view:jump_change(-1)
         end,
         stage = function()
             self:apply_change('stage')

@@ -614,7 +614,7 @@ T['diff']['<C-j> in the diff pane focuses the tree'] = function()
     eq(child.lua_get(H.LIST_WIN .. ' == vim.api.nvim_get_current_win()'), true)
 end
 
-T['diff'][']c and [c jump between hunks'] = function()
+T['diff'][']c and [c jump between changes'] = function()
     H.open(child)
     H.select(child, 'unstaged', 'a.txt')
     H.wait_diff(child, 'unstaged a.txt')
@@ -622,13 +622,13 @@ T['diff'][']c and [c jump between hunks'] = function()
     child.api.nvim_win_set_cursor(0, { 1, 0 })
 
     child.type_keys(']c')
-    eq(cursor_row(), 'hunk @@ -1,6 +1,6 @@')
+    eq(cursor_row(), 'del a3')
     child.type_keys(']c')
-    eq(cursor_row(), 'hunk @@ -22,7 +22,7 @@ a21')
+    eq(cursor_row(), 'del a25')
     child.type_keys(']c')
-    eq(cursor_row(), 'hunk @@ -22,7 +22,7 @@ a21')
+    eq(cursor_row(), 'del a25')
     child.type_keys('[c')
-    eq(cursor_row(), 'hunk @@ -1,6 +1,6 @@')
+    eq(cursor_row(), 'del a3')
 end
 
 T['diff'][']f and [f follow the tree order'] = function()
@@ -1682,8 +1682,8 @@ T['hunks']['? in the diff pane lists its keys'] = function()
                     .. [[.buf, 0, -1, false))]]
             ),
             {
-                ' ]c       Next hunk',
-                ' [c       Previous hunk',
+                ' ]c       Next change',
+                ' [c       Previous change',
                 ' ]a       Next annotation',
                 ' [a       Previous annotation',
                 ' ]f       Next file',

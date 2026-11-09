@@ -330,7 +330,7 @@ shows the unstaged and the staged section.
 
 **Diff.** `<CR>` or `gf` on a code line opens the file at that line and closes
 the status. A staged line lands where it is in the worktree. `]c` and `[c` move
-between the hunks, `s` and `u` stage and unstage the hunk or the selected
+between the changes, `s` and `u` stage and unstage the hunk or the selected
 lines, `q` closes the status, and `<C-j>` goes back to it.
 
 **Recent commits.** The last commits (`drawer.commits`, `0` hides them) sit at
@@ -681,8 +681,8 @@ and `<C-j>`.
 
 | Key       | Action            | Does                                                            |
 | --------- | ----------------- | --------------------------------------------------------------- |
-| `]c`      | `next_hunk`       | Next hunk                                                       |
-| `[c`      | `prev_hunk`       | Previous hunk                                                   |
+| `]c`      | `next_hunk`       | Next change                                                     |
+| `[c`      | `prev_hunk`       | Previous change                                                 |
 | `]a`      | `next_annotation` | Next annotation                                                 |
 | `[a`      | `prev_annotation` | Previous annotation                                             |
 | `]f`      | `next_file`       | Next file                                                       |

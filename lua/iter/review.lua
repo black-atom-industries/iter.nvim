@@ -264,10 +264,10 @@ end
 function Review:view_handlers()
     return {
         next_hunk = function()
-            self.view:jump_hunk(1)
+            self.view:jump_change(1)
         end,
         prev_hunk = function()
-            self.view:jump_hunk(-1)
+            self.view:jump_change(-1)
         end,
         next_annotation = function()
             self.view:jump_annotation(1)

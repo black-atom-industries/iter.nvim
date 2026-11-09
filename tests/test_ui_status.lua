@@ -539,7 +539,7 @@ local function focus_diff()
     child.api.nvim_win_set_cursor(0, { 1, 0 })
 end
 
-T['diff'][']c and [c move between the hunks'] = function()
+T['diff'][']c and [c move between the changes'] = function()
     open_status()
     move_to('b.txt')
     wait_preview({ 'unstaged b.txt', 'staged b.txt' })
@@ -555,11 +555,11 @@ T['diff'][']c and [c move between the hunks'] = function()
     end
 
     child.type_keys(']c')
-    eq(hunk(), { 'unstaged', 'hunk', 1 })
+    eq(hunk(), { 'unstaged', 'del', 1 })
     child.type_keys(']c')
-    eq(hunk(), { 'staged', 'hunk', 1 })
+    eq(hunk(), { 'staged', 'del', 1 })
     child.type_keys('[c')
-    eq(hunk(), { 'unstaged', 'hunk', 1 })
+    eq(hunk(), { 'unstaged', 'del', 1 })
 end
 
 T['diff']['<Space> stages the hunk under the cursor, then unstages it'] = function()
@@ -628,8 +628,8 @@ T['diff']['? lists the keys of the diff'] = function()
     )
 
     eq(lines, {
-        ' ]c       Next hunk',
-        ' [c       Previous hunk',
+        ' ]c       Next change',
+        ' [c       Previous change',
         ' s        Stage the hunk or the selected lines',
         ' u        Unstage the hunk or the selected lines',
         ' <Space>  Stage or unstage the hunk or the selected lines',

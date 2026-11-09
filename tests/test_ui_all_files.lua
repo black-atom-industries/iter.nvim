@@ -366,12 +366,12 @@ T['jumps'][']c and [c move across files'] = function()
     cursor_on('ax')
 
     child.type_keys(']c')
-    eq(cursor_row(), 'hunk @@ -1,4 +1,4 @@')
+    eq(cursor_row(), 'del b1')
     child.type_keys(']c', ']c')
-    eq(cursor_row(), 'hunk @@ -1 +1 @@')
+    eq(cursor_row(), 'del c')
     eq(H.selected(child), 'c.txt')
     child.type_keys('[c')
-    eq(cursor_row(), 'hunk @@ -17,4 +17,4 @@ b16')
+    eq(cursor_row(), 'del b20')
 end
 
 T['jumps']['<CR> on a gap expands it and keeps the files below'] = function()

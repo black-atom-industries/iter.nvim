@@ -92,6 +92,9 @@ local WORD_PRIORITY = vim.hl.priorities.treesitter + 50
 
 local WORD_HL = { add = 'IterDiffAddText', del = 'IterDiffDeleteText' }
 
+-- A filler row faces a change on the other side of the split layout.
+local CHANGE_KINDS = { add = true, del = true, filler = true }
+
 -- The blank cells of the new side's rail that the gutter's canvas covers.
 local GUTTER_CELLS = string.rep(' ', ribbons.EXTRA)
 
@@ -2107,18 +2110,24 @@ function View:expand_path(path)
     end
 end
 
---- Move the cursor to the next (`dir` 1) or previous (-1) hunk row. At the
---- last or first hunk the cursor stays.
+--- Move the cursor to the start of the next (`dir` 1) or previous (-1) run
+--- of changed lines. At the last or first run the cursor stays.
 ---@param dir 1|-1
-function View:jump_hunk(dir)
+function View:jump_change(dir)
     if not self:is_shown() then
         return
+    end
+
+    local function changed(lnum)
+        local row = self.rows[lnum]
+
+        return row ~= nil and CHANGE_KINDS[row.kind]
     end
 
     local lnum = self:cursor_line() + dir
 
     while lnum >= 1 and lnum <= #self.rows do
-        if self.rows[lnum].kind == 'hunk' then
+        if changed(lnum) and not changed(lnum - 1) then
             self:reveal(lnum)
             return
         end

@@ -181,7 +181,7 @@ the review straight to an agent pane.
   options it changes and restores them on every exit path.
 - The status sidebar (`iter.ui.status`, `status.style = 'sidebar'`, the default) shows the status in the panel at the tab's left
   edge, a tree page (`iter.ui.review_tree`, named `iter://status`) with the drawer's keys, and the diff of the file under
-  the cursor in the window it opened from, with the review's keys for moving between hunks, staging them
+  the cursor in the window it opened from, with the review's keys for moving between changes, staging them
   (`iter.ui.hunk_actions`, shared with the review), opening the file, closing and help. At open it saves that window's buffer and view and the tab's
   `winrestcmd()`; closing gives the window its buffer and view back, the view restores the options, and the tab gets
   its sizes back while its windows are the ones it had. Its line counts come from one `git diff --numstat HEAD` per

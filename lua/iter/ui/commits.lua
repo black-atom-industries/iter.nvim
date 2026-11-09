@@ -738,10 +738,10 @@ end
 function Commits:view_handlers()
     return {
         next_hunk = function()
-            self.view:jump_hunk(1)
+            self.view:jump_change(1)
         end,
         prev_hunk = function()
-            self.view:jump_hunk(-1)
+            self.view:jump_change(-1)
         end,
         split = function()
             self.diff:set_layout('split')

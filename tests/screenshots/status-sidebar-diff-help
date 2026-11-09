@@ -4,8 +4,8 @@
 03|                                  │  1     - d                                  
 04|   ▾ dir/                         │      1 + d changed                          
 05|     ▾ sub╭────────────────────────── Keys ──────────────────────────╮          
-06| ▸     ○ M│ ]c       Next hunk                                       │          
-07|     ● M c│ [c       Previous hunk                                   │          
+06| ▸     ○ M│ ]c       Next change                                     │          
+07|     ● M c│ [c       Previous change                                 │          
 08|   ○ M a.t│ s        Stage the hunk or the selected lines            │          
 09|   ◐ M b.t│ u        Unstage the hunk or the selected lines          │          
 10|   ○ ? new│ <Space>  Stage or unstage the hunk or the selected lines │          

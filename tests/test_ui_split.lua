@@ -468,12 +468,55 @@ T['sync']['jumps from the left window move both'] = function()
     local p = positions()
 
     eq(p[1], p[2])
-    eq(left_lines()[p[1][1]], '@@ -33,7')
+    eq(left_lines()[p[1][1]], 'local v = 3')
 
-    child.type_keys('[c')
+    child.type_keys(']c', '[c')
     p = positions()
     eq(p[1], p[2])
-    eq(p[1][1], 2)
+    eq(left_lines()[p[1][1]], 'local v = 3')
+end
+
+T['sync'][']c stops at each change of a hunk, also opposite a filler'] = function()
+    open_review()
+    split()
+    cursor_on('right', 'local v = 1')
+
+    local function at_cursor()
+        local lnum = positions()[1][1]
+
+        return { left_lines()[lnum], right_lines()[lnum] }
+    end
+
+    child.type_keys(']c')
+    eq(at_cursor(), { 'local v = 3', 'local v = 3 + 0' })
+    child.type_keys(']c')
+    eq(at_cursor(), { 'local v = 5', '' })
+    child.type_keys(']c')
+    eq(at_cursor(), { '', 'local w = 1' })
+    child.type_keys(']c')
+    eq(at_cursor(), { 'local v = 36', 'local v = 36 + 0' })
+    child.type_keys(']c')
+    eq(at_cursor(), { 'local v = 36', 'local v = 36 + 0' })
+
+    cursor_on('right', 'local w = 2')
+    child.type_keys('[c')
+    eq(at_cursor(), { '', 'local w = 1' })
+end
+
+T['sync']['s on a filler stages its hunk'] = function()
+    open_review()
+    split()
+    cursor_on('right', 'local v = 1')
+    child.type_keys(']c', ']c')
+    eq(right_lines()[positions()[1][1]], '')
+
+    child.type_keys('s')
+    helpers.wait_until(
+        child,
+        ([[vim.fn.system({ 'git', '-C', %q, 'diff', '--cached', '--name-only' }) == "f.lua\n"]]):format(
+            repo
+        )
+    )
 end
 
 T['sync']['the tree scrolls both windows'] = function()
