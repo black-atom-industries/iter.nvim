@@ -1061,7 +1061,7 @@ The project pins its tools in `mise.toml`: `lua-language-server`, `stylua`,
 
 ```bash
 just checks        # lint, format-check and test
-just lint          # lua-language-server --check against Neovim's Lua API
+just lint          # lua-language-server --check against the Lua API of the oldest supported Neovim
 just format        # format Lua with stylua and Markdown with vp fmt
 just test          # run the whole test suite
 just test-file tests/test_git.lua  # run one test file

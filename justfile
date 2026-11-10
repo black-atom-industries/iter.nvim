@@ -1,15 +1,18 @@
 mini_ref := "66b9e643b6dabe15079be7197ee4b4d59ff98c61"
 mini_url := "https://github.com/echasnovski/mini.nvim"
+# The oldest Neovim iter supports, as in the CI workflow; lint reads its Lua API.
+nvim_version := "0.12.2"
 minimal_init := justfile_directory() / "tests/minimal_init.lua"
 vp := justfile_directory() / "node_modules/.bin/vp"
 
 _default:
 	just -l
 
-# .luarc.json reads Neovim's Lua API from $VIMRUNTIME, which only nvim knows.
+# .luarc.json reads Neovim's Lua API from $VIMRUNTIME, here the pinned
+# version's, so a newer local nvim does not change the result.
 # Hint is the lowest level, so lint reports what the editor shows.
-lint:
-	VIMRUNTIME="$(nvim --clean --headless --cmd 'lua io.write(vim.env.VIMRUNTIME)' --cmd 'qa!')" lua-language-server --configpath={{ justfile_directory() }}/.luarc.json --check={{ justfile_directory() }} --checklevel=Hint
+lint: _nvim-runtime
+	VIMRUNTIME={{ justfile_directory() }}/deps/nvim-runtime lua-language-server --configpath={{ justfile_directory() }}/.luarc.json --check={{ justfile_directory() }} --checklevel=Hint
 
 # Lua through stylua, Markdown through Vite+ (`vp fmt`, config in vite.config.ts)
 format: _node-modules
@@ -19,6 +22,20 @@ format: _node-modules
 format-check: _node-modules
 	stylua --check {{ justfile_directory() }}
 	cd {{ justfile_directory() }} && {{ vp }} fmt --check '**/*.md'
+
+# Fetch the Lua runtime of nvim_version into deps/nvim-runtime
+_nvim-runtime:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	dir={{ quote(justfile_directory() / "deps/nvim-runtime") }}
+	if test "$(cat "${dir}/.version" 2>/dev/null)" = {{ quote(nvim_version) }}; then
+		exit 0
+	fi
+	rm -rf "${dir}"
+	mkdir -p "${dir}"
+	curl -fsSL https://github.com/neovim/neovim/archive/refs/tags/v{{ nvim_version }}.tar.gz \
+		| tar -xz -C "${dir}" --strip-components=2 neovim-{{ nvim_version }}/runtime/lua
+	echo {{ quote(nvim_version) }} > "${dir}/.version"
 
 _node-modules:
 	@test -x {{ quote(vp) }} || { echo 'vp is missing: run `npm ci`' >&2; exit 1; }
