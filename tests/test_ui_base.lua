@@ -232,6 +232,7 @@ T['open']['below the breakpoint at 180 columns the annotations sit below the tre
     child.o.columns = 180
     H.open(child, 'Iter review main')
     H.wait_diff(child, 'base a.txt')
+    child.lua(R .. ':place_annotations(true)')
 
     helpers.expect_screenshot(child, 'base-review-wide')
 end
@@ -781,6 +782,7 @@ end
 T['picker']['q and <CR> give the diff window its diff and options back'] = function()
     H.open(child)
     H.wait_diff(child, 'unstaged b.txt')
+    child.lua(R .. ':place_annotations(true)')
 
     local before = child.lua_get(WINOPTS)
 

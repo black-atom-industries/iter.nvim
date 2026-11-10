@@ -529,6 +529,15 @@ function Review:load_store()
         self.view:set_annotations(self.annotations, root)
     end
 
+    if
+        before_annotations ~= nil
+        and (#before_annotations == 0) ~= (#self.annotations == 0)
+    then
+        vim.schedule(function()
+            self:follow_annotations()
+        end)
+    end
+
     return annotations_changed
         or not vim.deep_equal(before_reviewed, self.reviewed)
 end
@@ -2182,7 +2191,12 @@ end
 ---@return integer
 function Review:tree_columns()
     local options = self.config.options
-    local annotations = (self:narrow() or self.annotations_closed) and 0
+    local annotations = (
+        self:narrow()
+        or self.annotations_closed
+        or (#self.annotations == 0 and sidebar.of(self.tab) == nil)
+    )
+            and 0
         or options.annotate.width + 1
 
     return self.tree:columns(options, vim.o.columns - annotations)
@@ -2197,8 +2211,9 @@ end
 --- Put the annotations window where the tab's width wants it, right of
 --- the diff from `annotate.review_breakpoint` tab columns, else below the
 --- tree; the selected annotation and the focus stay. A window the user
---- closed stays closed.
-function Review:place_annotations()
+--- closed stays closed. Without annotations it opens only with `force`.
+---@param force? boolean
+function Review:place_annotations(force)
     if
         self.closed
         or self.annotations_closed
@@ -2209,6 +2224,11 @@ function Review:place_annotations()
     end
 
     local open = sidebar.of(self.tab)
+
+    if open == nil and #self.annotations == 0 and not force then
+        return
+    end
+
     local below = self:narrow() and self.panel.win or nil
 
     if
@@ -2247,12 +2267,28 @@ function Review:place_annotations()
     end
 end
 
+--- Open the annotations window with the first annotation, close it with
+--- the last.
+function Review:follow_annotations()
+    local open = sidebar.of(self.tab)
+
+    if #self.annotations > 0 then
+        self:fit_tree(true)
+        self:place_annotations()
+    elseif open ~= nil and not self.closed then
+        -- Hidden, not closed by the user.
+        open.mode = nil
+        open:close()
+        fit_widths(self, true)
+    end
+end
+
 --- Open the annotations window, or focus it, in the review's tab.
 function Review:focus_annotations()
     vim.api.nvim_set_current_tabpage(self.tab)
     self.annotations_closed = false
     self:fit_tree()
-    self:place_annotations()
+    self:place_annotations(true)
 
     local open = sidebar.of(self.tab)
 

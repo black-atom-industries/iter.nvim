@@ -1193,9 +1193,7 @@ T['close'][':q in the annotations window closes only that window'] = function()
     H.open(child)
     H.select(child, 'unstaged', 'a.txt')
     H.wait_diff(child, 'unstaged a.txt')
-    child.lua(
-        [[require('iter.ui.sidebar').of(vim.api.nvim_get_current_tabpage()):focus()]]
-    )
+    child.cmd('Iter annotate')
     child.cmd('quit')
     child.lua('vim.wait(100)')
 
@@ -1206,9 +1204,7 @@ end
 
 T['close']['q in the annotations window closes the tab'] = function()
     expect_clean_exit(function()
-        child.lua(
-            [[require('iter.ui.sidebar').of(vim.api.nvim_get_current_tabpage()):focus()]]
-        )
+        child.cmd('Iter annotate')
         child.type_keys('q')
     end)
 end
@@ -2424,6 +2420,7 @@ T['files']['in a narrow tab the annotations sit below the tree'] = function()
     H.open(child)
     H.select(child, 'unstaged', 'a.txt')
     H.wait_diff(child, 'unstaged a.txt')
+    child.lua(R .. ':place_annotations(true)')
 
     local layout = tab_layout()
 
@@ -2446,6 +2443,7 @@ T['files']['in a wide tab the annotations sit right of the diff'] = function()
     H.open(child)
     H.select(child, 'unstaged', 'a.txt')
     H.wait_diff(child, 'unstaged a.txt')
+    child.lua(R .. ':place_annotations(true)')
 
     local layout = tab_layout()
 
@@ -2514,7 +2512,7 @@ T['files']['closed annotations stay closed until :Iter annotate'] = function()
     local open =
         [[require('iter.ui.sidebar').of(vim.api.nvim_get_current_tabpage())]]
 
-    child.lua(open .. ':focus()')
+    child.cmd('Iter annotate')
     child.cmd('close')
     helpers.wait_until(child, R .. '.annotations_closed')
 
@@ -2532,9 +2530,7 @@ T['files']['<C-j> in the annotations focuses the tree'] = function()
     H.open(child)
     H.select(child, 'unstaged', 'a.txt')
     H.wait_diff(child, 'unstaged a.txt')
-    child.lua(
-        [[require('iter.ui.sidebar').of(vim.api.nvim_get_current_tabpage()):focus()]]
-    )
+    child.cmd('Iter annotate')
 
     child.type_keys('<C-j>')
 
@@ -2766,7 +2762,6 @@ T['uri'][':edit iter://review opens the tab and wipes its own buffer'] = functio
         'a.txt'
     )
     eq(iter_names(), {
-        'iter://annotate/2',
         'iter://review',
         'iter://review/a.txt',
     })
@@ -2932,15 +2927,14 @@ T['uri'][':edit in an iter window draws it again'] = function()
     )
     eq(child.api.nvim_get_current_win(), child.lua_get(R .. '.diff_win'))
 
+    child.cmd('Iter annotate')
+
     local side =
         [[require('iter.ui.sidebar').of(vim.api.nvim_get_current_tabpage()).buf]]
     local annotations = child.lua_get(
         'vim.api.nvim_buf_get_lines(' .. side .. ', 0, -1, false)'
     )
 
-    child.lua(
-        [[require('iter.ui.sidebar').of(vim.api.nvim_get_current_tabpage()):focus()]]
-    )
     child.cmd('edit')
     eq(
         child.lua_get(
@@ -3047,8 +3041,7 @@ T['uri'][':edit from the status drawer windows'] = function()
 end
 
 T['uri'][':edit from the annotations window routes'] = function()
-    local focus_notes =
-        [[require('iter.ui.sidebar').of(vim.api.nvim_get_current_tabpage()):focus()]]
+    local focus_notes = [[vim.cmd('Iter annotate')]]
     H.open(child)
     H.select(child, 'unstaged', 'a.txt')
     H.wait_diff(child, 'unstaged a.txt')
@@ -3283,7 +3276,6 @@ T['uri']['buffer names are stable and carry no numbers'] = function()
     H.select(child, 'unstaged', 'a.txt')
     H.wait_diff(child, 'unstaged a.txt')
     eq(iter_names(), {
-        'iter://annotate/2',
         'iter://review',
         'iter://review/a.txt',
     })
@@ -3295,7 +3287,6 @@ T['uri']['buffer names are stable and carry no numbers'] = function()
     H.select(child, 'unstaged', 'c.txt')
     H.wait_diff(child, 'unstaged c.txt')
     eq(iter_names(), {
-        'iter://annotate/2',
         'iter://review',
         'iter://review/c.txt',
     })
@@ -3373,6 +3364,7 @@ T['uri']['the tab label reads iter review'] = function()
     H.open(child)
     H.select(child, 'unstaged', 'a.txt')
     H.wait_diff(child, 'unstaged a.txt')
+    child.lua(R .. ':place_annotations(true)')
 
     eq(child.lua_get('vim.t.iter_label'), 'iter review')
 
@@ -3410,6 +3402,17 @@ local LONG_WIDTH = 5 + 2 + 2 + #LONG_NAME + 3 + 1
 
 local function add_long_file()
     helpers.write_file(vim.fs.joinpath(repo, 'themes', LONG_NAME), { 'colors' })
+end
+
+--- Store a note, so the review opens with its annotations window.
+local function add_note()
+    child.lua([[
+        assert(require('iter.store').put_annotation(vim.fn.getcwd(), {
+            scope = 'file',
+            body = 'note',
+            anchor = { path = 'a.txt', side = 'new' },
+        }))
+    ]])
 end
 
 ---@return integer
@@ -3662,6 +3665,7 @@ T['tree width']['under auto it leaves the diff its split layout'] = function()
         annotate = { width = 40 },
     }]])
     add_long_file()
+    add_note()
     H.open(child)
 
     -- 200 columns less the annotations and their separator, the tree's
@@ -3679,6 +3683,7 @@ T['tree width']['under auto reopened annotations leave the diff split'] = functi
         diff = { layout = 'auto', split_breakpoint = 120 },
         annotate = { width = 40 },
     }]])
+    add_note()
     H.open(child)
     H.wait_diff(child, 'unstaged d/x.txt')
 

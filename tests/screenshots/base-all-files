@@ -1,5 +1,5 @@
 --|---------|---------|---------|---------|---------|---------|---------|---------|
-01| [No Name]  3 i//review                                                        X
+01| [No Name]  2 i//review                                                        X
 02| Review since main (715d34d)      │          M a.txt      +1 −1 · 0 annotations 
 03| Since main · 4 files             │          @@ -1,6 +1,6 @@                    
 04| reviewed ▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱ 0 of 4  │  1   1   a1                                 
@@ -12,16 +12,16 @@
 11|                                  │          ··· 24 unchanged lines ···  <CR> ex
 12|                                  │─────────────────────────────────────────────
 13|                                  │          M b.txt      +1 −1 · 0 annotations 
-14| r reviewed  A annotate  b base   │          @@ -1,5 +1,5 @@                    
-15| = one file  | split  ? help      │  1   1   b1                                 
-16|iter://review [-]                 │  2     - b2                                 
-17|Annotations (0)                   │      2 + b2 changed                         
+14|                                  │          @@ -1,5 +1,5 @@                    
+15|                                  │  1   1   b1                                 
+16|                                  │  2     - b2                                 
+17|                                  │      2 + b2 changed                         
 18|                                  │  3   3   b3                                 
-19|No annotations                    │  4   4   b4                                 
+19|                                  │  4   4   b4                                 
 20|                                  │  5   5   b5                                 
 21|                                  │          ··· 5 unchanged lines ···  <CR> exp
-22|<CR> jump  y yank  Y all          │─────────────────────────────────────────────
-23|d delete  e edit  ? help          │          A c.txt      +2 −0 · 0 annotations 
+22| r reviewed  A annotate  b base   │─────────────────────────────────────────────
+23| = one file  | split  ? help      │          A c.txt      +2 −0 · 0 annotations 
 24|                                                                                
 
 --|---------|---------|---------|---------|---------|---------|---------|---------|
@@ -38,14 +38,14 @@
 11|555555555555555555555555555555555559999999999:::::::::::::::::::::::::::::::::::
 12|55555555555555555555555555555555555FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 13|55555555555555555555555555555555555666666666677666666666668888888888888888888888
-14|5G44444444444G44444444444G4444455559999999999:::::::::::::::::::::::::::::::::::
-15|5G44444444444G44444444G4444455555559999999999;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-16|HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH5@@@@@@@@@@AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-17|IIIIIIIIIIIIIII===================5CCCCCCCCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+14|555555555555555555555555555555555559999999999:::::::::::::::::::::::::::::::::::
+15|555555555555555555555555555555555559999999999;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+16|55555555555555555555555555555555555@@@@@@@@@@AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+17|55555555555555555555555555555555555CCCCCCCCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
 18|555555555555555555555555555555555559999999999;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-19|444444444444445555555555555555555559999999999;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+19|555555555555555555555555555555555559999999999;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 20|555555555555555555555555555555555559999999999;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 21|555555555555555555555555555555555559999999999:::::::::::::::::::::::::::::::::::
-22|GGGG5444455G5444455G544455555555555FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-23|G544444455G5444455G54444555555555556666666666JJ666666666668888888888888888888888
-24|KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
+22|5G44444444444G44444444444G444445555FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+23|5G44444444444G44444444G4444455555556666666666HH666666666668888888888888888888888
+24|IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII

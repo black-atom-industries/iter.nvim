@@ -257,6 +257,64 @@ T['wide']['the command focuses the sidebar and keeps it open'] = function()
     eq(child.api.nvim_get_current_win(), sidebar_win())
 end
 
+T['empty'] = new_set()
+
+--- Remove every stored annotation, or store one on a3, and let the review
+--- read them again.
+---@param add boolean
+local function set_annotations(add)
+    child.lua(
+        [[
+        local add, annotation = ...
+        local store = require('iter.store')
+        local root = vim.fn.getcwd()
+        local ids = vim.tbl_map(function(a)
+            return a.id
+        end, store.load(root).annotations)
+        assert(store.remove_annotations(root, ids))
+        if add then
+            assert(store.put_annotation(root, annotation))
+        end
+        local review = require('iter').current_review
+        if review ~= nil then
+            review:refresh_annotations()
+        end
+    ]],
+        {
+            add,
+            {
+                scope = 'line',
+                body = 'First',
+                anchor = anchor('a.txt', 3, 'a3 changed'),
+            },
+        }
+    )
+end
+
+T['empty']['the sidebar hides without annotations and follows the first and the last'] = function()
+    set_annotations(false)
+    open_review()
+    child.lua('vim.wait(100)')
+
+    eq(sidebar_win(), nil)
+
+    set_annotations(true)
+    helpers.wait_until(child, S .. ' ~= nil')
+    eq(child.api.nvim_get_current_win(), child.lua_get(H.LIST_WIN))
+
+    set_annotations(false)
+    helpers.wait_until(child, S .. ' == nil')
+    eq(child.lua_get(R .. '.annotations_closed'), false)
+end
+
+T['empty']['the command opens the sidebar without annotations'] = function()
+    set_annotations(false)
+    open_review()
+    child.cmd('Iter annotate')
+
+    eq(child.api.nvim_get_current_win(), sidebar_win())
+end
+
 T['resize'] = new_set()
 
 --- The body of the note under the sidebar's cursor.

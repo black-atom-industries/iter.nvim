@@ -127,7 +127,8 @@ base per branch.
   gone.
 
 The review's annotations window lists every annotation in the tree's file
-order. On a note:
+order. It opens with the first annotation and closes with the last;
+`:Iter annotate` opens it without any. On a note:
 
 - moving onto it shows the annotation in the diff
 - `<CR>` jumps there
