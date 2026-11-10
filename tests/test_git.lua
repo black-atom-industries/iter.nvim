@@ -961,6 +961,43 @@ T['parent_branch()']['falls back when the reflog names a deleted branch'] = func
     eq(git.parent_branch(repo), 'main')
 end
 
+T['parent_branch()']['falls back when the reflog names the remote twin'] = function()
+    remote = helpers.create_remote(repo)
+    helpers.git(repo, { 'remote', 'set-head', 'origin', 'main' })
+    branch_from_head('feat')
+    commit('f1')
+    helpers.git(repo, { 'push', '--quiet', 'origin', 'feat' })
+    helpers.git(repo, { 'switch', '--quiet', 'main' })
+    helpers.git(repo, { 'branch', '-D', 'feat' })
+    helpers.git(repo, { 'switch', '--quiet', '-c', 'feat', 'origin/feat' })
+
+    eq(git.parent_branch(repo), 'main')
+end
+
+T['parent_branch()']['falls back when the reflog names a branch holding HEAD'] = function()
+    remote = helpers.create_remote(repo)
+    helpers.git(repo, { 'remote', 'set-head', 'origin', 'main' })
+    branch_from_head('feat')
+    commit('f1')
+    helpers.git(repo, { 'push', '--quiet', 'origin', 'feat' })
+    helpers.git(repo, { 'switch', '--quiet', 'main' })
+    helpers.git(repo, { 'switch', '--quiet', '-c', 'review', 'origin/feat' })
+
+    eq(git.parent_branch(repo), 'main')
+end
+
+T['parent_branch()']['takes a remote branch the reflog names'] = function()
+    remote = helpers.create_remote(repo)
+    helpers.git(repo, { 'switch', '--quiet', '-c', 'feat', 'origin/main' })
+    commit('f1')
+    helpers.git(repo, { 'switch', '--quiet', 'main' })
+    commit('m1')
+    helpers.git(repo, { 'push', '--quiet', 'origin', 'main' })
+    helpers.git(repo, { 'switch', '--quiet', 'feat' })
+
+    eq(git.parent_branch(repo), 'origin/main')
+end
+
 T['parent_branch()']['finds the branch a stacked branch forked from'] = function()
     branch_from_head('feat/a')
     commit('a1')

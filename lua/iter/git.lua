@@ -1459,7 +1459,8 @@ local function short_ref(ref)
 end
 
 --- The branch HEAD was created from. First the creation line of the
---- branch's reflog, when it names a branch that still exists; otherwise
+--- branch's reflog, when it names a branch that still exists, is not the
+--- same branch on a remote and does not contain HEAD; otherwise
 --- the local branch or remote default branch whose merge-base with HEAD is
 --- the fewest commits back, branches that contain HEAD left out and ties
 --- going to the default branch. The default branch is `origin/HEAD`'s
@@ -1513,8 +1514,21 @@ function git.parent_branch(root)
             }, { cwd = root, ignore_error = true })
 
             for _, ref in ipairs(split_output(exists.output)) do
-                if short_ref(ref) == from then
-                    return from
+                -- A branch checked out from its own remote twin, as for a
+                -- pull request, did not fork from it: the twin has the same
+                -- name or still contains HEAD.
+                local twin = vim.startswith(ref, 'refs/remotes/')
+                    and vim.endswith(ref, '/' .. branch)
+
+                if short_ref(ref) == from and not twin then
+                    local contains = git.run(
+                        { 'merge-base', '--is-ancestor', 'HEAD', ref },
+                        { cwd = root, ignore_error = true }
+                    )
+
+                    if contains.exit_code ~= 0 then
+                        return from
+                    end
                 end
             end
         end
