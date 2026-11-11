@@ -1,5 +1,88 @@
 # Changelog
 
+## [0.7.0](https://github.com/black-atom-industries/iter.nvim/compare/v0.6.0...v0.7.0) (2026-11-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* **status:** `:Iter` in the commits tab opens the status in the tab the commits came from, and the tab label leaves the status sidebar out of its window count.
+* **status:** `:Iter` (and `:Iter status`, `iter.status()`) opens the status as a sidebar at the left edge of the current tab, `review.tree_width` wide and at most half the editor, with the diff of the file under the cursor in the current window, instead of a float at the bottom of that window. Changed files are one tree with staging icons (● staged, ◐ partly staged, ○ unstaged); the recent commits are lines of the sidebar above the key hints, and `<CR>` on one opens the commits tab at that commit. `:Iter` while the sidebar is open in the current tab closes it; `iter.open_status()` opens or focuses it without closing. Set `status = { style = 'drawer' }` to keep the float; `drawer.height` and `drawer.breakpoint` apply to the float only, `drawer.commits`, `drawer.zindex` and `keys.drawer` to both.
+* **review:** in the review tab `iter.sidebar()` opens or focuses the annotations window instead of toggling it, and `annotate.review_breakpoint` decides whether the annotations sit right of the diff or under the tree.
+* **commits:** `:Iter commits` opens a tab of its own instead of a drawer in the current tab, and `require('iter').commits_drawer` is now `current_commits`. The list shows each commit's sha and subject; date, author and message are in the summary beside it. The `commits` keys view gains `collapse` (h) and `expand` (l). The highlight group `IterCommitBody` is gone.
+* **review:** the `review_drawer` keys view is now `tree`; its `edit`, `column_left` and `column_right` keys are gone and `collapse` (h) and `expand` (l) are new. `drawer.wide_breakpoint` is removed. `review.tree_width` sets the tree's width. `iter.review()` no longer takes a `side` argument.
+
+### Features
+
+* **commits:** browse commits in a tab of their own ([17f5191](https://github.com/black-atom-industries/iter.nvim/commit/17f519183f83df2ff3523ac972d8f2fb0afffc90))
+* **diff:** draw ribbons between the two sides of the split ([e84a11e](https://github.com/black-atom-industries/iter.nvim/commit/e84a11e2dda08623c5251dd31b195fd209f3f3f8)), closes [#40](https://github.com/black-atom-industries/iter.nvim/issues/40)
+* **review:** a file tree beside the diff in place of the drawer ([63a3e99](https://github.com/black-atom-industries/iter.nvim/commit/63a3e9999d9cae5d2c0e5b380687d2c44fd3ccb5))
+* **review:** fit the file trees to their longest name ([18bad1b](https://github.com/black-atom-industries/iter.nvim/commit/18bad1b46b1bb0719a61656db801dd15923b1f05))
+* **review:** preview the base under the cursor ([9d4b987](https://github.com/black-atom-industries/iter.nvim/commit/9d4b9870caba4ab0f9da59ab6e3b15628f862872))
+* **review:** show line counts in every file tree ([9393ad8](https://github.com/black-atom-industries/iter.nvim/commit/9393ad872e1263beda20f35df95332f42480d80b))
+* **review:** show the annotations window only once there are annotations ([988ff5a](https://github.com/black-atom-industries/iter.nvim/commit/988ff5a5444fd326e2edaeba4e6aa3aed1acc7d7))
+* **review:** show the reviewed mark at the start of a tree row ([084690a](https://github.com/black-atom-industries/iter.nvim/commit/084690afaaebfc5c2b405ddd71b45b7b92dca996))
+* **review:** show the total changed lines in the tree header ([5fcfb2d](https://github.com/black-atom-industries/iter.nvim/commit/5fcfb2deab7e79eb17ccb4f73ffb7bb09a70f67d))
+* **review:** the annotation sidebar beside the diff on wide screens ([b24bd9c](https://github.com/black-atom-industries/iter.nvim/commit/b24bd9c1c8ecdd29094dce21338223d0cbc42d68)), closes [#37](https://github.com/black-atom-industries/iter.nvim/issues/37)
+* **review:** toggle staging with the space key ([618e60a](https://github.com/black-atom-industries/iter.nvim/commit/618e60ace7038556ef5a06a0738e27902b06e054))
+* **status:** add a sidebar style for the status ([b412c49](https://github.com/black-atom-industries/iter.nvim/commit/b412c4917342969a4bd65adb49918911fac7fc51))
+* **status:** hand the window back on edits, splits and sessions ([0a89bee](https://github.com/black-atom-industries/iter.nvim/commit/0a89bee5ab1efbc9f2b36f83bf1ed5a7909abf96))
+* **status:** open the status as a sidebar by default ([b4a0004](https://github.com/black-atom-industries/iter.nvim/commit/b4a0004ce0e47498581f9a649a4254a464cc3e0a))
+* **status:** pin the recent commits in the sidebar ([e6ec125](https://github.com/black-atom-industries/iter.nvim/commit/e6ec12554df9516fba71427c3ad9ee6f1a06301d))
+* **status:** the diff keys beside the status sidebar ([74bd199](https://github.com/black-atom-industries/iter.nvim/commit/74bd199aa5af7c7e2d1256953aee6bd3701a884f))
+
+
+### Refactors
+
+* **git:** share the commit and parent lookup ([238599e](https://github.com/black-atom-industries/iter.nvim/commit/238599ef5a417dbd980f435ce321462cae3240f7))
+* remove the unused did_setup and old_rows fields ([faea379](https://github.com/black-atom-industries/iter.nvim/commit/faea379db6b68ff7a8d1d25238e12c7da1644f88))
+* **review:** a list window at the tab's left edge ([f46a3a4](https://github.com/black-atom-industries/iter.nvim/commit/f46a3a4118093042830857d53845759c725914ce))
+* **review:** lay out changed files as a directory tree ([b3554ce](https://github.com/black-atom-industries/iter.nvim/commit/b3554ceb25869e666eead6687e1cd01ae2444c5f))
+* **review:** share the diff preview and file actions with the drawer ([74bb581](https://github.com/black-atom-industries/iter.nvim/commit/74bb5811714e64cef92ed9967b0f02b238804ad9))
+* **status:** share the status header, stage icons and tree footer ([0d95e1e](https://github.com/black-atom-industries/iter.nvim/commit/0d95e1ea3bd2eebecec148d1eb9ee3148849ebb1))
+
+
+### Bug Fixes
+
+* **annotations:** compare a repeat's context by whole characters ([19af24a](https://github.com/black-atom-industries/iter.nvim/commit/19af24ad3a9fb2171b5de64b7ecaddc511ee5abd))
+* **annotations:** keep a waiting note preview from undoing &lt;CR&gt; ([d337dba](https://github.com/black-atom-industries/iter.nvim/commit/d337dbaa6d836212dd315d70f6b4e044c2ee808e))
+* **annotations:** keep the store file on a short write ([2403a1a](https://github.com/black-atom-industries/iter.nvim/commit/2403a1ae9e9d3b07bae72154bbadde527134ee96))
+* **annotations:** let a saved, hidden draft give way to the next ([544c6a3](https://github.com/black-atom-industries/iter.nvim/commit/544c6a3005017cd71eb8a8262dbcb38fbf222c78))
+* **annotations:** list a file's annotations by their current line ([e9e318b](https://github.com/black-atom-industries/iter.nvim/commit/e9e318bdde82163941902abfdb23f157fdc5c6c7))
+* **annotations:** save a draft only on the branch it opened on ([0c46b2a](https://github.com/black-atom-industries/iter.nvim/commit/0c46b2a3f4bdcb8498154428bb666d434c44a9e6))
+* **diff:** close the drawer cleanly after its split preview is wiped ([2c99ca9](https://github.com/black-atom-industries/iter.nvim/commit/2c99ca95b4f870ca87b09f02d5aa44fabfd869b8))
+* **diff:** jump to the changed lines with ]c and [c ([a36c0bf](https://github.com/black-atom-industries/iter.nvim/commit/a36c0bf2bb7a38f243bc373d38940333ccd0bb50))
+* **diff:** keep the diff view working without LuaJIT ([34bc823](https://github.com/black-atom-industries/iter.nvim/commit/34bc823892a47f94d7d098f24135ed060d6fc2d9)), closes [#40](https://github.com/black-atom-industries/iter.nvim/issues/40)
+* **diff:** keep the split panes scrolling together ([c37915d](https://github.com/black-atom-industries/iter.nvim/commit/c37915d9dc833fbf756de4f2e338c34290d533b5)), closes [#40](https://github.com/black-atom-industries/iter.nvim/issues/40)
+* **diff:** name a conflicted file in its header ([98ed7d4](https://github.com/black-atom-industries/iter.nvim/commit/98ed7d49d4c58fa2274691218bc7395905a02afc))
+* **diff:** read file names with glob characters literally ([26ddd5e](https://github.com/black-atom-industries/iter.nvim/commit/26ddd5e054602927620901a8d53500034a0f4740))
+* **diff:** show the cursorline on change and filler rows ([6a30dab](https://github.com/black-atom-industries/iter.nvim/commit/6a30dabadb6f34599bbe2ac5b637d1f186ab6692))
+* **diff:** unstage a deletion after a last line without a newline ([e8768c4](https://github.com/black-atom-industries/iter.nvim/commit/e8768c4d7c98d4902adfdd256681b82375c311c6))
+* drop the ▸ marker from the panel's cursor line ([17b1d23](https://github.com/black-atom-industries/iter.nvim/commit/17b1d230574fddc87f81a32199a21b10e63c6a03))
+* **graphics:** reuse canvas ids so highlight groups stop growing ([641838d](https://github.com/black-atom-industries/iter.nvim/commit/641838d7788171994c7f623cc6ae69f5a3fb8dbd))
+* **highlight:** colour status letters by their change ([1ea9e90](https://github.com/black-atom-industries/iter.nvim/commit/1ea9e90c00fcf6532ad935f17849f8cdcf4ab89f))
+* **highlight:** drop the band behind collapsed lines ([aac6fc7](https://github.com/black-atom-industries/iter.nvim/commit/aac6fc7474582f4bf9053f32cdcd4787ca8cc287))
+* **highlight:** keep diff rows visible when a theme hides them ([1bd9054](https://github.com/black-atom-industries/iter.nvim/commit/1bd90549a8aece972a3b9b14c62eb137de1085d4))
+* **review:** keep the last state when reading the base fails ([cdd97fc](https://github.com/black-atom-industries/iter.nvim/commit/cdd97fc63c164a8a9a629e5fa3665d0c2f7a938d))
+* **review:** keep the tree and annotations widths beside a split diff ([95b9e56](https://github.com/black-atom-industries/iter.nvim/commit/95b9e5652c47db0ace2e39e5929d6d053c627d3c))
+* **review:** leave the base list alone on an iter:// address ([7a3cf67](https://github.com/black-atom-industries/iter.nvim/commit/7a3cf67e22aaa74a6da76eee2405871b300c912f))
+* **review:** pick the PR target as the base of a checked-out PR ([f3c8777](https://github.com/black-atom-industries/iter.nvim/commit/f3c8777cfa3ab4bb40abc98786e3de2484068e0d))
+* **review:** skip the line count of large untracked files ([7761fc1](https://github.com/black-atom-industries/iter.nvim/commit/7761fc18ceb3ca08bd4807d2eb56f0d438395f01))
+* **review:** stay quiet when an open view's worktree is removed ([420c4c7](https://github.com/black-atom-industries/iter.nvim/commit/420c4c7ac82362a395e122ad212412cf1f8487ac))
+* **status:** keep the sidebar in place with scrolloffpad ([3b1141a](https://github.com/black-atom-industries/iter.nvim/commit/3b1141a05a3066832043dec1d20f9164f5f1886d))
+
+
+### Documentation
+
+* **agents:** say when an issue needs a design first ([7c4a3e5](https://github.com/black-atom-industries/iter.nvim/commit/7c4a3e5df50005221947551fd5f6b12e06e62245))
+* credit diffbandit.nvim as a rendering reference ([081a81a](https://github.com/black-atom-industries/iter.nvim/commit/081a81a4e185ce5b92d959ca5922d1e91b26530b))
+* record the review clips with the file tree ([909e903](https://github.com/black-atom-industries/iter.nvim/commit/909e903e03ef96750e7b2519cc23bfa35fc733ad))
+* record the status sidebar clip ([de50717](https://github.com/black-atom-industries/iter.nvim/commit/de50717c99551090f71d9406897c5715aced9ab1))
+
+
+### Performance
+
+* **annotations:** read the bars of an unannotated buffer once ([8e0b3a2](https://github.com/black-atom-industries/iter.nvim/commit/8e0b3a29e471f5b89166c80db13138fe621ffa8f))
+
 ## [0.6.0](https://github.com/black-atom-industries/iter.nvim/compare/v0.5.0...v0.6.0) (2026-10-30)
 
 ### Highlights
