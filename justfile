@@ -42,18 +42,34 @@ _node-modules:
 
 checks: lint format-check test
 
-# Run the whole mini.test suite headless
+# Run the whole mini.test suite headless, one Neovim per file in parallel.
+# Each file is listed as it finishes, so a hanging one is the file missing;
+# only a failing file's output is printed.
 test: deps
-	@just _run-tests ""
+	#!/usr/bin/env bash
+	set -uo pipefail
+	cd {{ justfile_directory() }}
+	logs="$(mktemp -d)"
+	trap 'rm -rf "${logs}"' EXIT
+	find tests -name 'test_*.lua' | sort | xargs -P "$(getconf _NPROCESSORS_ONLN)" -I{} sh -c \
+		'just _run-tests "$1" > "$2/$(basename "$1").log" 2>&1 || touch "$2/$(basename "$1").failed"; echo "done $1"' _ {} "${logs}"
+	total="$(find tests -name 'test_*.lua' | wc -l | tr -d ' ')"
+	failed=("${logs}"/*.failed)
+	if test -e "${failed[0]}"; then
+		for marker in "${failed[@]}"; do cat "${marker%.failed}.log"; done
+		echo "${#failed[@]} of ${total} test files failed: $(basename -a "${failed[@]%.failed}" | tr '\n' ' ')" >&2
+		exit 1
+	fi
+	echo "All ${total} test files passed"
 
 # Run one test file, e.g. `just test-file tests/test_git.lua`
 test-file FILE: deps
 	@just _run-tests {{ quote(FILE) }}
 
-# Runs ITER_TEST_FILE, or the whole suite when it is empty. A file that fails
-# to load raises inside MiniTest.run, so the pcall turns it into exit 1.
+# Runs ITER_TEST_FILE. A file that fails to load raises inside
+# MiniTest.run_file, so the pcall turns it into exit 1.
 _run-tests FILE:
-	cd {{ justfile_directory() }} && ITER_TEST_FILE={{ quote(FILE) }} nvim --headless --noplugin -u {{ minimal_init }} -c "lua local f = vim.env.ITER_TEST_FILE or '' local ok, err = pcall(function() if f == '' then MiniTest.run() else MiniTest.run_file(f) end end) if not ok then io.stderr:write(tostring(err) .. '\\n') vim.cmd('cquit 1') end"
+	cd {{ justfile_directory() }} && ITER_TEST_FILE={{ quote(FILE) }} nvim --headless --noplugin -u {{ minimal_init }} -c "lua local ok, err = pcall(MiniTest.run_file, vim.env.ITER_TEST_FILE) if not ok then io.stderr:write(tostring(err) .. '\\n') vim.cmd('cquit 1') end"
 
 # Apply the repo's Git config (hooks in .githooks/), once per clone
 git-config:

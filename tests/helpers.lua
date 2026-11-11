@@ -205,12 +205,12 @@ end
 --- Wait in the child until the Lua expression `condition` is truthy.
 ---@param child table MiniTest child Neovim
 ---@param condition string Lua expression evaluated in the child
----@param timeout? integer milliseconds, default 2000
+---@param timeout? integer milliseconds, default 10000
 function M.wait_until(child, condition, timeout)
     local ok = child.lua_get(
         string.format(
             'vim.wait(%d, function() return (%s) and true or false end, 10)',
-            timeout or 2000,
+            timeout or 10000,
             condition
         )
     )
