@@ -73,7 +73,7 @@ local BASE_PREVIEW_DELAY_MS = 150
 -- Commits since a branch the base summary lists at most.
 local BASE_COMMITS = 100
 
--- Glyph and group per reviewed state at the right of a tree row.
+-- Glyph and group per reviewed state at the start of a tree row.
 local REVIEWED_MARKS = {
     reviewed = { '✓', 'IterReviewed' },
     changed = { '↻', 'IterReviewedChanged' },
@@ -542,8 +542,8 @@ function Review:load_store()
         or not vim.deep_equal(before_reviewed, self.reviewed)
 end
 
---- A file row shows its staging state in working changes, and at the right its
---- line counts, its annotation count and its reviewed mark.
+--- A file row starts with its reviewed mark and, in working changes, its
+--- staging state, and shows at the right its line counts and annotation count.
 ---@return fun(file: IterTreeFile): IterTreeDecor
 function Review:decorator()
     local counts, annotations
@@ -568,12 +568,11 @@ function Review:decorator()
             table.insert(right, { ' ✎' .. count, 'IterDrawerCount' })
         end
 
-        table.insert(
-            right,
-            mark and { ' ' .. mark[1], mark[2] } or { '  ', 'IterDrawerHint' }
-        )
-
-        return { icon = tree.stage_icon(file.stage), right = right }
+        return {
+            mark = mark or { ' ' },
+            icon = tree.stage_icon(file.stage),
+            right = right,
+        }
     end
 end
 

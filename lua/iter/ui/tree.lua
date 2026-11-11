@@ -24,6 +24,7 @@ local render = require('iter.ui.render')
 ---@field depth integer
 
 ---@class IterTreeDecor
+---@field mark? [string, string] glyph and group before the icon
 ---@field icon? [string, string] glyph and group before the letter
 ---@field right? [string, string][] chunks at the right edge, one cell in
 
@@ -365,6 +366,11 @@ local function file_line(row, width, decor)
     local code = renamed and renamed.code or file.code
     local chunks = {}
 
+    if decor.mark then
+        table.insert(chunks, decor.mark)
+        table.insert(chunks, { ' ' })
+    end
+
     if decor.icon then
         table.insert(chunks, decor.icon)
         table.insert(chunks, { ' ' })
@@ -449,6 +455,7 @@ function M.width(root, decorate)
             local right = chunks_width(decor.right or {})
 
             used = used
+                + (decor.mark and chunks_width({ decor.mark }) + 1 or 0)
                 + (decor.icon and chunks_width({ decor.icon }) + 1 or 0)
                 + vim.fn.strdisplaywidth(node.code .. ' ')
                 + (right > 0 and right + 1 or 0)
@@ -462,7 +469,7 @@ end
 
 --- The render lines of `rows`, each at most `width` cells: a 3-cell gutter,
 --- 2 cells per depth, then a directory as `▾ name` (`▸` when collapsed) or a
---- file as `[icon ]letter name`. A rename adds `← orig_path`, dropped
+--- file as `[mark ][icon ]letter name`. A rename adds `← orig_path`, dropped
 --- before the name stops short; the decor's right chunks end one cell before
 --- the edge. A name is never shortened: what doesn't fit stops at the right
 --- chunks or the edge.

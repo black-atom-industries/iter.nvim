@@ -412,10 +412,10 @@ T['tree']['rows are directories first, then files, with staging icons'] = functi
 
     eq(tree_rows(), {
         '   ▾ d/',
-        '     ○ ? x.txt',
-        '   ○ M a.txt',
-        '   ◐ M b.txt',
-        '   ○ ? c.txt',
+        '       ○ ? x.txt',
+        '     ○ M a.txt',
+        '     ◐ M b.txt',
+        '     ○ ? c.txt',
     })
     eq(H.selected(child), 'd/x.txt')
 end
@@ -472,7 +472,7 @@ T['tree']['h and l close and open a directory, <CR> toggles it'] = function()
     child.type_keys('<CR>')
     eq(tree_rows()[1], '   ▸ d/')
     child.type_keys('<CR>')
-    eq(tree_rows()[2], '     ○ ? x.txt')
+    eq(tree_rows()[2], '       ○ ? x.txt')
 
     -- A closed directory stays closed across a refresh.
     child.type_keys('h')
@@ -1860,10 +1860,10 @@ T['reviewed']['rows start unreviewed, the header counts files and shows progress
 
     eq(tree_rows(), {
         '   ▾ d/',
-        '     ○ ? x.txt',
-        '   ○ M a.txt',
-        '   ◐ M b.txt',
-        '   ○ ? c.txt',
+        '       ○ ? x.txt',
+        '     ○ M a.txt',
+        '     ◐ M b.txt',
+        '     ○ ? c.txt',
     })
     eq(tree_header(), { 'Review HEAD main', 'Working changes · 4 files' })
     eq(
@@ -1979,7 +1979,7 @@ T['reviewed']['r in the tree marks the selected file, R unmarks it'] = function(
     H.select(child, 'unstaged', 'a.txt')
     H.wait_diff(child, 'unstaged a.txt')
 
-    eq(row_of('a.txt'), 'M a.txt ✓')
+    eq(row_of('a.txt'), '✓ M a.txt')
     eq(row_of('b.txt'), 'M b.txt')
     eq(
         progress(),
@@ -2015,7 +2015,7 @@ T['reviewed']['r in the diff pane marks the shown file, R unmarks it'] = functio
     H.select(child, 'unstaged', 'a.txt')
     H.wait_diff(child, 'unstaged a.txt')
     eq(diff_header(), '✓ reviewed  +2 −2 · 0 annotations ')
-    eq(row_of('a.txt'), 'M a.txt ✓')
+    eq(row_of('a.txt'), '✓ M a.txt')
     eq(row_of('b.txt'), 'M b.txt')
 
     child.lua('vim.api.nvim_set_current_win(' .. R .. '.diff_win)')
@@ -2045,8 +2045,8 @@ T['reviewed']['a partly staged file shows one mark'] = function()
     wait_state('b.txt', 'reviewed')
 
     eq(row_of('a.txt'), 'M a.txt')
-    eq(row_of('b.txt'), 'M b.txt ✓')
-    eq(row_of('b.txt'), 'M b.txt ✓')
+    eq(row_of('b.txt'), '✓ M b.txt')
+    eq(row_of('b.txt'), '✓ M b.txt')
     eq(
         progress(),
         'reviewed ▰▰▰▰▱▱▱▱▱▱▱▱▱▱▱ 1 of 4'
@@ -2067,7 +2067,7 @@ T['reviewed']['staging keeps a file reviewed'] = function()
     wait_state('a.txt', 'reviewed')
 
     eq(row_of('b.txt'), 'M b.txt')
-    eq(row_of('a.txt'), 'M a.txt ✓')
+    eq(row_of('a.txt'), '✓ M a.txt')
     eq(
         progress(),
         'reviewed ▰▰▰▰▱▱▱▱▱▱▱▱▱▱▱ 1 of 4'
@@ -2086,7 +2086,7 @@ T['reviewed']['an edit from outside turns reviewed into changed'] = function()
     edit_b_from_outside()
     wait_state('b.txt', 'changed')
 
-    eq(row_of('b.txt'), 'M b.txt ↻')
+    eq(row_of('b.txt'), '↻ M b.txt')
     eq(progress(), 'reviewed ▱▱▱▱▱▱▱▱▱ 0 of 4 · ↻ 1')
 
     H.select(child, 'unstaged', 'b.txt')
@@ -2155,7 +2155,7 @@ T['reviewed']['each file of an untracked directory takes its own mark'] = functi
     wait_state('d/x.txt', 'reviewed')
 
     eq(row_of('c.txt'), '? c.txt')
-    eq(row_of('d/x.txt'), '? x.txt ✓')
+    eq(row_of('d/x.txt'), '✓ ? x.txt')
     eq(
         progress(),
         'reviewed ▰▰▰▰▱▱▱▱▱▱▱▱▱▱▱ 1 of 4'
@@ -2178,7 +2178,7 @@ T['reviewed']['reviewed marks survive a restart'] = function()
     H.select(child, 'unstaged', 'a.txt')
     H.wait_diff(child, 'unstaged a.txt')
 
-    eq(row_of('a.txt'), 'M a.txt ✓')
+    eq(row_of('a.txt'), '✓ M a.txt')
     eq(row_of('b.txt'), 'M b.txt')
     eq(
         progress(),
@@ -2290,7 +2290,7 @@ T['reviewed']['r in the diff marks the file and moves to the first change of the
     eq(H.selected(child), 'b.txt')
     eq(cursor_row(), 'add top1')
     eq(placement(), { top = 1, focus = 'diff' })
-    eq(row_of('a.txt'), 'M a.txt ✓')
+    eq(row_of('a.txt'), '✓ M a.txt')
 end
 
 T['reviewed']['r in the tree moves the selection on and keeps the focus'] = function()
@@ -2329,7 +2329,7 @@ T['reviewed']['r on a reviewed file keeps the mark and moves on'] = function()
     H.wait_diff(child, 'unstaged b.txt')
 
     eq(H.selected(child), 'b.txt')
-    eq(row_of('a.txt'), 'M a.txt ✓')
+    eq(row_of('a.txt'), '✓ M a.txt')
 end
 
 T['reviewed']['R on a file without a mark changes nothing'] = function()
@@ -2354,7 +2354,7 @@ T['reviewed']['r on the last file marks it and stays'] = function()
     wait_state('c.txt', 'reviewed')
 
     eq(H.selected(child), 'c.txt')
-    eq(row_of('c.txt'), '? c.txt ✓')
+    eq(row_of('c.txt'), '✓ ? c.txt')
 end
 
 T['reviewed']['in all files, r collapses the file and puts the next header on top'] = function()
@@ -2564,7 +2564,7 @@ T['files']['u on a partly staged file unstages it and keeps its row'] = function
     -- s stages the whole file, s again unstages it.
     child.type_keys('s')
     helpers.wait_until(child, '#' .. R .. '.changes.staged == 1')
-    eq(tree_rows()[4], '   ● M b.txt')
+    eq(tree_rows()[4], '     ● M b.txt')
     child.type_keys('s')
     helpers.wait_until(child, '#' .. R .. '.changes.staged == 0')
 end
@@ -3396,9 +3396,9 @@ end
 T['tree width'] = new_set()
 
 local LONG_NAME = 'black-atom-terra-fall-light.toml'
--- 5 cells of gutter and indent, the icon, the letter, the name, the mark
--- with its gap and the edge.
-local LONG_WIDTH = 5 + 2 + 2 + #LONG_NAME + 3 + 1
+-- 5 cells of gutter and indent, the mark, the icon, the letter, the name
+-- and the edge.
+local LONG_WIDTH = 5 + 2 + 2 + 2 + #LONG_NAME + 1
 
 local function add_long_file()
     helpers.write_file(vim.fs.joinpath(repo, 'themes', LONG_NAME), { 'colors' })
