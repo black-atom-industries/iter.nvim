@@ -2,4 +2,6 @@
 set -e
 
 cd "$(git rev-parse --show-toplevel)"
+# Git exports GIT_DIR to a hook in a worktree; the suite's git calls in its own temp repos must not inherit it.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
 CI=1 just checks
