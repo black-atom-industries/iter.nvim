@@ -59,7 +59,7 @@ end
 
 ---@return string porcelain status of `repo`
 local function status()
-    return vim.trim(helpers.git(repo, { 'status', '--porcelain' }))
+    return vim.trim(helpers.git(assert(repo), { 'status', '--porcelain' }))
 end
 
 T['toggle_kind()'] = new_set()
