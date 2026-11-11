@@ -782,11 +782,12 @@ end
 T['keys'][']f after <CR> steps from the shown file'] = function()
     open_column()
     goto_note('Why this change?')
-    child.type_keys('<CR>')
-    H.wait_diff(child, 'staged m.txt')
-    child.type_keys(']f')
-
+    child.type_keys('<CR>', ']f')
     H.wait_diff(child, 'unstaged n.txt')
+    -- Past the sidebar's preview delay, the note's preview must not take n.txt back.
+    child.lua('vim.wait(200)')
+
+    eq(child.lua_get(R .. '.view.files[1].path'), 'n.txt')
 end
 
 T['keys']['<CR> on a file outside the changes opens it in the first tab'] = function()

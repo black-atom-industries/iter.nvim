@@ -473,6 +473,11 @@ function Sidebar:jump()
     local item = row.item
 
     if self.mode ~= nil then
+        -- A preview still waiting for the move before <CR> would undo what the jump shows.
+        if self.cursor_timer ~= nil then
+            self.cursor_timer:stop()
+        end
+
         if item ~= nil then
             self.mode.jump(item)
         end
