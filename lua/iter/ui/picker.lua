@@ -32,7 +32,7 @@ local M = {}
 local Page = {}
 Page.__index = Page
 
--- Cells left of an item: the gutter the panel draws `▸` over.
+-- Cells left of an item.
 local GUTTER = '   '
 
 --- The chunks of `item` in `width` cells, its tag at the right edge.
@@ -217,13 +217,6 @@ function Page:on_cursor(lnum, prev)
             self.opts.on_select(index)
         end
     end
-end
-
---- Whether line `lnum` holds an item.
----@param lnum integer
----@return boolean
-function Page:has_item(lnum)
-    return self.indexes[lnum] ~= nil
 end
 
 --- The index of the item under the cursor.

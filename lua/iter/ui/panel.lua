@@ -1,16 +1,15 @@
 --- The panel: a full-height window at the tab's left edge that shows one
 --- page at a time, such as the review's file tree or a list that takes its
---- place, and marks the cursor line with `▸`.
+--- place.
 
 local util = require('iter.util')
 
 local M = {}
 
 ---@class IterPanelPage
----@field buf integer the page's own buffer, its lines starting with a 3-cell gutter whose second cell the panel draws `▸` in; it must survive being hidden ('bufhidden' not 'wipe' or 'delete'), since another page takes the window
+---@field buf integer the page's own buffer, its lines starting with a 3-cell gutter; it must survive being hidden ('bufhidden' not 'wipe' or 'delete'), since another page takes the window
 ---@field render fun(self, width: integer, height: integer) writes the page's lines and its line → item map
 ---@field on_cursor? fun(self, lnum: integer, prev: integer) after the cursor moved to another line, and once when the page is shown, with the panel's window current; may move the cursor to an item line
----@field has_item? fun(self, lnum: integer): boolean whether line `lnum` holds an item; the marker shows only on such a line
 
 ---@class IterPanelOpenOptions
 ---@field width integer cells
@@ -29,8 +28,6 @@ local M = {}
 ---@field silent? boolean `close` was asked not to call `on_close`
 local Panel = {}
 Panel.__index = Panel
-
-local namespace = vim.api.nvim_create_namespace('iter.panel.cursor')
 
 local WINOPTS = {
     number = false,
@@ -92,44 +89,14 @@ local function showing(self)
         and vim.api.nvim_win_get_buf(self.win) == self.page.buf
 end
 
---- Draw `▸` in the gutter of the cursor line of the shown page, none
---- while the window shows another buffer.
----@param self IterPanel
-local function mark(self)
-    local page = self.page
-
-    if page == nil or not vim.api.nvim_buf_is_valid(page.buf) then
-        return
-    end
-
-    vim.api.nvim_buf_clear_namespace(page.buf, namespace, 0, -1)
-
-    if not showing(self) then
-        return
-    end
-
-    local lnum = vim.api.nvim_win_get_cursor(self.win)[1]
-
-    if page.has_item ~= nil and not page:has_item(lnum) then
-        return
-    end
-
-    vim.api.nvim_buf_set_extmark(page.buf, namespace, lnum - 1, 0, {
-        virt_text = { { ' ▸', 'IterDrawerKey' } },
-        virt_text_pos = 'overlay',
-        hl_mode = 'combine',
-    })
-end
-
 --- Let the page answer a cursor move to a line other than the one it last
---- saw, then mark where the cursor ended up.
+--- saw.
 ---@param self IterPanel
 ---@param force? boolean also when the line is the same
 local function moved(self, force)
     local page = self.page
 
     if page == nil or not showing(self) then
-        mark(self)
         return
     end
 
@@ -146,7 +113,6 @@ local function moved(self, force)
 
     self.lnum = lnum
     self.cursors[page] = vim.api.nvim_win_get_cursor(self.win)
-    mark(self)
 end
 
 --- Show the page from its first line while the cursor line fits in the
@@ -284,10 +250,6 @@ function Panel:show(page)
         self.cursors[shown] = vim.api.nvim_win_get_cursor(self.win)
     end
 
-    if shown ~= nil and vim.api.nvim_buf_is_valid(shown.buf) then
-        vim.api.nvim_buf_clear_namespace(shown.buf, namespace, 0, -1)
-    end
-
     self.page = page
     vim.api.nvim_win_set_buf(self.win, page.buf)
     apply_winopts(self.win)
@@ -388,12 +350,6 @@ function M.open(opts)
         once = true,
         callback = function()
             pcall(vim.api.nvim_del_augroup_by_id, self.group)
-
-            local page = self.page
-
-            if page ~= nil and vim.api.nvim_buf_is_valid(page.buf) then
-                vim.api.nvim_buf_clear_namespace(page.buf, namespace, 0, -1)
-            end
 
             if self.on_close ~= nil and not self.silent then
                 vim.schedule(self.on_close)

@@ -86,19 +86,6 @@ local function cursor_line()
     return child.lua_get('vim.api.nvim_win_get_cursor(' .. P .. '.win)[1]')
 end
 
---- The line the `▸` marker is on in `buf`, nil without one.
----@param buf string Lua expression of the buffer
----@return integer?
-local function marker(buf)
-    local line = child.lua_get([[(function(buf)
-            local ns = vim.api.nvim_get_namespaces()['iter.panel.cursor']
-            local marks = vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, {})
-            return marks[1] and marks[1][2] + 1 or false
-        end)(]] .. buf .. ')')
-
-    return line ~= false and line or nil
-end
-
 local T = new_set({
     hooks = {
         pre_case = function()
@@ -193,8 +180,6 @@ T['pages']['show swaps pages and gives each its cursor back'] = function()
 
     child.lua(P .. ':show(_G.a)')
     eq(cursor_line(), 5)
-    eq(marker('_G.a.buf'), 5)
-    eq(marker('_G.b.buf'), nil)
 
     child.lua(P .. ':show(_G.b)')
     eq(cursor_line(), 4)
@@ -215,20 +200,6 @@ T['pages']['on_cursor snaps the cursor onto an item'] = function()
     eq(cursor_line(), 5)
     child.type_keys('gg')
     eq(cursor_line(), 3)
-end
-
-T['pages']['the marker follows j and k'] = function()
-    start(80)
-    child.lua('_G.a = _G.page("A", 4); _G.open(34):show(_G.a)')
-    eq(marker('_G.a.buf'), 3)
-
-    child.lua(P .. ':focus()')
-    child.type_keys('j')
-    eq(marker('_G.a.buf'), 4)
-    child.type_keys('j', 'j')
-    eq(marker('_G.a.buf'), 6)
-    child.type_keys('k')
-    eq(marker('_G.a.buf'), 5)
 end
 
 T['pages']['a resize renders at the new size'] = function()
@@ -266,7 +237,6 @@ T['pages']['a buffer put into the window leaves the page alone'] = function()
     child.lua(P .. ':render()')
 
     eq(child.lua_get('_G.calls'), 1)
-    eq(marker('_G.a.buf'), nil)
     eq(child.cmd_capture('messages'), '')
 
     child.lua(P .. ':show(_G.a)')
@@ -275,25 +245,22 @@ T['pages']['a buffer put into the window leaves the page alone'] = function()
         true
     )
     eq(cursor_line(), 3)
-    eq(marker('_G.a.buf'), 3)
 end
 
-T['pages']['set_cursor moves the marker while unfocused'] = function()
+T['pages']['set_cursor moves the cursor while unfocused'] = function()
     start(80)
     child.lua('_G.a = _G.page("A", 4); _G.open(34):show(_G.a)')
     child.lua(P .. ':set_cursor(5)')
 
     eq(cursor_line(), 5)
-    eq(marker('_G.a.buf'), 5)
 
     -- A title line snaps like a user's move onto it.
     child.lua(P .. ':set_cursor(2)')
     eq(cursor_line(), 3)
-    eq(marker('_G.a.buf'), 3)
     eq(child.api.nvim_get_current_win() ~= child.lua_get(P .. '.win'), true)
 end
 
-T['pages']['a render with fewer lines keeps the marker on the cursor'] = function()
+T['pages']['a render with fewer lines moves the cursor onto the last line'] = function()
     start(80)
     child.lua([[
         _G.a = _G.page('A', 5)
@@ -310,7 +277,6 @@ T['pages']['a render with fewer lines keeps the marker on the cursor'] = functio
     child.lua(P .. ':render()')
 
     eq(cursor_line(), 4)
-    eq(marker('_G.a.buf'), 4)
 end
 
 T['close'] = new_set()

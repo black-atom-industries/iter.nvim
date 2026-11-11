@@ -272,7 +272,7 @@ T['open']['the cursor starts on the file of the current buffer'] = function()
     eq(cursor_path(), 'a.txt')
 end
 
-T['open']['the cursor, the marker and the diff move together'] = function()
+T['open']['the cursor and the diff move together'] = function()
     child.cmd('edit a.txt')
 
     open_status()
@@ -282,20 +282,14 @@ T['open']['the cursor, the marker and the diff move together'] = function()
 
     local state = child.lua_get([[(function()
         local s = require('iter').drawer
-        local ns = vim.api.nvim_create_namespace('iter.panel.cursor')
-        local marks = vim.api.nvim_buf_get_extmarks(s.tree.buf, ns, 0, -1, {})
         return {
             cursor = vim.api.nvim_win_get_cursor(s.panel.win)[1],
-            marks = vim.tbl_map(function(mark)
-                return mark[2] + 1
-            end, marks),
             lnum = s.tree:line_of('new.txt'),
             pane = vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(s.pane)),
         }
     end)()]])
 
     eq(state.cursor, state.lnum)
-    eq(state.marks, { state.lnum })
     eq(state.pane, 'iter://status/new.txt')
 end
 
