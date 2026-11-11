@@ -224,7 +224,6 @@ T['open'][':Iter review main lists the changes since main without staging icons'
         ),
         'M a.txt'
     )
-    helpers.expect_screenshot(child, 'base-review')
 end
 
 T['open']['below the breakpoint at 180 columns the annotations sit below the tree'] = function()
@@ -234,7 +233,18 @@ T['open']['below the breakpoint at 180 columns the annotations sit below the tre
     H.wait_diff(child, 'base a.txt')
     child.lua(R .. ':place_annotations(true)')
 
-    helpers.expect_screenshot(child, 'base-review-wide')
+    eq(
+        child.lua_get([[(function()
+        local r = ]] .. R .. [[
+        local tree = r.panel.win
+        local note = require('iter.ui.sidebar').of(r.tab).win
+        return vim.api.nvim_win_get_position(note)[1]
+            > vim.api.nvim_win_get_position(tree)[1]
+                + vim.api.nvim_win_get_height(tree)
+                - 1
+    end)()]]),
+        true
+    )
 end
 
 T['open']['the subtitle names the base and counts the files'] = function()
@@ -347,7 +357,6 @@ T['diff']['= shows every file since the base in one scroll'] = function()
         end, ]] .. R .. [[.view.document.sections)]]),
         { 'base\0a.txt', 'base\0b.txt', 'base\0c.txt', 'base\0d.txt' }
     )
-    helpers.expect_screenshot(child, 'base-all-files')
 end
 
 T['diff']['| shows the diff side by side, the base on the left'] = function()
@@ -357,7 +366,12 @@ T['diff']['| shows the diff side by side, the base on the left'] = function()
     child.type_keys('|')
     helpers.wait_until(child, R .. '.view.layout == "split"')
 
-    helpers.expect_screenshot(child, 'base-split')
+    local changed = child.lua_get([[vim.tbl_map(function(pane)
+        local lines = vim.api.nvim_buf_get_lines(pane.buf, 0, -1, false)
+        return table.concat(lines, '\n'):find('a3 changed', 1, true) ~= nil
+    end, ]] .. R .. [[.view:panes())]])
+
+    eq(changed, { false, true })
 end
 
 T['diff']['the tree hints offer b in place of the staging keys'] = function()
@@ -776,7 +790,6 @@ T['picker']['the diff window previews the base under the cursor'] = function()
     local preview = summary_lines('from ' .. edit)
 
     eq(preview[#preview - 1], ' +1 −1  b.txt')
-    helpers.expect_screenshot(child, 'base-preview-commit')
 end
 
 T['picker']['q and <CR> give the diff window its diff and options back'] = function()

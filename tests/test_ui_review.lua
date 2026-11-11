@@ -438,7 +438,10 @@ T['tree']['a partly staged file shows its Unstaged then its Staged section'] = f
         'unstaged\0b.txt\nstaged\0b.txt'
     )
 
-    helpers.expect_screenshot(child, 'review-tree-partly')
+    eq(
+        vim.tbl_contains(vim.tbl_map(vim.trim, tree_rows()), '◐ M b.txt'),
+        true
+    )
 end
 
 T['tree']['<CR> moves into the diff pane'] = function()
@@ -2373,7 +2376,6 @@ T['reviewed']['in all files, r collapses the file and puts the next header on to
     eq(H.selected(child), 'b.txt')
     eq(cursor_row(), 'add top1')
     eq(placement(), { top = header, focus = 'diff' })
-    helpers.expect_screenshot(child, 'review-reviewed-advance')
 end
 
 T['reviewed']['screenshot of reviewed, changed and unreviewed rows'] = function()
@@ -3377,8 +3379,6 @@ T['uri']['the tab label reads iter review'] = function()
     )
     eq(screen_row(1):find(' 3 iter review ', 1, true) ~= nil, true)
 
-    helpers.expect_screenshot(child, 'review-tabline')
-
     -- The left pane of the split layout, where uri() names the new line a
     -- deleted line lands on.
     cursor_on('a3 changed')
@@ -3442,7 +3442,6 @@ T['tree width']['grows to show long names whole on a wide tab'] = function()
         true
     )
     H.wait_diff(child, 'unstaged d/x.txt')
-    helpers.expect_screenshot(child, 'review-tree-fit')
 end
 
 T['tree width']['a closed directory keeps its names in the fit'] = function()

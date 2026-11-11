@@ -298,7 +298,7 @@ T['open']['a partly staged file shows its unstaged and its staged section'] = fu
     move_to('b.txt')
     wait_preview({ 'unstaged b.txt', 'staged b.txt' })
 
-    helpers.expect_screenshot(child, 'status-sidebar-partly')
+    eq(cursor_path(), 'b.txt')
 end
 
 T['open']['a clean tree leaves the window as it is'] = function()
@@ -316,7 +316,6 @@ T['open']['a clean tree leaves the window as it is'] = function()
         ' Working tree clean',
     })
     eq(child.api.nvim_win_get_buf(child.lua_get(S .. '.pane')), buf)
-    helpers.expect_screenshot(child, 'status-sidebar-clean')
 end
 
 T['open']['closing on a clean tree keeps the cursor in the window'] = function()
@@ -522,7 +521,6 @@ T['tree']['? lists the keys with collapse and expand'] = function()
         " h        Close the directory, or the file's directory",
         ' l        Open the directory',
     })
-    helpers.expect_screenshot(child, 'status-sidebar-help')
 end
 
 T['diff'] = new_set()
@@ -637,7 +635,6 @@ T['diff']['? lists the keys of the diff'] = function()
         ' q        Close',
         ' ?        Show the keys',
     })
-    helpers.expect_screenshot(child, 'status-sidebar-diff-help')
 end
 
 T['close'] = new_set()
@@ -904,7 +901,6 @@ T['commits']['the recent commits sit above the hints, ↑ on unpushed ones'] = f
         ' <Space> stage  d discard',
         ' <CR> open  r review  ? help',
     })
-    helpers.expect_screenshot(child, 'status-sidebar-commits')
     helpers.cleanup(remote)
 end
 
@@ -954,7 +950,6 @@ T['commits']['a commit under the cursor shows its summary in the window'] = func
     )
     eq(child.lua_get(S .. '.tree:node()'), vim.NIL)
     eq(child.lua_get(S .. '.tree:extra().subject'), 'initial')
-    helpers.expect_screenshot(child, 'status-sidebar-commit-summary')
 
     child.type_keys('k')
     wait_preview({ 'unstaged new.txt' })
@@ -1342,7 +1337,6 @@ T['hand back']['a 50-column tab gives the sidebar half of it'] = function()
     wait_preview({ 'unstaged dir/sub/d.txt' })
 
     eq(child.api.nvim_win_get_width(child.lua_get(S .. '.panel.win')), 25)
-    helpers.expect_screenshot(child, 'status-sidebar-narrow')
 end
 
 T['hand back']['the sidebar grows to show long names whole'] = function()

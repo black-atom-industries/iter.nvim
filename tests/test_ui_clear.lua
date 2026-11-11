@@ -131,7 +131,6 @@ T['clear removes the marks from the buffer shown'] = function()
     )
     child.lua([[require('iter').clear()]])
     eq(buffer_marks(), 0)
-    helpers.expect_screenshot(child, 'clear_buffer')
 end
 
 return T

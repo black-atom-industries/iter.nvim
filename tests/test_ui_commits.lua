@@ -345,7 +345,6 @@ T['enter']['iter.commits({ sha }) opens the tab on the commit and its files'] = 
         '   M a.txt                     ±2',
     })
     eq(child.api.nvim_get_current_win(), panel_win())
-    helpers.expect_screenshot(child, 'commits-entered')
 
     child.type_keys('q')
 

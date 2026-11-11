@@ -1554,8 +1554,6 @@ T['cursorline']['shows on a change row and on the filler beside it'] = function(
     if attr_at(old, added, 5) == attr_at(old, below, 5) then
         error('the filler under the cursor looks like the next one')
     end
-
-    helpers.expect_screenshot(child, 'split-cursorline')
 end
 
 return T

@@ -75,4 +75,28 @@ function M.focus_list(child)
     child.lua([[vim.api.nvim_set_current_win(]] .. M.LIST_WIN .. [[)]])
 end
 
+--- The diff line of the annotation mark whose body is `body`.
+---@param child table MiniTest child Neovim
+---@param body string
+---@return integer?
+function M.mark_lnum(child, body)
+    return child.lua_get([[(function(body)
+            for _, mark in ipairs(]] .. M.R .. [[.view.marks) do
+                if mark.annotation.body == body then
+                    return mark.lnum
+                end
+            end
+            return vim.NIL
+        end)(...)]], { body })
+end
+
+--- The cursor line of the review's diff window.
+---@param child table MiniTest child Neovim
+---@return integer
+function M.diff_cursor(child)
+    return child.lua_get(
+        [[vim.api.nvim_win_get_cursor(]] .. M.R .. [[.diff_win)[1] ]]
+    )
+end
+
 return M

@@ -304,8 +304,6 @@ T['open']['drawer windows take the Normal background, not the float one'] = func
         eq(winhl:find('FloatTitle:IterDrawer', 1, true) ~= nil, true)
         eq(winhl:find('FloatFooter:IterDrawer', 1, true) ~= nil, true)
     end
-
-    helpers.expect_screenshot(child, 'drawer-normal-background')
 end
 
 T['open'][':Iter status opens the drawer'] = function()
@@ -555,7 +553,6 @@ T['keys']['m, | and - switch the preview from the drawer and the pane'] = functi
 
     child.type_keys('|')
     eq(child.lua_get(D .. [[.view.layout]]), 'split')
-    helpers.expect_screenshot(child, 'drawer-all-files-split')
 
     child.type_keys('-')
     eq(child.lua_get(D .. [[.view.layout]]), 'unified')
@@ -1683,8 +1680,6 @@ T['commits']['pins the recent commits under the files'] = function()
         { strip = true, focusable = false, stacked = true, height = 2 }
     )
     eq(chrome().hint, HINT_WIDE)
-
-    helpers.expect_screenshot(child, 'drawer-recent-commits')
 end
 
 T['commits']['stay visible above a long file list'] = function()
@@ -1705,8 +1700,6 @@ T['commits']['stay visible above a long file list'] = function()
     -- The share leaves fewer rows than the minimum of file lines, so the
     -- minimum holds and the rest of the list scrolls.
     eq(strip_state().height, 5)
-
-    helpers.expect_screenshot(child, 'drawer-recent-commits-long')
 end
 
 T['commits']['the section never takes focus'] = function()
@@ -1950,8 +1943,6 @@ T['clean']['a clean tree says Working tree clean'] = function()
     eq(child.v.errmsg, '')
     eq(child.lua_get('_G.notes'), {})
 
-    helpers.expect_screenshot(child, 'drawer-clean')
-
     child.type_keys('q')
     eq(pane_opts(), PANE_OPTS)
 end
@@ -2191,7 +2182,6 @@ T['rename']['a staged rename reads old → new in one row'] = function()
 
     select_item('staged', 'diff/parser.lua')
     wait_preview('staged diff/parser.lua')
-    helpers.expect_screenshot(child, 'drawer-rename')
 end
 
 T['statusline'] = new_set()

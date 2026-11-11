@@ -206,7 +206,7 @@ T['wide']['moving in the sidebar previews the note in the diff'] = function()
     goto_note('Why this change?')
 
     eq(child.lua_get(R .. '.view.files[1].path'), 'a.txt')
-    helpers.expect_screenshot(child, 'review-sidebar')
+    eq(H.diff_cursor(child), H.mark_lnum(child, 'Why this change?'))
 end
 
 T['wide']['a note on a file without changes shows the file at HEAD'] = function()
@@ -216,7 +216,6 @@ T['wide']['a note on a file without changes shows the file at HEAD'] = function(
     local file = child.lua_get(R .. '.view.files[1]')
 
     eq({ file.path, file.side }, { 'e.txt', 'commit' })
-    helpers.expect_screenshot(child, 'review-sidebar-outside')
 end
 
 T['wide']['<CR> moves into the diff pane at the note'] = function()

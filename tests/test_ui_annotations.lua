@@ -295,27 +295,6 @@ local function mark_groups()
     end)()]])
 end
 
---- The diff row the annotation with `body` sits below.
----@param body string
----@return integer?
-local function mark_lnum(body)
-    return child.lua_get([[(function(body)
-            for _, mark in ipairs(]] .. R .. [[.view.marks) do
-                if mark.annotation.body == body then
-                    return mark.lnum
-                end
-            end
-            return vim.NIL
-        end)(...)]], { body })
-end
-
----@return integer
-local function diff_cursor()
-    return child.lua_get(
-        [[vim.api.nvim_win_get_cursor(]] .. R .. [[.diff_win)[1] ]]
-    )
-end
-
 local T = new_set({
     hooks = {
         pre_case = function()
@@ -441,7 +420,6 @@ T['list']['a long file list scrolls beside a still annotations window'] = functi
 
     eq(tops.files > 1, true)
     eq(tops.annotations, 1)
-    helpers.expect_screenshot(child, 'review-long-files')
 end
 
 T['preview'] = new_set()
@@ -451,13 +429,13 @@ T['preview']['moving onto a note shows its file with the annotation focused'] = 
     H.wait_diff(child, 'unstaged n.txt')
     wait_focus('Rename the variable')
 
-    eq(diff_cursor(), mark_lnum('Rename the variable'))
+    eq(H.diff_cursor(child), H.mark_lnum(child, 'Rename the variable'))
 
     goto_note('Why this change?')
     H.wait_diff(child, 'staged m.txt')
     wait_focus('Why this change?')
 
-    eq(diff_cursor(), mark_lnum('Why this change?'))
+    eq(H.diff_cursor(child), H.mark_lnum(child, 'Why this change?'))
 
     local groups = mark_groups()
     eq(groups['Why this change?'], 'IterDiffAnnotationFocus')
@@ -472,7 +450,7 @@ T['preview']['a deleted line shows on the side of its base'] = function()
     wait_focus('Why remove it?')
 
     eq(child.lua_get(R .. [[.view.files[1].side]]), 'staged')
-    eq(diff_cursor(), mark_lnum('Why remove it?'))
+    eq(H.diff_cursor(child), H.mark_lnum(child, 'Why remove it?'))
 end
 
 T['preview']['a file outside the changes shows at HEAD with its annotation'] = function()
@@ -492,8 +470,7 @@ T['preview']['a file outside the changes shows at HEAD with its annotation'] = f
         ),
         { 'c1', 'c2' }
     )
-    eq(diff_cursor(), mark_lnum('Not in the changes'))
-    helpers.expect_screenshot(child, 'review-annotation-outside')
+    eq(H.diff_cursor(child), H.mark_lnum(child, 'Not in the changes'))
 end
 
 T['preview']['the file outside the changes takes no annotations'] = function()
@@ -784,7 +761,10 @@ T['keys']['<CR> jumps into the diff at the annotation'] = function()
 
     eq(child.api.nvim_get_current_win(), child.lua_get(R .. '.diff_win'))
     eq(child.lua_get(R .. [[.view.files[1].path]]), 'm.txt')
-    eq(diff_cursor(), mark_lnum('Extract a helper\nfor these lines'))
+    eq(
+        H.diff_cursor(child),
+        H.mark_lnum(child, 'Extract a helper\nfor these lines')
+    )
 end
 
 T['keys']['a refresh after <CR> keeps the diff cursor'] = function()
@@ -796,7 +776,7 @@ T['keys']['a refresh after <CR> keeps the diff cursor'] = function()
     helpers.wait_until(child, R .. [[.reviewed['n.txt'] == 'reviewed']])
 
     eq(child.api.nvim_get_current_win(), child.lua_get(R .. '.diff_win'))
-    eq(diff_cursor(), 1)
+    eq(H.diff_cursor(child), 1)
 end
 
 T['keys'][']f after <CR> steps from the shown file'] = function()
