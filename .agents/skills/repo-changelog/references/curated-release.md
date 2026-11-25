@@ -8,7 +8,7 @@ push to `main`. The most recent curated section is the reference shape.
 1. Check out the release PR branch with `gh pr checkout <number>`.
 2. Read the generated section and the commits behind it, and rank the outcomes by impact on a user.
 3. Write `### Highlights` in impact order (below), directly under the release heading and above the first generated group.
-4. Run the `humanizer` skill on the highlights.
+4. Run the `nbr-voice` rewrite pass on the highlights.
 5. Commit the section as `docs: curate the <version> release notes` and push the branch.
 6. Write the section into the PR description with `gh pr edit <number> --body-file <file>`. Keep release-please's header
    line, the `---` lines around the notes, and its footer; the notes between them are the section from `CHANGELOG.md`,
